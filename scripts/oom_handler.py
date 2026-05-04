@@ -167,7 +167,6 @@ class OmnistrateClient:
 CHAT_MENTIONS: str = (
     "<users/111622808083881015737> "  # Muhammad
     "<users/117793002495590672566> "  # David
-    "<users/117131850958413609302>"   # Barak
 )
 
 
