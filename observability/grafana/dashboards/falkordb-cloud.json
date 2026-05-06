@@ -31,17 +31,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "standalone": {
-                  "index": 0,
-                  "text": "replication"
-                }
-              }
-            }
-          ],
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -374,7 +364,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "redis_falkordb_total_graph_count{namespace=\"$namespace\", pod=~\"$pod\", container=~\"$container\"}",
+          "expr": "sum(redis_falkordb_total_graph_count{namespace=\"$namespace\", pod=~\"$pod\", container=~\"$container\"})",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
@@ -1507,7 +1497,7 @@
             "uid": "${vl_datasource}"
           },
           "editorMode": "code",
-          "expr": "namespace: \"$namespace\" AND pod: \"$pod\" AND container: \"$container\" AND -\"error:0A000126:SSL\"",
+          "expr": "namespace: \"$namespace\" AND pod:~\"$pod\" AND container:~\"$container\" AND -\"error:0A000126:SSL\"",
           "queryType": "instant",
           "refId": "A"
         }
@@ -1882,56 +1872,12 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(redis_instance_info{namespace=~\"$namespace\"}, redis_mode)",
-        "includeAll": true,
-        "multi": false,
-        "name": "deployment_mode",
-        "options": [],
-        "query": "label_values(redis_instance_info{namespace=~\"$namespace\"}, redis_mode)",
-        "refresh": 2,
-        "regex": "",
-        "sort": 1,
-        "type": "query"
-      },
-      {
-        "allValue": ".*",
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource}"
-        },
-        "definition": "label_values(redis_instance_info{namespace=~\"$namespace\", redis_mode=~\"$deployment_mode\"}, role)",
-        "includeAll": true,
-        "multi": false,
-        "name": "pod_role",
-        "options": [],
-        "query": "label_values(redis_instance_info{namespace=~\"$namespace\", redis_mode=~\"$deployment_mode\"}, role)",
-        "refresh": 2,
-        "regex": "",
-        "sort": 1,
-        "type": "query"
-      },
-      {
-        "allValue": ".*",
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource}"
-        },
-        "definition": "label_values(redis_instance_info{namespace=~\"$namespace\", redis_mode=~\"$deployment_mode\", role=~\"$pod_role\"}, pod)",
+        "definition": "label_values(redis_uptime_in_seconds{namespace=~\"$namespace\"}, pod)",
         "includeAll": true,
         "multi": true,
         "name": "pod",
         "options": [],
-        "query": "label_values(redis_instance_info{namespace=~\"$namespace\", redis_mode=~\"$deployment_mode\", role=~\"$pod_role\"}, pod)",
+        "query": "label_values(redis_uptime_in_seconds{namespace=~\"$namespace\"}, pod)",
         "refresh": 2,
         "regex": "",
         "sort": 1,
