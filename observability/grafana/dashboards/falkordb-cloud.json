@@ -462,11 +462,11 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", image=~\".+falkordb.+\"}[$__rate_interval]))",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", image=~\".+falkordb.+\"}[$__rate_interval])) by (pod)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "__auto",
+          "legendFormat": "{{ pod }}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -694,10 +694,10 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(redis_connected_clients{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"})",
+          "expr": "sum(redis_connected_clients{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}) by (pod)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "connected",
+          "legendFormat": "{{ pod }} connected",
           "refId": "A"
         },
         {
@@ -705,10 +705,10 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(redis_blocked_clients{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"})",
+          "expr": "sum(redis_blocked_clients{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}) by (pod)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "blocked",
+          "legendFormat": "{{ pod }} blocked",
           "refId": "B"
         }
       ],
@@ -773,34 +773,9 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "Bps"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "A"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "In"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "B"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Out"
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 7,
@@ -829,10 +804,10 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(redis_net_input_bytes_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[5m]))",
+          "expr": "sum(rate(redis_net_input_bytes_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[5m])) by (pod)",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "In",
+          "legendFormat": "{{ pod }} In",
           "range": true,
           "refId": "A",
           "step": 240
@@ -843,11 +818,11 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(redis_net_output_bytes_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[5m]))",
+          "expr": "sum(rate(redis_net_output_bytes_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[5m])) by (pod)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "Out",
+          "legendFormat": "{{ pod }} Out",
           "range": true,
           "refId": "B",
           "step": 240
@@ -965,11 +940,11 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(irate(redis_commands_duration_seconds_total{pod =~ \"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd)\n  /\nsum(irate(redis_commands_total{pod =~ \"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd)\n",
+          "expr": "sum(irate(redis_commands_duration_seconds_total{pod =~ \"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd, pod)\n  /\nsum(irate(redis_commands_total{pod =~ \"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd, pod)\n",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{ cmd }}",
+          "legendFormat": "{{ pod }} :: {{ cmd }}",
           "metric": "redis_command_calls_total",
           "refId": "A",
           "step": 240
@@ -1066,11 +1041,11 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(redis_commands_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"} [1m])) by (cmd)",
+          "expr": "sum(rate(redis_commands_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"} [1m])) by (cmd, pod)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{ cmd }}",
+          "legendFormat": "{{ pod }} :: {{ cmd }}",
           "metric": "redis_command_calls_total",
           "refId": "A",
           "step": 240
@@ -1291,11 +1266,11 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(irate(redis_commands_duration_seconds_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd) != 0",
+          "expr": "sum(irate(redis_commands_duration_seconds_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd, pod) != 0",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{ cmd }}",
+          "legendFormat": "{{ pod }} :: {{ cmd }}",
           "metric": "redis_command_calls_total",
           "refId": "A",
           "step": 240
