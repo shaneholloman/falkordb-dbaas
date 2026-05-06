@@ -451,7 +451,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "redis_falkordb_total_graph_count{namespace=\"$namespace\", pod=\"$pod\", container=~\"$container\"}",
+          "expr": "redis_falkordb_total_graph_count{namespace=\"$namespace\", pod=~\"$pod\", container=~\"$container\"}",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -1591,6 +1591,218 @@
       ],
       "title": "Logs",
       "type": "logs"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "id": 26,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Average latency per graph command per pod. graph.QUERY, graph.RO_QUERY, graph.PROFILE and graph.EXPLAIN only.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 15,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": { "group": "A", "mode": "none" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "links": [],
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 80 }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 52 },
+          "id": 27,
+          "options": {
+            "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${datasource}" },
+              "expr": "sum(rate(redis_commands_duration_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)graph\\\\.(query|ro_query|profile|explain)\"}[5m])) by (cmd, pod)\n/ clamp_min(sum(rate(redis_commands_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)graph\\\\.(query|ro_query|profile|explain)\"}[5m])) by (cmd, pod), 1e-9)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 2,
+              "legendFormat": "{{ pod }} :: {{ cmd }}",
+              "refId": "A",
+              "step": 0
+            }
+          ],
+          "title": "Avg Query Latency (Graph Commands)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Graph command throughput by pod and command.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": { "group": "A", "mode": "normal" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "links": [],
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 80 }
+                ]
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 60 },
+          "id": 28,
+          "options": {
+            "legend": { "calcs": ["lastNotNull"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${datasource}" },
+              "expr": "sum(rate(redis_commands_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)graph\\\\.(query|ro_query|profile|explain)\"}[5m])) by (cmd, pod)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 2,
+              "legendFormat": "{{ pod }} :: {{ cmd }}",
+              "refId": "A",
+              "step": 0
+            }
+          ],
+          "title": "Graph Commands / sec",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Top user-facing commands by total time spent. Internal Redis infrastructure commands are excluded.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": { "group": "A", "mode": "none" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "links": [],
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 80 }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 60 },
+          "id": 29,
+          "options": {
+            "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${datasource}" },
+              "expr": "topk(20, sum(rate(redis_commands_duration_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd!~\"(?i)^(client|cluster|command|config|hello|info|latency|memory|module|monitor|ping|psync|pubsub|replconf|role|slowlog|sync|time)([|].*)?$\"}[5m])) by (cmd))",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 2,
+              "legendFormat": "{{ cmd }}",
+              "refId": "A",
+              "step": 0
+            }
+          ],
+          "title": "Top Commands by Time-Spent Rate (Internal Filtered)",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Graph Command Latency",
+      "type": "row"
     }
   ],
   "preload": false,
@@ -1640,34 +1852,84 @@
         "type": "query"
       },
       {
-        "current": {},
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(redis_uptime_in_seconds{namespace=~\"$namespace\"}, pod)",
-        "includeAll": false,
-        "multi": true,
-        "name": "pod",
+        "definition": "label_values(redis_instance_info{namespace=~\"$namespace\"}, redis_mode)",
+        "includeAll": true,
+        "multi": false,
+        "name": "deployment_mode",
         "options": [],
-        "query": "label_values(redis_uptime_in_seconds{namespace=~\"$namespace\"}, pod)",
+        "query": "label_values(redis_instance_info{namespace=~\"$namespace\"}, redis_mode)",
         "refresh": 2,
         "regex": "",
         "sort": 1,
         "type": "query"
       },
       {
+        "allValue": ".*",
         "current": {
           "selected": true,
-          "text": "service",
-          "value": "service"
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(redis_instance_info{namespace=~\"$namespace\", redis_mode=~\"$deployment_mode\"}, role)",
+        "includeAll": true,
+        "multi": false,
+        "name": "pod_role",
+        "options": [],
+        "query": "label_values(redis_instance_info{namespace=~\"$namespace\", redis_mode=~\"$deployment_mode\"}, role)",
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(redis_instance_info{namespace=~\"$namespace\", redis_mode=~\"$deployment_mode\", role=~\"$pod_role\"}, pod)",
+        "includeAll": true,
+        "multi": true,
+        "name": "pod",
+        "options": [],
+        "query": "label_values(redis_instance_info{namespace=~\"$namespace\", redis_mode=~\"$deployment_mode\", role=~\"$pod_role\"}, pod)",
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
         },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
         "definition": "label_values(redis_uptime_in_seconds{namespace=~\"$namespace\", pod=~\"$pod\"}, container)",
-        "includeAll": false,
+        "includeAll": true,
         "name": "container",
         "options": [],
         "query": "label_values(redis_uptime_in_seconds{namespace=~\"$namespace\", pod=~\"$pod\"}, container)",
@@ -1686,6 +1948,6 @@
   "timezone": "browser",
   "title": "FalkorDB Dashboard",
   "uid": "e008bc3f-81a2-40f9-baf2-a33fd8dec7eg",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }
