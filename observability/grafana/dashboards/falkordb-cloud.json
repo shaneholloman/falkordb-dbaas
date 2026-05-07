@@ -10,7 +10,7 @@
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations \u0026 Alerts",
+        "name": "Annotations & Alerts",
         "type": "dashboard"
       }
     ]
@@ -50,7 +50,7 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 8,
+        "w": 6,
         "x": 0,
         "y": 0
       },
@@ -164,101 +164,14 @@
               }
             ]
           },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 4,
-        "x": 8,
-        "y": 0
-      },
-      "id": 9,
-      "maxDataPoints": 100,
-      "options": {
-        "colorMode": "none",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "11.3.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "max(max_over_time(redis_uptime_in_seconds{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[$__interval]))",
-          "format": "time_series",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "",
-          "metric": "",
-          "range": true,
-          "refId": "A",
-          "step": 1800
-        }
-      ],
-      "title": "Max Uptime",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "rgb(31, 120, 193)",
-            "mode": "fixed"
-          },
-          "decimals": 0,
-          "mappings": [
-            {
-              "options": {
-                "match": "null",
-                "result": {
-                  "text": "N/A"
-                }
-              },
-              "type": "special"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
           "unit": "none"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 7,
-        "w": 4,
-        "x": 12,
+        "w": 6,
+        "x": 6,
         "y": 0
       },
       "hideTimeOverride": true,
@@ -348,8 +261,8 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 4,
-        "x": 16,
+        "w": 6,
+        "x": 12,
         "y": 0
       },
       "hideTimeOverride": true,
@@ -421,8 +334,8 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 4,
-        "x": 20,
+        "w": 6,
+        "x": 18,
         "y": 0
       },
       "id": 23,
@@ -451,10 +364,10 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "redis_falkordb_total_graph_count{namespace=\"$namespace\", pod=\"$pod\", container=~\"$container\"}",
-          "instant": false,
+          "expr": "sum(redis_falkordb_total_graph_count{namespace=\"$namespace\", pod=~\"$pod\", container=~\"$container\"} and on(pod, namespace) redis_instance_info{namespace=\"$namespace\", role=\"master\"})",
+          "instant": true,
           "legendFormat": "__auto",
-          "range": true,
+          "range": false,
           "refId": "A"
         }
       ],
@@ -519,7 +432,41 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/80% CPU limit.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 7,
@@ -549,14 +496,25 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", image=~\".+falkordb.+\"}[$__rate_interval]))",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", image=~\".+falkordb.+\"}[$__rate_interval])) by (pod)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "__auto",
+          "legendFormat": "{{ pod }}",
           "range": true,
           "refId": "A",
           "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "0.8 * sum(kube_pod_container_resource_limits{resource=\"cpu\", namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"}) by (pod)",
+          "legendFormat": "80% CPU limit, {{ pod }}",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "CPU",
@@ -638,6 +596,39 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/80% limit.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
           }
         ]
       },
@@ -687,6 +678,19 @@
           "intervalFactor": 2,
           "legendFormat": "max, {{ pod }}",
           "refId": "B",
+          "step": 240
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "0.8 * redis_memory_max_bytes{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}",
+          "format": "time_series",
+          "hide": false,
+          "intervalFactor": 2,
+          "legendFormat": "80% limit, {{ pod }}",
+          "refId": "C",
           "step": 240
         }
       ],
@@ -781,10 +785,10 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(redis_connected_clients{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"})",
+          "expr": "sum(redis_connected_clients{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}) by (pod)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "connected",
+          "legendFormat": "{{ pod }} connected",
           "refId": "A"
         },
         {
@@ -792,10 +796,10 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(redis_blocked_clients{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"})",
+          "expr": "sum(redis_blocked_clients{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}) by (pod)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "blocked",
+          "legendFormat": "{{ pod }} blocked",
           "refId": "B"
         }
       ],
@@ -860,34 +864,9 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "Bps"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "A"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "In"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "B"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Out"
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 7,
@@ -916,10 +895,10 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(redis_net_input_bytes_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[5m]))",
+          "expr": "sum(rate(redis_net_input_bytes_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[5m])) by (pod)",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "In",
+          "legendFormat": "{{ pod }} In",
           "range": true,
           "refId": "A",
           "step": 240
@@ -930,11 +909,11 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(redis_net_output_bytes_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[5m]))",
+          "expr": "sum(rate(redis_net_output_bytes_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[5m])) by (pod)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "Out",
+          "legendFormat": "{{ pod }} Out",
           "range": true,
           "refId": "B",
           "step": 240
@@ -1052,11 +1031,11 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(irate(redis_commands_duration_seconds_total{pod =~ \"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd)\n  /\nsum(irate(redis_commands_total{pod =~ \"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd)\n",
+          "expr": "sum(irate(redis_commands_duration_seconds_total{pod =~ \"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd, pod)\n  /\nsum(irate(redis_commands_total{pod =~ \"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd, pod)\n",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{ cmd }}",
+          "legendFormat": "{{ pod }} :: {{ cmd }}",
           "metric": "redis_command_calls_total",
           "refId": "A",
           "step": 240
@@ -1153,11 +1132,11 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(redis_commands_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"} [1m])) by (cmd)",
+          "expr": "sum(rate(redis_commands_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"} [1m])) by (cmd, pod)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{ cmd }}",
+          "legendFormat": "{{ pod }} :: {{ cmd }}",
           "metric": "redis_command_calls_total",
           "refId": "A",
           "step": 240
@@ -1378,17 +1357,326 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(irate(redis_commands_duration_seconds_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd) != 0",
+          "expr": "sum(irate(redis_commands_duration_seconds_total{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[1m])) by (cmd, pod) != 0",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{ cmd }}",
+          "legendFormat": "{{ pod }} :: {{ cmd }}",
           "metric": "redis_command_calls_total",
           "refId": "A",
           "step": 240
         }
       ],
       "title": "Total Time Spent by Command / sec",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Average latency per graph command per pod. graph.QUERY, graph.RO_QUERY, graph.PROFILE and graph.EXPLAIN only.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(redis_commands_duration_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\.(query|ro_query|profile|explain)$\"}[5m])) by (cmd, pod)\n/ clamp_min(sum(rate(redis_commands_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\.(query|ro_query|profile|explain)$\"}[5m])) by (cmd, pod), 1e-9)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "{{ pod }} :: {{ cmd }}",
+          "refId": "A",
+          "step": 0
+        }
+      ],
+      "title": "Avg Query Latency (Graph Commands)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Graph command throughput by pod and command.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(redis_commands_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\.(query|ro_query|profile|explain)$\"}[5m])) by (cmd, pod)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "{{ pod }} :: {{ cmd }}",
+          "refId": "A",
+          "step": 0
+        }
+      ],
+      "title": "Graph Commands / sec",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Top user-facing commands by total time spent. Internal Redis infrastructure commands are excluded.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 40,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(20, sum(rate(redis_commands_duration_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\.(query|ro_query|profile|explain)$\"}[5m])) by (cmd))",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "{{ cmd }}",
+          "refId": "A",
+          "step": 0
+        }
+      ],
+      "title": "Top Graph Commands by Time-Spent Rate",
       "type": "timeseries"
     },
     {
@@ -1429,7 +1717,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 51
       },
       "id": 24,
       "options": {
@@ -1563,7 +1851,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 59
       },
       "id": 25,
       "options": {
@@ -1584,13 +1872,100 @@
             "uid": "${vl_datasource}"
           },
           "editorMode": "code",
-          "expr": "namespace: \"$namespace\" AND pod: \"$pod\" AND container: \"$container\" AND -\"error:0A000126:SSL\"",
+          "expr": "namespace: \"$namespace\" AND pod:~\"$pod\" AND container:~\"$container\" AND -\"error:0A000126:SSL\"",
           "queryType": "instant",
           "refId": "A"
         }
       ],
       "title": "Logs",
       "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "rgb(31, 120, 193)",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "N/A"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 67
+      },
+      "id": 9,
+      "maxDataPoints": 100,
+      "options": {
+        "colorMode": "none",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max(max_over_time(redis_uptime_in_seconds{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[$__interval]))",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "",
+          "metric": "",
+          "range": true,
+          "refId": "A",
+          "step": 1800
+        }
+      ],
+      "title": "Max Uptime",
+      "type": "stat"
     }
   ],
   "preload": false,
@@ -1640,13 +2015,18 @@
         "type": "query"
       },
       {
-        "current": {},
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
         "definition": "label_values(redis_uptime_in_seconds{namespace=~\"$namespace\"}, pod)",
-        "includeAll": false,
+        "includeAll": true,
         "multi": true,
         "name": "pod",
         "options": [],
@@ -1657,17 +2037,18 @@
         "type": "query"
       },
       {
+        "allValue": ".*",
         "current": {
           "selected": true,
-          "text": "service",
-          "value": "service"
+          "text": "All",
+          "value": "$__all"
         },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
         "definition": "label_values(redis_uptime_in_seconds{namespace=~\"$namespace\", pod=~\"$pod\"}, container)",
-        "includeAll": false,
+        "includeAll": true,
         "name": "container",
         "options": [],
         "query": "label_values(redis_uptime_in_seconds{namespace=~\"$namespace\", pod=~\"$pod\"}, container)",
@@ -1686,6 +2067,6 @@
   "timezone": "browser",
   "title": "FalkorDB Dashboard",
   "uid": "e008bc3f-81a2-40f9-baf2-a33fd8dec7eg",
-  "version": 2,
+  "version": 4,
   "weekStart": ""
 }

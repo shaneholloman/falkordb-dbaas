@@ -46,7 +46,7 @@
     {
       "description": "Terragrunt version pinned in CI workflows",
       "customType": "regex",
-      "fileMatch": [".github/workflows/.+\\.ya?ml$"],
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
       "matchStrings": ["TG_VERSION=\"(?<currentValue>[\\d.]+)\""],
       "depNameTemplate": "gruntwork-io/terragrunt",
       "datasourceTemplate": "github-releases"
