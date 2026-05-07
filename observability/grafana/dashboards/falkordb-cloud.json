@@ -364,7 +364,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(redis_falkordb_total_graph_count{namespace=\"$namespace\", pod=~\"$pod\", container=~\"$container\"})",
+          "expr": "sum(redis_falkordb_total_graph_count{namespace=\"$namespace\", pod=~\"$pod\", container=~\"$container\"} and on(pod, namespace) redis_instance_info{namespace=\"$namespace\", role=\"master\"})",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
