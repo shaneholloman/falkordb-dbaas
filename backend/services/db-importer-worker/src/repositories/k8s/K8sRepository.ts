@@ -369,6 +369,7 @@ export class K8sRepository {
 
     const password = await this._getDeploymentPassword(kubeConfig, instanceId, podId);
 
+<<<<<<< HEAD
     const shellCommand: string = isCluster ? `set -e; (
             INITIAL_HOST="${podId}";
             INITIAL_PORT="6379";
@@ -413,6 +414,46 @@ export class K8sRepository {
             echo "$RESPONSE" | grep -cve '^s*$';
           fi
         )`;
+=======
+    // Pass the password via positional arg + REDISCLI_AUTH so it never has to
+    // be interpolated into the shell string. This avoids any quoting/escaping
+    // / shell-injection issues if the password contains spaces, $, `, ;, etc.
+    const tlsFlag = hasTLS ? '--tls' : '';
+    const shellCommand: string = isCluster ? `
+            REDISCLI_AUTH="$1"; export REDISCLI_AUTH
+            (
+              INITIAL_HOST="${podId}"
+              INITIAL_PORT="6379"
+
+              # Get IP:Port of all master nodes, excluding the cluster bus port
+              MASTER_NODES=$(redis-cli ${tlsFlag} --no-auth-warning -h "$INITIAL_HOST" -p "$INITIAL_PORT" CLUSTER NODES 2>/dev/null \\
+                | grep master \\
+                | awk '{print $2}' \\
+                | cut -d'@' -f1)
+
+              # Loop through each master node and run graph.list
+              for NODE in $MASTER_NODES; do
+                  IP=$(echo "$NODE" | cut -d: -f1)
+                  PORT=$(echo "$NODE" | cut -d: -f2)
+                  # Use 2>/dev/null to suppress connection errors for unreachable nodes, if any
+                  redis-cli ${tlsFlag} --no-auth-warning -h "$IP" -p "$PORT" graph.list 2>/dev/null
+              done
+            ) | grep -v '^(empty array)' | grep -cve '^s*$'
+        ` :
+      `
+            REDISCLI_AUTH="$1"; export REDISCLI_AUTH
+            (
+              RESPONSE=$(redis-cli ${tlsFlag} --no-auth-warning graph.list | grep -v '^(empty array)')
+              if echo "$RESPONSE" | grep -q "(empty array)"; then
+                echo "0"
+              elif [ -z "$RESPONSE" ] || [ "$RESPONSE" = "" ] || [ "$RESPONSE" = $'\n' ]; then
+                echo "0"
+              else
+                echo "$RESPONSE" | grep -cve '^s*$'
+              fi
+            )
+        `;
+>>>>>>> 252a88b1 (fix: enhance Redis command execution to improve security and reliability)
 
     const response = await this._executeCommand(
       kubeConfig,
@@ -422,6 +463,8 @@ export class K8sRepository {
         'sh',
         '-c',
         shellCommand,
+        'sh',
+        password,
       ],
     ).catch((e) => {
       this._options.logger.error(e, 'Error getting key count');
@@ -551,6 +594,7 @@ export class K8sRepository {
     const k8sCoreApi = kubeConfig.makeApiClient(k8s.CoreV1Api);
     const secrets = await k8sCoreApi.listNamespacedSecret(namespace).then((res) => res.body.items);
 
+<<<<<<< HEAD
     const tlsFlag = hasTLS ? '--tls' : '';
     const scheme = hasTLS ? 'rediss' : 'redis';
     const shellCommand = `set -eu
@@ -668,6 +712,32 @@ export class K8sRepository {
 
       URL="${scheme}://:$PASS@$TARGET_HOST:6379"
       rmt -s /data/dump.rdb -m "$URL" -r`;
+=======
+    const scheme = hasTLS ? 'rediss' : 'redis';
+    const tlsFlag = hasTLS ? '--tls' : '';
+    const shellCommand = `(
+      apk --update add curl redis;
+      curl -X GET -H "Accept: application/octet-stream" --output /data/dump.rdb "${downloadUrl}";
+
+      info=$(redis-cli ${tlsFlag} -h ${podId} -a "$adminpassword" --no-auth-warning info);
+
+      podId="${podId}";
+      if echo "$info" | grep -q "redis_mode:standalone"; then
+        if echo "$info" | grep -q "role:slave"; then
+          master=$(echo "$info" | grep "master_host" | cut -d':' -f2 | tr -d ' ' | tr -d '\r');
+          podId="$master";
+        fi
+      fi
+
+      # Percent-encode every byte of the password so that characters like
+      # @, :, /, %, or whitespace cannot break the redis URI parser in rmt.
+      enc_pass=$(printf '%s' "$adminpassword" | od -An -tx1 -v | tr -d ' \\n' | sed 's/../%&/g');
+
+      url="${scheme}://:$enc_pass@$podId:6379";
+
+      rmt -s /data/dump.rdb -m "$url" -r
+    )`;
+>>>>>>> 252a88b1 (fix: enhance Redis command execution to improve security and reliability)
 
     const jobManifest: k8s.V1Job = {
       apiVersion: 'batch/v1',
