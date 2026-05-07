@@ -369,76 +369,49 @@ export class K8sRepository {
 
     const password = await this._getDeploymentPassword(kubeConfig, instanceId, podId);
 
-<<<<<<< HEAD
-    const shellCommand: string = isCluster ? `set -e; (
-            INITIAL_HOST="${podId}";
-            INITIAL_PORT="6379";
-
-            # Get IP:Port of all healthy master nodes (exclude fail/noaddr).
-            CLUSTER_NODES=$(redis-cli ${hasTLS ? '--tls' : ''} -a ${password} --no-auth-warning -h "$INITIAL_HOST" -p "$INITIAL_PORT" CLUSTER NODES);
-            MASTER_NODES=$(echo "$CLUSTER_NODES" | awk '$3 ~ /master/ && $3 !~ /fail/ && $3 !~ /noaddr/ {print $2}' | cut -d'@' -f1);
-
-            if [ -z "$MASTER_NODES" ]; then
-              echo "ERROR: no healthy master nodes found" >&2; exit 1;
-            fi
-
-            # Loop through each master node and run graph.list. Fail loudly if any shard is unreachable.
-            for NODE in $MASTER_NODES; do
-                IP=$(echo "$NODE" | cut -d: -f1);
-                PORT=$(echo "$NODE" | cut -d: -f2);
-                if [ -z "$IP" ] || [ -z "$PORT" ] || [ "$PORT" = "0" ]; then
-                  echo "ERROR: invalid master address '$NODE'" >&2; exit 1;
-                fi
-                OUT=$(redis-cli ${hasTLS ? '--tls' : ''} -a ${password} --no-auth-warning -h "$IP" -p "$PORT" graph.list) || {
-                  echo "ERROR: graph.list failed on $IP:$PORT" >&2; exit 1;
-                }
-                # Normalize each line to just the graph name:
-                #   - strip optional "  1) " index prefix (TTY-style output),
-                #   - strip surrounding double quotes,
-                #   - drop empty / whitespace-only lines,
-                #   - drop the literal "(empty array)" placeholder.
-                echo "$OUT" \\
-                  | sed -E 's/^[[:space:]]*[0-9]+\\)[[:space:]]*//; s/^"(.*)"$/\\1/' \\
-                  | grep -vE '^[[:space:]]*$' \\
-                  | grep -vxF '(empty array)' \\
-                  || true;
-            done
-        ) | sort -u | wc -l | tr -d ' '` :
-      `(
-          RESPONSE=$(redis-cli ${hasTLS ? '--tls' : ''} -a ${password} --no-auth-warning graph.list | grep -v '^(empty array)');
-          if echo "$RESPONSE" | grep -q "(empty array)"; then
-            echo "0";
-          elif [ -z "$RESPONSE" ] || [ "$RESPONSE" = "" ] || [ "$RESPONSE" = $'\n' ]; then
-            echo "0";
-          else
-            echo "$RESPONSE" | grep -cve '^s*$';
-          fi
-        )`;
-=======
-    // Pass the password via positional arg + REDISCLI_AUTH so it never has to
-    // be interpolated into the shell string. This avoids any quoting/escaping
-    // / shell-injection issues if the password contains spaces, $, `, ;, etc.
+    // Pass the password via a positional arg + REDISCLI_AUTH so it is never
+    // interpolated into the shell string. Avoids quoting/escaping problems
+    // and shell-injection if the password contains spaces, $, `, ;, etc.
     const tlsFlag = hasTLS ? '--tls' : '';
-    const shellCommand: string = isCluster ? `
+    const shellCommand: string = isCluster ? `set -e
             REDISCLI_AUTH="$1"; export REDISCLI_AUTH
             (
               INITIAL_HOST="${podId}"
               INITIAL_PORT="6379"
 
-              # Get IP:Port of all master nodes, excluding the cluster bus port
-              MASTER_NODES=$(redis-cli ${tlsFlag} --no-auth-warning -h "$INITIAL_HOST" -p "$INITIAL_PORT" CLUSTER NODES 2>/dev/null \\
-                | grep master \\
-                | awk '{print $2}' \\
-                | cut -d'@' -f1)
+              # Get IP:Port of all healthy master nodes (exclude fail/noaddr).
+              CLUSTER_NODES=$(redis-cli ${tlsFlag} --no-auth-warning -h "$INITIAL_HOST" -p "$INITIAL_PORT" CLUSTER NODES)
+              MASTER_NODES=$(echo "$CLUSTER_NODES" | awk '$3 ~ /master/ && $3 !~ /fail/ && $3 !~ /noaddr/ {print $2}' | cut -d'@' -f1)
 
-              # Loop through each master node and run graph.list
+              if [ -z "$MASTER_NODES" ]; then
+                echo "ERROR: no healthy master nodes found" >&2
+                exit 1
+              fi
+
+              # Loop through each master node and run graph.list. Fail loudly if any shard is unreachable.
               for NODE in $MASTER_NODES; do
                   IP=$(echo "$NODE" | cut -d: -f1)
                   PORT=$(echo "$NODE" | cut -d: -f2)
-                  # Use 2>/dev/null to suppress connection errors for unreachable nodes, if any
-                  redis-cli ${tlsFlag} --no-auth-warning -h "$IP" -p "$PORT" graph.list 2>/dev/null
+                  if [ -z "$IP" ] || [ -z "$PORT" ] || [ "$PORT" = "0" ]; then
+                    echo "ERROR: invalid master address '$NODE'" >&2
+                    exit 1
+                  fi
+                  OUT=$(redis-cli ${tlsFlag} --no-auth-warning -h "$IP" -p "$PORT" graph.list) || {
+                    echo "ERROR: graph.list failed on $IP:$PORT" >&2
+                    exit 1
+                  }
+                  # Normalize each line to just the graph name:
+                  #   - strip optional "  1) " index prefix (TTY-style output),
+                  #   - strip surrounding double quotes,
+                  #   - drop empty / whitespace-only lines,
+                  #   - drop the literal "(empty array)" placeholder.
+                  echo "$OUT" \\
+                    | sed -E 's/^[[:space:]]*[0-9]+\\)[[:space:]]*//; s/^"(.*)"$/\\1/' \\
+                    | grep -vE '^[[:space:]]*$' \\
+                    | grep -vxF '(empty array)' \\
+                    || true
               done
-            ) | grep -v '^(empty array)' | grep -cve '^s*$'
+            ) | sort -u | wc -l | tr -d ' '
         ` :
       `
             REDISCLI_AUTH="$1"; export REDISCLI_AUTH
@@ -453,7 +426,6 @@ export class K8sRepository {
               fi
             )
         `;
->>>>>>> 252a88b1 (fix: enhance Redis command execution to improve security and reliability)
 
     const response = await this._executeCommand(
       kubeConfig,
@@ -594,7 +566,6 @@ export class K8sRepository {
     const k8sCoreApi = kubeConfig.makeApiClient(k8s.CoreV1Api);
     const secrets = await k8sCoreApi.listNamespacedSecret(namespace).then((res) => res.body.items);
 
-<<<<<<< HEAD
     const tlsFlag = hasTLS ? '--tls' : '';
     const scheme = hasTLS ? 'rediss' : 'redis';
     const shellCommand = `set -eu
@@ -710,34 +681,12 @@ export class K8sRepository {
 
       disable_failover
 
-      URL="${scheme}://:$PASS@$TARGET_HOST:6379"
-      rmt -s /data/dump.rdb -m "$URL" -r`;
-=======
-    const scheme = hasTLS ? 'rediss' : 'redis';
-    const tlsFlag = hasTLS ? '--tls' : '';
-    const shellCommand = `(
-      apk --update add curl redis;
-      curl -X GET -H "Accept: application/octet-stream" --output /data/dump.rdb "${downloadUrl}";
-
-      info=$(redis-cli ${tlsFlag} -h ${podId} -a "$adminpassword" --no-auth-warning info);
-
-      podId="${podId}";
-      if echo "$info" | grep -q "redis_mode:standalone"; then
-        if echo "$info" | grep -q "role:slave"; then
-          master=$(echo "$info" | grep "master_host" | cut -d':' -f2 | tr -d ' ' | tr -d '\r');
-          podId="$master";
-        fi
-      fi
-
       # Percent-encode every byte of the password so that characters like
       # @, :, /, %, or whitespace cannot break the redis URI parser in rmt.
-      enc_pass=$(printf '%s' "$adminpassword" | od -An -tx1 -v | tr -d ' \\n' | sed 's/../%&/g');
+      ENC_PASS=$(printf '%s' "$PASS" | od -An -tx1 -v | tr -d ' \\n' | sed 's/../%&/g')
 
-      url="${scheme}://:$enc_pass@$podId:6379";
-
-      rmt -s /data/dump.rdb -m "$url" -r
-    )`;
->>>>>>> 252a88b1 (fix: enhance Redis command execution to improve security and reliability)
+      URL="${scheme}://:$ENC_PASS@$TARGET_HOST:6379"
+      rmt -s /data/dump.rdb -m "$URL" -r`;
 
     const jobManifest: k8s.V1Job = {
       apiVersion: 'batch/v1',
