@@ -391,8 +391,16 @@ export class K8sRepository {
                 OUT=$(redis-cli ${hasTLS ? '--tls' : ''} -a ${password} --no-auth-warning -h "$IP" -p "$PORT" graph.list) || {
                   echo "ERROR: graph.list failed on $IP:$PORT" >&2; exit 1;
                 }
-                # Drop empty/whitespace-only lines from this shard's output.
-                echo "$OUT" | grep -vE '^[[:space:]]*$' || true;
+                # Normalize each line to just the graph name:
+                #   - strip optional "  1) " index prefix (TTY-style output),
+                #   - strip surrounding double quotes,
+                #   - drop empty / whitespace-only lines,
+                #   - drop the literal "(empty array)" placeholder.
+                echo "$OUT" \\
+                  | sed -E 's/^[[:space:]]*[0-9]+\\)[[:space:]]*//; s/^"(.*)"$/\\1/' \\
+                  | grep -vE '^[[:space:]]*$' \\
+                  | grep -vxF '(empty array)' \\
+                  || true;
             done
         ) | sort -u | wc -l | tr -d ' '` :
       `(
@@ -545,17 +553,43 @@ export class K8sRepository {
 
     const tlsFlag = hasTLS ? '--tls' : '';
     const scheme = hasTLS ? 'rediss' : 'redis';
-    const shellCommand = `set -u
-      apk --update add curl redis
+    const shellCommand = `set -eu
 
-      curl -fsS -X GET -H "Accept: application/octet-stream" --output /data/dump.rdb "${downloadUrl}"
-
+      # Validate required env before doing anything destructive.
+      if [ -z "\${adminpassword:-}" ]; then
+        echo "ERROR: adminpassword env var is not set" >&2
+        exit 1
+      fi
       PASS="$adminpassword"
-      INFO=$(redis-cli ${tlsFlag} -h ${podId} -a "$PASS" --no-auth-warning info)
+
+      apk --update add curl redis >/dev/null \\
+        || { echo "ERROR: failed to install curl/redis" >&2; exit 1; }
+
+      curl -fsS -X GET -H "Accept: application/octet-stream" \\
+        --output /data/dump.rdb "${downloadUrl}" \\
+        || { echo "ERROR: failed to download RDB from signed URL" >&2; exit 1; }
+      if [ ! -s /data/dump.rdb ]; then
+        echo "ERROR: downloaded RDB is empty" >&2
+        exit 1
+      fi
+
+      INFO=$(redis-cli ${tlsFlag} -h ${podId} -a "$PASS" --no-auth-warning info) \\
+        || { echo "ERROR: failed to query INFO on ${podId}" >&2; exit 1; }
+      if [ -z "$INFO" ]; then
+        echo "ERROR: empty INFO response from ${podId}" >&2
+        exit 1
+      fi
+      case "$INFO" in
+        *NOAUTH*) echo "ERROR: authentication to ${podId} failed (NOAUTH)" >&2; exit 1 ;;
+      esac
 
       TARGET_HOST="${podId}"
       if echo "$INFO" | grep -q "redis_mode:standalone" && echo "$INFO" | grep -q "role:slave"; then
         TARGET_HOST=$(echo "$INFO" | grep "master_host" | cut -d':' -f2 | tr -d ' \\r')
+        if [ -z "$TARGET_HOST" ]; then
+          echo "ERROR: could not resolve master_host from INFO" >&2
+          exit 1
+        fi
       fi
 
       # In cluster mode, disable replica auto-failover for the duration of the
@@ -565,25 +599,72 @@ export class K8sRepository {
       if echo "$INFO" | grep -q "redis_mode:cluster"; then
         REPLICAS=$(redis-cli ${tlsFlag} -h ${podId} -a "$PASS" --no-auth-warning CLUSTER NODES \\
           | awk '$3 ~ /slave/ && $3 !~ /fail/ && $3 !~ /noaddr/ {print $2}' \\
-          | cut -d'@' -f1)
+          | cut -d'@' -f1) \\
+          || { echo "ERROR: failed to query CLUSTER NODES on ${podId}" >&2; exit 1; }
       fi
 
-      set_failover() {
-        VAL="$1"
+      # Track which replicas we successfully flipped to no-failover=yes so we
+      # only attempt to restore the ones we actually changed, and so cleanup
+      # can report on every individual node it touched.
+      DISABLED_REPLICAS=""
+
+      # Try CONFIG SET cluster-slave-no-failover on a single replica, with a
+      # small retry loop. Returns 0 on success, non-zero on failure.
+      try_set_no_failover() {
+        ip="$1"; port="$2"; val="$3"
+        attempt=1
+        while [ $attempt -le 3 ]; do
+          out=$(redis-cli ${tlsFlag} -h "$ip" -p "$port" -a "$PASS" --no-auth-warning \\
+            CONFIG SET cluster-slave-no-failover "$val" 2>&1) && [ "$out" = "OK" ] && return 0
+          echo "WARN: CONFIG SET cluster-slave-no-failover=$val on $ip:$port attempt $attempt failed: $out" >&2
+          attempt=$((attempt + 1))
+          sleep 1
+        done
+        return 1
+      }
+
+      disable_failover() {
         for R in $REPLICAS; do
           IP="\${R%:*}"
           PORT="\${R#*:}"
           [ -z "$IP" ] || [ -z "$PORT" ] || [ "$PORT" = "0" ] && continue
-          redis-cli ${tlsFlag} -h "$IP" -p "$PORT" -a "$PASS" --no-auth-warning \\
-            CONFIG SET cluster-slave-no-failover "$VAL" >/dev/null 2>&1 \\
-            || echo "WARN: CONFIG SET cluster-slave-no-failover=$VAL failed on $IP:$PORT" >&2
+          if try_set_no_failover "$IP" "$PORT" yes; then
+            DISABLED_REPLICAS="$DISABLED_REPLICAS $IP:$PORT"
+          else
+            # Don't fail the import outright on a single replica that we
+            # couldn't lock down — but make it impossible to miss in logs.
+            echo "ERROR: could not disable auto-failover on $IP:$PORT; import will continue but this shard is unprotected" >&2
+          fi
         done
       }
 
-      cleanup() { set_failover no; }
+      # Best-effort restore on every replica we previously disabled. Any
+      # node we cannot restore is escalated as a high-visibility ERROR so
+      # operators can manually re-enable failover and avoid leaving the
+      # cluster in a degraded HA state.
+      cleanup() {
+        rc=$?
+        FAILED_RESTORES=""
+        for NODE in $DISABLED_REPLICAS; do
+          IP="\${NODE%:*}"
+          PORT="\${NODE#*:}"
+          if ! try_set_no_failover "$IP" "$PORT" no; then
+            FAILED_RESTORES="$FAILED_RESTORES $IP:$PORT"
+          fi
+        done
+        if [ -n "$FAILED_RESTORES" ]; then
+          echo "ERROR: FAILED to re-enable auto-failover on the following replicas:$FAILED_RESTORES" >&2
+          echo "ERROR: cluster HA is degraded on those nodes. Run:" >&2
+          echo "ERROR:   redis-cli -h <node> -p <port> -a <pass> CONFIG SET cluster-slave-no-failover no" >&2
+          # If the import itself succeeded, surface the cleanup failure as
+          # a non-zero exit so the Job is marked failed and gets attention.
+          [ $rc -eq 0 ] && rc=2
+        fi
+        exit $rc
+      }
       trap cleanup EXIT INT TERM
 
-      set_failover yes
+      disable_failover
 
       URL="${scheme}://:$PASS@$TARGET_HOST:6379"
       rmt -s /data/dump.rdb -m "$URL" -r`;
