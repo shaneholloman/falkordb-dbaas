@@ -17,9 +17,6 @@ spec:
         - name: mailserver
           image: docker.io/falkordb/saasbuilder-mail:0.3.0
           imagePullPolicy: IfNotPresent
-          ports:
-            - name: http
-              containerPort: 49750
           envFrom:
             - secretRef:
                 name: mailserver-env
@@ -30,33 +27,6 @@ spec:
             limits:
               memory: "1Gi"
               cpu: "500m"
-          livenessProbe:
-            httpGet:
-              path: /healthz/process/liveness
-              port: 49750
-            initialDelaySeconds: 120
-            periodSeconds: 20
-            timeoutSeconds: 10
-            successThreshold: 1
-            failureThreshold: 9
-          readinessProbe:
-            httpGet:
-              path: /healthz/process/readiness
-              port: 49750
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 10
-            successThreshold: 1
-            failureThreshold: 18
-          startupProbe:
-            httpGet:
-              path: /healthz/process/startup
-              port: 49750
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 10
-            successThreshold: 1
-            failureThreshold: 60
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -66,18 +36,3 @@ spec:
             sizeLimit: 100Mi
       nodeSelector:
         node_pool: backend
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: mailserver
-  namespace: api
-spec:
-  selector:
-    app: mailserver
-  ports:
-    - name: http
-      protocol: TCP
-      port: 49750
-      targetPort: 49750
-  type: ClusterIP
