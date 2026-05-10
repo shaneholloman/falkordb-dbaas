@@ -1,5 +1,5 @@
 import { type Job } from 'bullmq';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { type FastifyInstance } from 'fastify';
 import { type InstanceRestoredJobData } from '../types';
 import { IOmnistrateRepository } from '../../repositories/omnistrate/IOmnistrateRepository';
@@ -158,12 +158,18 @@ export async function processInstanceRestored(
     logger.info({ count: usersToSync.length }, 'Non-principal users to sync from source instance');
 
     let syncedCount = 0;
-    const syncErrors: Array<{ username: string; operation: 'create' | 'modify'; error: string }> = [];
+    // usernameHash is a short, non-reversible identifier so support can correlate
+    // failures across log lines without exposing real customer usernames.
+    const hashUsername = (username: string): string =>
+      createHash('sha256').update(username).digest('hex').slice(0, 12);
+
+    const syncErrors: Array<{ usernameHash: string; operation: 'create' | 'modify'; error: string }> = [];
 
     for (const user of usersToSync) {
       // Passwords are write-only in LDAP — assign a random initial password.
       // Users must reset their passwords after restoration.
       const randomPassword = randomBytes(24).toString('base64url');
+      const usernameHash = hashUsername(user.username);
 
       try {
         await userService.createUser(instanceId, cloudProvider, k8sClusterName, region, {
@@ -185,18 +191,18 @@ export async function processInstanceRestored(
           } catch (modifyError) {
             const msg = getErrorMessage(modifyError);
             logger.warn(
-              { error: msg, username: user.username, operation: 'modify' },
+              { error: msg, username: '***', usernameHash, operation: 'modify' },
               'Failed to update ACL for existing user in restored instance',
             );
-            syncErrors.push({ username: user.username, operation: 'modify', error: msg });
+            syncErrors.push({ usernameHash, operation: 'modify', error: msg });
           }
         } else {
           const msg = getErrorMessage(error);
           logger.warn(
-            { error: msg, username: user.username, operation: 'create' },
+            { error: msg, username: '***', usernameHash, operation: 'create' },
             'Failed to create non-principal user in restored instance',
           );
-          syncErrors.push({ username: user.username, operation: 'create', error: msg });
+          syncErrors.push({ usernameHash, operation: 'create', error: msg });
         }
       }
     }
