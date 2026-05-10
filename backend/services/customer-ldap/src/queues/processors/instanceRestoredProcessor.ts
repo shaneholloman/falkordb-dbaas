@@ -43,8 +43,8 @@ export async function processInstanceRestored(
     const instance = await omnistrateRepo.getInstance(instanceId);
 
     if (!instance) {
-      logger.error('Instance not found in Omnistrate');
-      throw new Error(`Instance ${instanceId} not found in Omnistrate - will retry`);
+      logger.error({ instanceId }, 'Instance not found in Omnistrate');
+      return;
     }
 
     const resultParams = instance.resultParams || {};
@@ -106,7 +106,7 @@ export async function processInstanceRestored(
 
     // Step 2: sync non-principal users from the source instance (if provided)
     if (!sourceInstanceId) {
-      logger.info({ instanceId }, 'No sourceInstanceId provided — skipping non-principal user sync');
+      logger.warn({ instanceId }, 'No sourceInstanceId provided — skipping non-principal user sync');
       return;
     }
 
@@ -182,6 +182,10 @@ export async function processInstanceRestored(
             syncedCount++;
             logger.info({ instanceId }, 'Non-principal user ACL updated in restored instance');
           } catch (modifyError) {
+            logger.warn(
+              { error: modifyError instanceof Error ? modifyError.message : 'Unknown error' },
+              'Failed to update ACL for existing user in restored instance',
+            );
             const msg = modifyError instanceof Error ? modifyError.message : 'Unknown error';
             syncErrors.push({ instanceId, error: msg });
           }

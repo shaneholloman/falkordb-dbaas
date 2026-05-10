@@ -34,18 +34,15 @@ export const modifyUserHandler: RouteHandlerMethod<
     // The principal user's password must only be changed via the Omnistrate API
     // (which triggers the instance-updated webhook and syncs to LDAP automatically).
     // Block any attempt to modify it through the customer-ldap API.
-    if (userData.password !== undefined) {
-      const omnistrateRepository = request.diScope.resolve<IOmnistrateRepository>(
-        IOmnistrateRepository.repositoryName,
+    const omnistrateRepository = request.diScope.resolve<IOmnistrateRepository>(IOmnistrateRepository.repositoryName);
+    const instance = await omnistrateRepository.getInstance(sessionData.instanceId);
+    const principalUsername = instance.resultParams?.falkordbUser;
+
+    if (principalUsername && username === principalUsername) {
+      throw ApiError.forbidden(
+        'The principal user password can only be changed via the Omnistrate API',
+        'CANNOT_CHANGE_PRINCIPAL_USER_PASSWORD',
       );
-      const instance = await omnistrateRepository.getInstance(sessionData.instanceId);
-      const principalUsername = instance.resultParams?.falkordbUser;
-      if (principalUsername && username === principalUsername) {
-        throw ApiError.forbidden(
-          'The principal user password can only be changed via the Omnistrate API',
-          'CANNOT_CHANGE_PRINCIPAL_USER_PASSWORD',
-        );
-      }
     }
 
     // Execute the user operation
