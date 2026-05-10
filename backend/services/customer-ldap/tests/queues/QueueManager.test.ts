@@ -56,18 +56,20 @@ describe('QueueManager', () => {
 
   describe('constructor', () => {
     it('should initialize queues', () => {
-      expect(Queue).toHaveBeenCalledTimes(2);
+      expect(Queue).toHaveBeenCalledTimes(4);
       expect(Queue).toHaveBeenCalledWith(QUEUE_NAMES.INSTANCE_CREATED, expect.any(Object));
       expect(Queue).toHaveBeenCalledWith(QUEUE_NAMES.INSTANCE_DELETED, expect.any(Object));
+      expect(Queue).toHaveBeenCalledWith(QUEUE_NAMES.INSTANCE_UPDATED, expect.any(Object));
+      expect(Queue).toHaveBeenCalledWith(QUEUE_NAMES.INSTANCE_RESTORED, expect.any(Object));
       expect(mockFastify.log.info).toHaveBeenCalledWith('Queues initialized');
     });
   });
 
   describe('startWorkers', () => {
-    it('should start workers for both queues', async () => {
+    it('should start workers for all queues', async () => {
       await queueManager.startWorkers();
 
-      expect(Worker).toHaveBeenCalledTimes(2);
+      expect(Worker).toHaveBeenCalledTimes(4);
       expect(Worker).toHaveBeenCalledWith(
         QUEUE_NAMES.INSTANCE_CREATED,
         expect.any(Function),
@@ -75,6 +77,16 @@ describe('QueueManager', () => {
       );
       expect(Worker).toHaveBeenCalledWith(
         QUEUE_NAMES.INSTANCE_DELETED,
+        expect.any(Function),
+        expect.any(Object),
+      );
+      expect(Worker).toHaveBeenCalledWith(
+        QUEUE_NAMES.INSTANCE_UPDATED,
+        expect.any(Function),
+        expect.any(Object),
+      );
+      expect(Worker).toHaveBeenCalledWith(
+        QUEUE_NAMES.INSTANCE_RESTORED,
         expect.any(Function),
         expect.any(Object),
       );
@@ -171,8 +183,8 @@ describe('QueueManager', () => {
     it('should close all workers and queues', async () => {
       await queueManager.close();
 
-      expect(mockWorker.close).toHaveBeenCalledTimes(2);
-      expect(mockQueue.close).toHaveBeenCalledTimes(2);
+      expect(mockWorker.close).toHaveBeenCalledTimes(4);
+      expect(mockQueue.close).toHaveBeenCalledTimes(4);
       expect(mockFastify.log.info).toHaveBeenCalledWith('Closing queue workers and connections');
       expect(mockFastify.log.info).toHaveBeenCalledWith('Queue workers and connections closed');
     });
