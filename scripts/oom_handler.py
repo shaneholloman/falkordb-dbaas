@@ -163,6 +163,13 @@ class OmnistrateClient:
 # Google Chat notifier
 # ---------------------------------------------------------------------------
 
+# Centralized mention string appended to OOM notifications (Google Chat user IDs)
+CHAT_MENTIONS: str = (
+    "<users/111622808083881015737> "  # Muhammad
+    "<users/117793002495590672566> "  # David
+)
+
+
 class GoogleChatNotifier:
 
     def __init__(self, webhook_url: str, verify_ssl: bool = True):
@@ -181,7 +188,7 @@ class GoogleChatNotifier:
         timestamp: str,
     ):
         payload = {
-            "text": f"🚨 ContainerOOMKilled — {pod} ({namespace})",
+            "text": f"🚨 ContainerOOMKilled — {pod} ({namespace}) {CHAT_MENTIONS}",
             "cards": [{
                 "header": {
                     "title": "🚨 ContainerOOMKilled",
@@ -232,7 +239,7 @@ class GoogleChatNotifier:
                                            cluster: str, container: str,
                                            timestamp: str):
         payload = {
-            "text": f"🚨 ContainerOOMKilled (non-FalkorDB) — {pod} ({namespace})",
+            "text": f"🚨 ContainerOOMKilled (non-FalkorDB) — {pod} ({namespace}) {CHAT_MENTIONS}",
             "cards": [{
                 "header": {
                     "title": "🚨 ContainerOOMKilled (non-FalkorDB workload)",
@@ -261,7 +268,7 @@ class GoogleChatNotifier:
                                 namespace: str, cluster: str,
                                 error_details: Optional[str] = None):
         payload = {
-            "text": "❌ OOM Handler Failed",
+            "text": f"❌ OOM Handler Failed {CHAT_MENTIONS}",
             "cards": [{
                 "header": {
                     "title": "❌ OOM Handler Failed",
@@ -437,6 +444,24 @@ def main(args):
         timestamp=timestamp,
     )
     print("   Notification sent.")
+
+    # Write outputs for downstream GitHub Actions jobs (AI triage pipeline)
+    # Use <<EOF delimiter syntax to safely handle special characters in values
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if github_output:
+        import uuid
+        delimiter = f"ghadelimiter_{uuid.uuid4().hex}"
+        with open(github_output, "a") as f:
+            for key, val in [
+                ("namespace", args.namespace),
+                ("pod", args.pod),
+                ("cluster", args.cluster),
+                ("container", args.container),
+                ("customer_name", customer.name),
+                ("customer_email", mask_email(customer.email)),
+                ("subscription_id", customer.subscription_id),
+            ]:
+                f.write(f"{key}<<{delimiter}\n{val}\n{delimiter}\n")
 
     print(f"\n{'='*60}")
     print("✅ OOM handling complete!")

@@ -4,7 +4,7 @@
 # Usage:
 #   ./scripts/terragrunt_apply.sh <stack> <tfvars-file> [command] [extra-args...]
 #
-# Commands: apply (default), plan, destroy, output, state, import, show, etc.
+# Commands: apply (default), plan, destroy, output, state, import, show, taint, etc.
 #
 # Examples:
 #   ./scripts/terragrunt_apply.sh gcp-infra terraform.dev.tfvars
@@ -170,17 +170,32 @@ case "$ACTION" in
   *) NEEDS_VARFILE=false ;;
 esac
 
+# Commands that terragrunt does not natively support must be forwarded
+# via "terragrunt run -- <cmd> ...".
+case "$ACTION" in
+  taint|untaint|force-unlock) USE_RUN=true ;;
+  *) USE_RUN=false ;;
+esac
+
+tg_exec() {
+  if [ "$USE_RUN" = true ]; then
+    exec terragrunt run -- "$ACTION" "$@"
+  else
+    exec terragrunt "$ACTION" "$@"
+  fi
+}
+
 case "$STACK" in
   # Stacks where all vars are mapped through terragrunt inputs → no -var-file
   gcp-infra|gcp-k8s)
-    exec terragrunt "$ACTION" "$@"
+    tg_exec "$@"
     ;;
   # Terragrunt stacks that need -var-file for vars not in inputs
   azure|gcp-core|gcp-workloads|gcp-bootstrap)
     if [ "$NEEDS_VARFILE" = true ]; then
-      exec terragrunt "$ACTION" -var-file="$TFVARS_FILE" "$@"
+      tg_exec -var-file="$TFVARS_FILE" "$@"
     else
-      exec terragrunt "$ACTION" "$@"
+      tg_exec "$@"
     fi
     ;;
   # AWS stacks use tofu directly (S3 backend, no terragrunt root)
