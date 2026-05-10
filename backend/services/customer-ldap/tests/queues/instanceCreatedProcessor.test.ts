@@ -195,7 +195,10 @@ describe('processInstanceCreated', () => {
       mockUserService.createUser.mockRejectedValue(new Error('429 Rate limited'));
 
       await expect(processInstanceCreated(mockJob, mockFastify)).rejects.toThrow('LDAP server rate limit reached');
-      expect(mockLogger.warn).toHaveBeenCalledWith('Rate limited by LDAP server');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { error: '429 Rate limited' },
+        'Rate limited by LDAP server',
+      );
     });
 
     it('should throw error on generic failure', async () => {
