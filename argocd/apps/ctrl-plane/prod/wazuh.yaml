@@ -167,6 +167,17 @@ spec:
               - name: google-chat-webhook
                 secret:
                   secretName: wazuh-google-chat-webhook
+              # Phase-2 custom rules/decoders + risk-accepted CVE list.
+              # These ConfigMaps live in argocd/kustomize/wazuh-rules.
+              - name: wazuh-custom-rules
+                configMap:
+                  name: wazuh-custom-rules
+              - name: wazuh-custom-decoders
+                configMap:
+                  name: wazuh-custom-decoders
+              - name: wazuh-accepted-cves
+                configMap:
+                  name: wazuh-accepted-cves
             additionalVolumeMounts:
               - name: google-chat-integration
                 mountPath: /var/ossec/integrations/custom-google-chat
@@ -178,6 +189,20 @@ spec:
                 readOnly: true
               - name: google-chat-webhook
                 mountPath: /var/ossec/etc/secrets/google-chat
+                readOnly: true
+              # Custom Phase-2 rules — extends localRules from helm values.
+              - name: wazuh-custom-rules
+                mountPath: /var/ossec/etc/rules/local_rules.xml
+                subPath: local_rules.xml
+                readOnly: true
+              - name: wazuh-custom-decoders
+                mountPath: /var/ossec/etc/decoders/local_decoder.xml
+                subPath: local_decoder.xml
+                readOnly: true
+              # CDB list of risk-accepted CVEs (used by suppression rule 100404).
+              - name: wazuh-accepted-cves
+                mountPath: /var/ossec/etc/lists/accepted-cves
+                subPath: accepted-cves
                 readOnly: true
             extraConf: |
               <remote>
@@ -200,6 +225,10 @@ spec:
                 <level>10</level>
                 <alert_format>json</alert_format>
               </integration>
+              <!-- Risk-accepted CVE suppression list (referenced by rule 100404) -->
+              <ruleset>
+                <list>etc/lists/accepted-cves</list>
+              </ruleset>
               <vulnerability-detector>
                 <enabled>yes</enabled>
                 <interval>12h</interval>

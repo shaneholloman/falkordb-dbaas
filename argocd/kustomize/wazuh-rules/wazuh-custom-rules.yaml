@@ -143,8 +143,9 @@ data:
         <group>grype_vuln</group>
       </rule>
 
-      <!-- Any vulnerability found — triggers Google Chat (level >= 10) -->
-      <rule id="100401" level="10">
+      <!-- Any vulnerability found — logged + dashboarded; level <10 so no notification per-CVE.
+           See burst rules 100450/100451 for actionable aggregated alerts. -->
+      <rule id="100401" level="7">
         <if_sid>100400</if_sid>
         <field name="Severity">critical|high</field>
         <description>Grype CVE $(VulnerabilityID) [$(Severity)] in $(Package) on $(ImageName) — $(Cluster)</description>
@@ -152,20 +153,45 @@ data:
         <options>alert_by_email</options>
       </rule>
 
-      <!-- Critical CVE -->
-      <rule id="100402" level="13">
+      <!-- Critical CVE — individually logged, not notified (see 100450 burst rule) -->
+      <rule id="100402" level="9">
         <if_sid>100401</if_sid>
         <field name="Severity">critical</field>
         <description>CRITICAL CVE $(VulnerabilityID) in $(Package) ($(InstalledVersion)) on $(ImageName) — $(Cluster)</description>
         <group>grype_vuln,soc2_fail,soc2_critical</group>
       </rule>
 
-      <!-- High CVE -->
-      <rule id="100403" level="12">
+      <!-- High CVE — individually logged, not notified -->
+      <rule id="100403" level="8">
         <if_sid>100401</if_sid>
         <field name="Severity">high</field>
         <description>HIGH CVE $(VulnerabilityID) in $(Package) ($(InstalledVersion)) on $(ImageName) — $(Cluster)</description>
         <group>grype_vuln,soc2_fail</group>
+      </rule>
+
+      <!-- Burst aggregation: 3+ critical/high CVEs on same cluster within 1h
+           → single actionable alert. This is what gets pushed to Google Chat. -->
+      <rule id="100450" level="13" frequency="3" timeframe="3600">
+        <if_matched_sid>100401</if_matched_sid>
+        <same_field>Cluster</same_field>
+        <description>CVE BURST: 3+ critical/high CVEs detected on $(Cluster) within 1h — review evidence locker</description>
+        <group>grype_vuln,soc2_fail,soc2_critical,cve_burst</group>
+        <options>alert_by_email</options>
+      </rule>
+
+      <!-- Risk-accepted CVE suppression.
+           Drops to level 0 (no alert, no integration trigger) if the
+           VulnerabilityID is present in the accepted-cves CDB list mounted
+           at /var/ossec/etc/lists/accepted-cves. The list is managed via
+           the wazuh-accepted-cves ConfigMap and requires a Security-team
+           CODEOWNER review for each addition.
+           Note: this rule MUST come AFTER 100401-100450 and 100499 so it
+           takes precedence on matched events. -->
+      <rule id="100404" level="0">
+        <if_sid>100401</if_sid>
+        <list field="VulnerabilityID" lookup="match_key">etc/lists/accepted-cves</list>
+        <description>Grype CVE $(VulnerabilityID) suppressed (risk-accepted in accepted-cves list).</description>
+        <group>grype_vuln,suppressed</group>
       </rule>
 
     </group>
@@ -291,13 +317,23 @@ data:
         <group>kubebench_cis</group>
       </rule>
 
-      <!-- FAIL finding — scored -->
-      <rule id="100701" level="11">
+      <!-- FAIL finding — scored. Logged + dashboarded; not notified per-finding.
+           Burst rule 100750 fires on 5+ scored fails per cluster per hour. -->
+      <rule id="100701" level="7">
         <if_sid>100700</if_sid>
         <field name="Status">FAIL</field>
         <field name="Scored">true</field>
         <description>CIS Benchmark FAIL (scored): [$(TestNumber)] $(TestDesc) — $(Cluster)</description>
         <group>kubebench_cis,soc2_fail,cis_fail</group>
+        <options>alert_by_email</options>
+      </rule>
+
+      <!-- Burst: 5+ scored CIS failures on same cluster within 1h -->
+      <rule id="100750" level="13" frequency="5" timeframe="3600">
+        <if_matched_sid>100701</if_matched_sid>
+        <same_field>Cluster</same_field>
+        <description>CIS BURST: 5+ scored CIS benchmark failures on $(Cluster) within 1h — review compliance report</description>
+        <group>kubebench_cis,soc2_fail,soc2_critical,cis_burst</group>
         <options>alert_by_email</options>
       </rule>
 
@@ -334,8 +370,8 @@ data:
         <group>kubescape_attack</group>
       </rule>
 
-      <!-- Critical severity finding -->
-      <rule id="100801" level="13">
+      <!-- Critical severity finding — logged; burst rule 100850 notifies on spikes -->
+      <rule id="100801" level="9">
         <if_sid>100800</if_sid>
         <field name="Severity">critical</field>
         <description>CRITICAL KubeScape: [$(ControlID)] $(ControlName) in $(Framework) — $(Cluster)</description>
@@ -343,12 +379,21 @@ data:
         <options>alert_by_email</options>
       </rule>
 
-      <!-- High severity finding -->
-      <rule id="100802" level="12">
+      <!-- High severity finding — logged -->
+      <rule id="100802" level="8">
         <if_sid>100800</if_sid>
         <field name="Severity">high</field>
         <description>HIGH KubeScape: [$(ControlID)] $(ControlName) in $(Framework) — $(Cluster)</description>
         <group>kubescape_attack,soc2_fail</group>
+        <options>alert_by_email</options>
+      </rule>
+
+      <!-- Burst: 3+ critical KubeScape findings on same cluster within 1h -->
+      <rule id="100850" level="13" frequency="3" timeframe="3600">
+        <if_matched_sid>100801</if_matched_sid>
+        <same_field>Cluster</same_field>
+        <description>KUBESCAPE BURST: 3+ critical findings on $(Cluster) within 1h</description>
+        <group>kubescape_attack,soc2_fail,soc2_critical,kubescape_burst</group>
         <options>alert_by_email</options>
       </rule>
 

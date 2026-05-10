@@ -17,10 +17,20 @@ metadata:
 data:
   custom-google-chat: |
     #!/usr/bin/env python3
-    """Wazuh custom integration: forward alerts to Google Chat via webhook."""
+    """Wazuh custom integration: forward alerts to Google Chat via webhook.
+
+    Rate-limited: at most RATE_LIMIT_MAX messages per RATE_LIMIT_WINDOW
+    seconds (sliding window). State persisted at RATE_LIMIT_STATE.
+    Critical alerts (level >= 13) bypass the cap so genuine incidents are
+    never dropped. When the cap is hit, drops are logged to stderr (which
+    Wazuh tee's to ossec.log) and an aggregate "rate-limit hit" message
+    is posted to Google Chat at most once per window.
+    """
     import json
     import os
     import sys
+    import time
+    import fcntl
     import urllib.request
     import urllib.error
 
@@ -39,12 +49,102 @@ data:
         print("ERROR: No webhook URL provided", file=sys.stderr)
         sys.exit(1)
 
+    # ── Rate limiting ─────────────────────────────────────────────
+    # Sliding window: at most MAX msgs in WINDOW seconds. Critical
+    # alerts (level >= BYPASS_LEVEL) ignore the cap.
+    RATE_LIMIT_STATE = os.environ.get(
+        "WAZUH_GCHAT_RL_STATE", "/var/ossec/logs/gchat-rate-limit.json"
+    )
+    RATE_LIMIT_WINDOW = int(os.environ.get("WAZUH_GCHAT_RL_WINDOW", "3600"))
+    RATE_LIMIT_MAX = int(os.environ.get("WAZUH_GCHAT_RL_MAX", "50"))
+    RATE_LIMIT_BYPASS_LEVEL = int(os.environ.get("WAZUH_GCHAT_RL_BYPASS", "13"))
+
+    def _post(payload_dict):
+        body = json.dumps(payload_dict).encode("utf-8")
+        req = urllib.request.Request(
+            HOOK_URL,
+            data=body,
+            headers={"Content-Type": "application/json; charset=UTF-8"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status not in (200, 201):
+                    print(
+                        f"WARNING: Google Chat returned status {resp.status}",
+                        file=sys.stderr,
+                    )
+                    return False
+                return True
+        except urllib.error.URLError as e:
+            print(f"ERROR: Failed to post to Google Chat: {e}", file=sys.stderr)
+            return False
+
+    def _check_rate_limit(level):
+        """Return (allowed: bool, dropped_since: int).
+
+        Critical alerts always allowed. Returns dropped_since > 0 when this
+        invocation is the first to allow a message after one or more drops
+        in the current window — caller should then post an aggregate notice.
+        """
+        if level >= RATE_LIMIT_BYPASS_LEVEL:
+            return True, 0
+        now = time.time()
+        os.makedirs(os.path.dirname(RATE_LIMIT_STATE), exist_ok=True)
+        # Open with O_RDWR | O_CREAT for fcntl locking.
+        fd = os.open(RATE_LIMIT_STATE, os.O_RDWR | os.O_CREAT, 0o640)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                raw = os.read(fd, 65536).decode("utf-8") or "{}"
+                state = json.loads(raw) if raw.strip() else {}
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                state = {}
+            timestamps = [
+                t for t in state.get("timestamps", [])
+                if isinstance(t, (int, float)) and (now - t) < RATE_LIMIT_WINDOW
+            ]
+            dropped = int(state.get("dropped", 0))
+            if len(timestamps) >= RATE_LIMIT_MAX:
+                state["timestamps"] = timestamps
+                state["dropped"] = dropped + 1
+                os.lseek(fd, 0, 0)
+                os.ftruncate(fd, 0)
+                os.write(fd, json.dumps(state).encode("utf-8"))
+                print(
+                    f"WARN: Google Chat rate limit hit "
+                    f"({len(timestamps)}/{RATE_LIMIT_MAX} in {RATE_LIMIT_WINDOW}s); "
+                    f"dropped this alert (level={level}, total dropped={dropped + 1}).",
+                    file=sys.stderr,
+                )
+                return False, 0
+            timestamps.append(now)
+            state["timestamps"] = timestamps
+            # Reset dropped counter once we successfully allow a message
+            # again — return the previous count so caller can announce it.
+            announce = dropped
+            state["dropped"] = 0
+            os.lseek(fd, 0, 0)
+            os.ftruncate(fd, 0)
+            os.write(fd, json.dumps(state).encode("utf-8"))
+            return True, announce
+        finally:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                os.close(fd)
+
     with open(ALERT_FILE) as f:
         alert = json.load(f)
 
     rule = alert.get("rule", {})
     agent = alert.get("agent", {})
     level = rule.get("level", 0)
+
+    allowed, dropped_since = _check_rate_limit(level)
+    if not allowed:
+        # Drop silently — counter persisted; aggregate posted on next allow.
+        sys.exit(0)
 
     # Map severity to emoji
     if level >= 13:
@@ -71,21 +171,14 @@ data:
             full_description = full_description[:500] + "…"
         text += f"\n*Details:* {full_description}"
 
-    payload = json.dumps({"text": text}).encode("utf-8")
+    if dropped_since > 0:
+        text = (
+            f"⚠️ *Rate-limit recovery* — {dropped_since} alert(s) were dropped "
+            f"in the previous {RATE_LIMIT_WINDOW}s window (cap: "
+            f"{RATE_LIMIT_MAX}/window). Resuming delivery.\n\n"
+        ) + text
 
-    req = urllib.request.Request(
-        HOOK_URL,
-        data=payload,
-        headers={"Content-Type": "application/json; charset=UTF-8"},
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            if resp.status not in (200, 201):
-                print(f"WARNING: Google Chat returned status {resp.status}", file=sys.stderr)
-    except urllib.error.URLError as e:
-        print(f"ERROR: Failed to post to Google Chat: {e}", file=sys.stderr)
+    if not _post({"text": text}):
         sys.exit(1)
   custom-google-chat.py: |
     #!/usr/bin/env python3
