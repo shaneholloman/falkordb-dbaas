@@ -9,6 +9,7 @@ import { IConnectionCacheRepository } from '../../repositories/connection-cache/
 import { UserService } from '../../services/UserService';
 import { ALLOWED_ACL } from '../../constants';
 import { JOB_TIMEOUT_MS } from '../config';
+import { getErrorMessage, isConflictError, isRateLimitError } from '../../utils/error-helpers';
 
 /**
  * Process instance created job
@@ -91,14 +92,14 @@ export async function processInstanceCreated(
       logger.info({ username: '***' }, 'User created successfully');
     } catch (error) {
       // Check if user already exists (idempotency)
-      if (error instanceof Error && (error.message.includes('already exists') || error.message.includes('409'))) {
+      if (isConflictError(error)) {
         logger.info('User already exists - job is idempotent');
         return; // Success - user already exists
       }
 
       // Check for rate limiting
-      if (error instanceof Error && error.message.includes('429')) {
-        logger.warn('Rate limited by LDAP server');
+      if (isRateLimitError(error)) {
+        logger.warn({ error: getErrorMessage(error) }, 'Rate limited by LDAP server');
         throw new Error('LDAP server rate limit reached - will retry');
       }
 
@@ -106,7 +107,7 @@ export async function processInstanceCreated(
       throw error;
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = getErrorMessage(error);
     logger.error({ error: errorMessage }, 'Error processing instance created job');
 
     // Re-throw to trigger BullMQ retry

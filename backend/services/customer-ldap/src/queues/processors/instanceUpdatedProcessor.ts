@@ -8,6 +8,7 @@ import { ILdapRepository } from '../../repositories/ldap/ILdapRepository';
 import { IConnectionCacheRepository } from '../../repositories/connection-cache/IConnectionCacheRepository';
 import { UserService } from '../../services/UserService';
 import { JOB_TIMEOUT_MS } from '../config';
+import { getErrorMessage, isRateLimitError } from '../../utils/error-helpers';
 
 /**
  * Process instance updated job.
@@ -86,14 +87,14 @@ export async function processInstanceUpdated(
 
       logger.info({ instanceId }, 'Principal user password synced to LDAP successfully');
     } catch (error) {
-      if (error instanceof Error && error.message.includes('429')) {
-        logger.warn('Rate limited by LDAP server');
+      if (isRateLimitError(error)) {
+        logger.warn({ error: getErrorMessage(error) }, 'Rate limited by LDAP server');
         throw new Error('LDAP server rate limit reached - will retry');
       }
       throw error;
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = getErrorMessage(error);
     logger.error({ error: errorMessage }, 'Error processing instance updated job');
     throw new Error(`Failed to process instance updated: ${errorMessage}`);
   }

@@ -33,6 +33,8 @@ describe('Omnistrate Webhook Routes with Queue', () => {
     mockQueueManager = {
       addInstanceCreatedJob: jest.fn().mockResolvedValue('test-job-id-123'),
       addInstanceDeletedJob: jest.fn().mockResolvedValue('test-job-id-456'),
+      addInstanceUpdatedJob: jest.fn().mockResolvedValue('test-job-id-789'),
+      addInstanceRestoredJob: jest.fn().mockResolvedValue('test-job-id-321'),
       startWorkers: jest.fn().mockResolvedValue(undefined),
       close: jest.fn().mockResolvedValue(undefined),
     } as any;
@@ -262,6 +264,167 @@ describe('Omnistrate Webhook Routes with Queue', () => {
           payload: {
             instance_id: 'test-instance-789',
             subscription_id: 'test-sub-012',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(JSON.parse(response.body)).toEqual({
+        error: 'Internal server error',
+        message: 'Failed to queue webhook for processing - webhook will be retried',
+      });
+    });
+  });
+
+  describe('POST /v1/omnistrate/instance-updated', () => {
+    it('should enqueue job and return 202 Accepted', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/omnistrate/instance-updated',
+        headers: {
+          authorization: 'Bearer webhook-secret',
+        },
+        payload: {
+          payload: {
+            instance_id: 'test-instance-upd-1',
+            subscription_id: 'test-sub-upd-1',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(JSON.parse(response.body)).toEqual({
+        message: 'Instance updated webhook accepted and queued for processing',
+        jobId: 'test-job-id-789',
+      });
+      expect(mockQueueManager.addInstanceUpdatedJob).toHaveBeenCalledWith({
+        instanceId: 'test-instance-upd-1',
+        subscriptionId: 'test-sub-upd-1',
+      });
+    });
+
+    it('should return 401 without authentication', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/omnistrate/instance-updated',
+        payload: {
+          payload: {
+            instance_id: 'test-instance-upd-1',
+            subscription_id: 'test-sub-upd-1',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(mockQueueManager.addInstanceUpdatedJob).not.toHaveBeenCalled();
+    });
+
+    it('should return 500 if enqueuing fails', async () => {
+      mockQueueManager.addInstanceUpdatedJob.mockRejectedValueOnce(new Error('Redis connection error'));
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/omnistrate/instance-updated',
+        headers: {
+          authorization: 'Bearer webhook-secret',
+        },
+        payload: {
+          payload: {
+            instance_id: 'test-instance-upd-1',
+            subscription_id: 'test-sub-upd-1',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(JSON.parse(response.body)).toEqual({
+        error: 'Internal server error',
+        message: 'Failed to queue webhook for processing - webhook will be retried',
+      });
+    });
+  });
+
+  describe('POST /v1/omnistrate/instance-restored', () => {
+    it('should enqueue job and return 202 Accepted with sourceInstanceId', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/omnistrate/instance-restored',
+        headers: {
+          authorization: 'Bearer webhook-secret',
+        },
+        payload: {
+          payload: {
+            instance_id: 'test-instance-rst-1',
+            subscription_id: 'test-sub-rst-1',
+            source_instance_id: 'test-instance-source-1',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(JSON.parse(response.body)).toEqual({
+        message: 'Instance restored webhook accepted and queued for processing',
+        jobId: 'test-job-id-321',
+      });
+      expect(mockQueueManager.addInstanceRestoredJob).toHaveBeenCalledWith({
+        instanceId: 'test-instance-rst-1',
+        subscriptionId: 'test-sub-rst-1',
+        sourceInstanceId: 'test-instance-source-1',
+      });
+    });
+
+    it('should enqueue job and return 202 Accepted without sourceInstanceId', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/omnistrate/instance-restored',
+        headers: {
+          authorization: 'Bearer webhook-secret',
+        },
+        payload: {
+          payload: {
+            instance_id: 'test-instance-rst-2',
+            subscription_id: 'test-sub-rst-2',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(mockQueueManager.addInstanceRestoredJob).toHaveBeenCalledWith({
+        instanceId: 'test-instance-rst-2',
+        subscriptionId: 'test-sub-rst-2',
+        sourceInstanceId: undefined,
+      });
+    });
+
+    it('should return 401 without authentication', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/omnistrate/instance-restored',
+        payload: {
+          payload: {
+            instance_id: 'test-instance-rst-1',
+            subscription_id: 'test-sub-rst-1',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(mockQueueManager.addInstanceRestoredJob).not.toHaveBeenCalled();
+    });
+
+    it('should return 500 if enqueuing fails', async () => {
+      mockQueueManager.addInstanceRestoredJob.mockRejectedValueOnce(new Error('Redis connection error'));
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/omnistrate/instance-restored',
+        headers: {
+          authorization: 'Bearer webhook-secret',
+        },
+        payload: {
+          payload: {
+            instance_id: 'test-instance-rst-1',
+            subscription_id: 'test-sub-rst-1',
           },
         },
       });

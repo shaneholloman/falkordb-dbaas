@@ -10,6 +10,7 @@ import { IConnectionCacheRepository } from '../../repositories/connection-cache/
 import { UserService } from '../../services/UserService';
 import { ALLOWED_ACL } from '../../constants';
 import { JOB_TIMEOUT_MS } from '../config';
+import { getErrorMessage, isConflictError, isRateLimitError } from '../../utils/error-helpers';
 
 /**
  * Process instance restored job.
@@ -90,14 +91,14 @@ export async function processInstanceRestored(
       });
       logger.info({ username: '***' }, 'Principal user re-created in LDAP after restoration');
     } catch (error) {
-      if (error instanceof Error && (error.message.includes('already exists') || error.message.includes('409'))) {
+      if (isConflictError(error)) {
         logger.info('Principal user already exists in LDAP - syncing password instead');
         await userService.modifyUser(instanceId, cloudProvider, k8sClusterName, region, falkordbUsername, {
           password: falkordbPassword,
         });
         logger.info({ username: '***' }, 'Principal user password synced after restoration');
-      } else if (error instanceof Error && error.message.includes('429')) {
-        logger.warn('Rate limited by LDAP server');
+      } else if (isRateLimitError(error)) {
+        logger.warn({ error: getErrorMessage(error) }, 'Rate limited by LDAP server');
         throw new Error('LDAP server rate limit reached - will retry');
       } else {
         throw error;
@@ -117,7 +118,7 @@ export async function processInstanceRestored(
       sourceInstance = await omnistrateRepo.getInstance(sourceInstanceId);
     } catch (error) {
       logger.warn(
-        { error: error instanceof Error ? error.message : 'Unknown error' },
+        { error: getErrorMessage(error) },
         'Could not fetch source instance — skipping non-principal user sync',
       );
       return;
@@ -145,7 +146,7 @@ export async function processInstanceRestored(
       );
     } catch (error) {
       logger.warn(
-        { error: error instanceof Error ? error.message : 'Unknown error' },
+        { error: getErrorMessage(error) },
         'Could not list users from source instance — skipping non-principal user sync',
       );
       return;
@@ -157,7 +158,7 @@ export async function processInstanceRestored(
     logger.info({ count: usersToSync.length }, 'Non-principal users to sync from source instance');
 
     let syncedCount = 0;
-    const syncErrors: Array<{ instanceId: string; error: string }> = [];
+    const syncErrors: Array<{ username: string; operation: 'create' | 'modify'; error: string }> = [];
 
     for (const user of usersToSync) {
       // Passwords are write-only in LDAP — assign a random initial password.
@@ -173,7 +174,7 @@ export async function processInstanceRestored(
         syncedCount++;
         logger.info({ username: '***' }, 'Non-principal user synced to restored instance');
       } catch (error) {
-        if (error instanceof Error && (error.message.includes('already exists') || error.message.includes('409'))) {
+        if (isConflictError(error)) {
           // Already present — ACL may differ; update it but leave password unchanged
           try {
             await userService.modifyUser(instanceId, cloudProvider, k8sClusterName, region, user.username, {
@@ -182,27 +183,34 @@ export async function processInstanceRestored(
             syncedCount++;
             logger.info({ instanceId }, 'Non-principal user ACL updated in restored instance');
           } catch (modifyError) {
+            const msg = getErrorMessage(modifyError);
             logger.warn(
-              { error: modifyError instanceof Error ? modifyError.message : 'Unknown error' },
+              { error: msg, username: user.username, operation: 'modify' },
               'Failed to update ACL for existing user in restored instance',
             );
-            const msg = modifyError instanceof Error ? modifyError.message : 'Unknown error';
-            syncErrors.push({ instanceId, error: msg });
+            syncErrors.push({ username: user.username, operation: 'modify', error: msg });
           }
         } else {
-          const msg = error instanceof Error ? error.message : 'Unknown error';
-          syncErrors.push({ instanceId, error: msg });
+          const msg = getErrorMessage(error);
+          logger.warn(
+            { error: msg, username: user.username, operation: 'create' },
+            'Failed to create non-principal user in restored instance',
+          );
+          syncErrors.push({ username: user.username, operation: 'create', error: msg });
         }
       }
     }
 
     if (syncErrors.length > 0) {
-      logger.warn({ syncedCount, failedCount: syncErrors.length }, 'Some non-principal users failed to sync');
+      logger.warn(
+        { syncedCount, failedCount: syncErrors.length, syncErrors },
+        'Some non-principal users failed to sync',
+      );
     } else {
       logger.info({ syncedCount }, 'Non-principal user sync completed');
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = getErrorMessage(error);
     logger.error({ error: errorMessage }, 'Error processing instance restored job');
     throw new Error(`Failed to process instance restored: ${errorMessage}`);
   }

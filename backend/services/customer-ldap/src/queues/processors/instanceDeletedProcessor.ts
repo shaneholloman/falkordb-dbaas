@@ -8,6 +8,7 @@ import { ILdapRepository } from '../../repositories/ldap/ILdapRepository';
 import { IConnectionCacheRepository } from '../../repositories/connection-cache/IConnectionCacheRepository';
 import { UserService } from '../../services/UserService';
 import { JOB_TIMEOUT_MS } from '../config';
+import { getErrorMessage } from '../../utils/error-helpers';
 
 /**
  * Process instance deleted job
@@ -41,7 +42,7 @@ export async function processInstanceDeleted(
       instance = await omnistrateRepo.getInstance(instanceId);
     } catch (error) {
       logger.warn(
-        { error: error instanceof Error ? error.message : 'Unknown error' },
+        { error: getErrorMessage(error) },
         'Instance not found in Omnistrate, may already be deleted',
       );
       // For deletion jobs, if instance doesn't exist, consider it success
@@ -87,7 +88,7 @@ export async function processInstanceDeleted(
       users = await userService.listUsers(instanceId, cloudProvider, k8sClusterName, region);
     } catch (error) {
       logger.warn(
-        { error: error instanceof Error ? error.message : 'Unknown error' },
+        { error: getErrorMessage(error) },
         'Could not list users, may already be deleted',
       );
       return; // Success - users already deleted or inaccessible
@@ -106,7 +107,7 @@ export async function processInstanceDeleted(
         logger.info({ username: '***' }, 'User deleted successfully');
         deletedCount++;
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage = getErrorMessage(error);
         logger.error({ error: errorMessage, username: '***' }, 'Error deleting user');
         errors.push({ username: '***', error: errorMessage });
       }
@@ -120,7 +121,7 @@ export async function processInstanceDeleted(
 
     logger.info({ deletedCount }, 'User deletion completed');
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = getErrorMessage(error);
     logger.error({ error: errorMessage }, 'Error processing instance deleted job');
 
     // For deletion jobs, we're more lenient - don't throw to avoid excessive retries
