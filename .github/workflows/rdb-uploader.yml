@@ -73,6 +73,16 @@ on:
       environment:
         required: true
         type: string
+    outputs:
+      rdb_url:
+        description: 'Signed GCS download URL for dump.rdb'
+        value: ${{ jobs.upload-rdb.outputs.rdb_url }}
+      aof_url:
+        description: 'Signed GCS download URL for appendonlydir.tar.gz'
+        value: ${{ jobs.upload-rdb.outputs.aof_url }}
+      falkordb_version:
+        description: 'FalkorDB version detected via MODULE LIST'
+        value: ${{ jobs.upload-rdb.outputs.falkordb_version }}
 
 env:
   ISSUE_REPO: 'FalkorDB/private'
@@ -81,6 +91,10 @@ jobs:
   upload-rdb:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    outputs:
+      rdb_url: ${{ steps.upload_gcs.outputs.rdb_url }}
+      aof_url: ${{ steps.upload_gcs.outputs.aof_url }}
+      falkordb_version: ${{ steps.upload_gcs.outputs.falkordb_version }}
     steps:
       # ------------------------------------------------------------------ #
       # 0. Check that the actor is an authorised user
@@ -104,14 +118,14 @@ jobs:
       # ------------------------------------------------------------------ #
       - name: Setup omnistrate-ctl
         if: ${{ inputs.sign_only != 'true' }}
-        uses: omnistrate-oss/setup-omnistrate-ctl@v1
+        uses: omnistrate-oss/setup-omnistrate-ctl@0ac9e5945eb7019952b098c7d155b0c1b77b5c7a # v1
 
       # ------------------------------------------------------------------ #
       # 2. Install kubectl (skipped in sign-only mode)
       # ------------------------------------------------------------------ #
       - name: Install kubectl
         if: ${{ inputs.sign_only != 'true' }}
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
 
       # ------------------------------------------------------------------ #
       # 3. Set up Python
@@ -168,7 +182,7 @@ jobs:
       # 6. Authenticate to GCP via Workload Identity Federation
       # ------------------------------------------------------------------ #
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCS_SA_EMAIL }}
@@ -210,6 +224,7 @@ jobs:
           RDB_PATH: ${{ steps.upload_gcs.outputs.rdb_url }}
           AOF_PATH: ${{ steps.upload_gcs.outputs.aof_url }}
           AOF_UPLOAD_FAILED: ${{ steps.upload_gcs.outputs.aof_upload_failed }}
+          FALKORDB_VERSION: ${{ steps.upload_gcs.outputs.falkordb_version }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SIGN_ONLY: ${{ inputs.sign_only }}
         run: |
@@ -248,7 +263,13 @@ jobs:
 
           COMMENT+="
 
-          **Pod:** \`$POD\` &nbsp; **Namespace:** \`$NAMESPACE\`
+          **Pod:** \`$POD\` &nbsp; **Namespace:** \`$NAMESPACE\`"
+
+          if [[ -n "$FALKORDB_VERSION" ]]; then
+            COMMENT+=" &nbsp; **FalkorDB:** \`$FALKORDB_VERSION\`"
+          fi
+
+          COMMENT+="
 
           > [View workflow run]($RUN_URL)
 
