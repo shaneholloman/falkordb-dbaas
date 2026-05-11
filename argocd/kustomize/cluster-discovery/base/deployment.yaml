@@ -57,4 +57,4 @@ spec:
               cpu: 500m
               memory: 512Mi
       nodeSelector:
-        node_pool: observability-resources
+        node_pool: backend
