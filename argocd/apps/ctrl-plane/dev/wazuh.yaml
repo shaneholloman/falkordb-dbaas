@@ -163,6 +163,10 @@ spec:
               type: ClusterIP
               annotations: {}
               ports:
+                - name: agents
+                  protocol: TCP
+                  port: 1514
+                  targetPort: 1514
                 - name: registration
                   protocol: TCP
                   port: 1515
@@ -255,6 +259,14 @@ spec:
                 readOnly: true
             # Appended to the template-generated ossec.conf
             extraConf: |
+              <auth>
+                <force>
+                  <enabled>yes</enabled>
+                  <key_mismatch>yes</key_mismatch>
+                  <disconnected_time enabled="yes">0</disconnected_time>
+                  <after_registration_time>0</after_registration_time>
+                </force>
+              </auth>
               <remote>
                 <connection>syslog</connection>
                 <port>514</port>
