@@ -31,10 +31,11 @@ import sys
 import re
 import json
 import html
+import hashlib
 import argparse
 import asyncio
-from datetime import datetime
-from urllib.parse import urlencode
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode, quote
 from zoneinfo import ZoneInfo
 
 import requests
@@ -252,6 +253,223 @@ def _scrub_report(text: str) -> str:
     return text
 
 
+# ---------------------------------------------------------------------------
+# GitHub Issue Manager for OOM tracking
+# ---------------------------------------------------------------------------
+
+class GitHubIssueManager:
+    """Manages GitHub issues for OOM event tracking.
+
+    Deduplicates by namespace — recurring OOMs on the same instance within
+    7 days are added as comments to the existing issue rather than creating
+    new issues.
+    """
+
+    MAX_LABEL_LENGTH = 50
+
+    def __init__(self, token: str, repo: str, project_id: str | None = None):
+        self.token = token
+        self.repo = repo  # "owner/repo"
+        self.project_id = project_id  # "PVT_kwDO..."
+        self.session = requests.Session()
+        self.session.headers.update({
+            'Authorization': f'Bearer {token}',
+            'Accept': 'application/vnd.github.v3+json',
+        })
+        self.api_url = "https://api.github.com"
+
+    # -- label helpers -------------------------------------------------------
+
+    @staticmethod
+    def _make_safe_label(prefix: str, value: str) -> str:
+        """Create a label that fits within GitHub's 50-char limit."""
+        full_label = f"{prefix}:{value}"
+        if len(full_label) <= GitHubIssueManager.MAX_LABEL_LENGTH:
+            return full_label
+        value_hash = hashlib.sha256(value.encode('utf-8')).hexdigest()[:8]
+        label = f"{prefix}:{value_hash}"
+        if len(label) > GitHubIssueManager.MAX_LABEL_LENGTH:
+            max_prefix_len = GitHubIssueManager.MAX_LABEL_LENGTH - 9
+            label = f"{prefix[:max_prefix_len]}:{value_hash}"
+        print(f"⚠️  Label '{prefix}:{value}' too long ({len(full_label)} chars), using hash: {label}")
+        return label
+
+    def _ensure_label_exists(self, label: str):
+        """Ensure a label exists in the repo, create if missing."""
+        if len(label) > self.MAX_LABEL_LENGTH:
+            raise ValueError(f"Label '{label}' exceeds {self.MAX_LABEL_LENGTH} char limit")
+        encoded = quote(label, safe='')
+        resp = self.session.get(
+            f"{self.api_url}/repos/{self.repo}/labels/{encoded}", timeout=30,
+        )
+        if resp.status_code == 404:
+            create = self.session.post(
+                f"{self.api_url}/repos/{self.repo}/labels",
+                json={"name": label, "color": "d93f0b"},  # red for OOM
+                timeout=30,
+            )
+            if create.status_code == 201:
+                print(f"Created label: {label}")
+            elif create.status_code == 422:
+                print(f"Label already exists (race): {label}")
+            else:
+                create.raise_for_status()
+
+    # -- project linking -----------------------------------------------------
+
+    def _add_issue_to_project(self, issue_node_id: str):
+        """Add issue to GitHub project via GraphQL."""
+        if not self.project_id:
+            return
+        mutation = """
+        mutation($projectId: ID!, $contentId: ID!) {
+          addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+            item { id }
+          }
+        }
+        """
+        resp = self.session.post(
+            "https://api.github.com/graphql",
+            json={"query": mutation, "variables": {
+                "projectId": self.project_id,
+                "contentId": issue_node_id,
+            }},
+            timeout=30,
+        )
+        if resp.status_code == 200:
+            result = resp.json()
+            if "errors" in result:
+                print(f"❌ Failed to add issue to project: {result['errors']}", file=sys.stderr)
+            else:
+                print(f"✅ Issue added to project {self.project_id}")
+        else:
+            print(f"❌ Failed to add issue to project (HTTP {resp.status_code})", file=sys.stderr)
+
+    # -- find / create / comment ---------------------------------------------
+
+    def find_existing_issue(self, customer_email: str, namespace: str,
+                            hours: int = 168) -> int | None:
+        """Find an open OOM issue for this namespace within *hours* (default 7 days).
+
+        Returns the issue number, or None if no issue exists.
+        """
+        customer_label = self._make_safe_label('customer', customer_email)
+        namespace_label = self._make_safe_label('namespace', namespace)
+
+        resp = self.session.get(
+            f"{self.api_url}/repos/{self.repo}/issues",
+            params={
+                'state': 'open',
+                'labels': f'oom,{customer_label},{namespace_label}',
+                'per_page': 10,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        issues = resp.json()
+
+        if not issues:
+            return None
+
+        issue = issues[0]
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        try:
+            created = datetime.fromisoformat(
+                issue['created_at'].replace('Z', '+00:00')
+            )
+        except (ValueError, KeyError):
+            created = datetime.now(timezone.utc)
+
+        if created < cutoff:
+            print(f"   Existing issue #{issue['number']} is older than {hours}h, will create new")
+            return None
+
+        print(f"   Found existing issue #{issue['number']}")
+        return issue['number']
+
+    def create_issue(
+        self,
+        customer_name: str,
+        customer_email: str,
+        subscription_id: str,
+        pod: str,
+        namespace: str,
+        cluster: str,
+        container: str,
+        timestamp: str,
+        report: str,
+        grafana_memory_url: str,
+        grafana_pods_url: str,
+    ) -> int:
+        """Create a new GitHub issue with the full OOM triage report."""
+
+        # Extract key fields for the title
+        category = _extract_report_field(report, "Category") or "Unknown"
+        masked_email = _mask_email(customer_email)
+
+        title = f"[OOM] {pod} in {namespace} ({cluster}) — {category} — {timestamp}"
+
+        body = f"""## ContainerOOMKilled — AI Triage
+
+**Customer:** {customer_name} ({masked_email})
+**Subscription ID:** {subscription_id}
+**Pod:** {pod}
+**Container:** {container}
+**Namespace:** {namespace}
+**Cluster:** {cluster}
+**Time (Israel):** {timestamp}
+
+**Grafana Links:** [Memory metrics]({grafana_memory_url}) · [Pod overview]({grafana_pods_url})
+
+---
+
+{_scrub_report(report)}
+"""
+
+        customer_label = self._make_safe_label('customer', customer_email)
+        namespace_label = self._make_safe_label('namespace', namespace)
+
+        labels = [customer_label, namespace_label, 'oom']
+        for lbl in labels:
+            self._ensure_label_exists(lbl)
+
+        resp = self.session.post(
+            f"{self.api_url}/repos/{self.repo}/issues",
+            json={'title': title, 'body': body, 'labels': labels},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        issue_number = data['number']
+        print(f"✅ Created OOM issue #{issue_number}")
+
+        self._add_issue_to_project(data['node_id'])
+        return issue_number
+
+    def add_comment(self, issue_number: int, pod: str, namespace: str,
+                    cluster: str, container: str, timestamp: str,
+                    report: str, grafana_memory_url: str,
+                    grafana_pods_url: str):
+        """Add triage report as a comment on an existing issue."""
+        comment = f"""### Recurring OOM — {timestamp}
+
+**Pod:** {pod} | **Container:** {container} | **Namespace:** {namespace} | **Cluster:** {cluster}
+
+**Grafana Links:** [Memory metrics]({grafana_memory_url}) · [Pod overview]({grafana_pods_url})
+
+---
+
+{_scrub_report(report)}
+"""
+        resp = self.session.post(
+            f"{self.api_url}/repos/{self.repo}/issues/{issue_number}/comments",
+            json={'body': comment},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        print(f"✅ Added triage comment to issue #{issue_number}")
+
+
 def _build_initial_prompt(args) -> str:
     """Build the initial prompt with OOM context for the AI session."""
     # Determine topology description
@@ -349,7 +567,7 @@ def _build_grafana_pods_url(grafana_base: str, namespace: str, pod: str,
     return f"{grafana_base.rstrip('/')}/d/k8s_views_pods/kubernetes-views-pods?{urlencode(params)}"
 
 
-def _send_report_to_chat(
+def _send_summary_to_chat(
     report: str,
     webhook_url: str,
     customer_name: str,
@@ -362,17 +580,20 @@ def _send_report_to_chat(
     grafana_memory_url: str,
     grafana_pods_url: str,
     timestamp: str,
+    issue_number: int | None = None,
+    issue_repo: str = "",
+    is_recurring: bool = False,
     verify_ssl: bool = True,
 ):
-    """Send the AI triage report as a Google Chat card."""
+    """Send a compact AI triage summary to Google Chat (no full report).
+
+    The full triage report is stored in the GitHub issue instead of chat
+    to reduce channel noise.
+    """
 
     # Extract key fields from the report
     category = html.escape(_extract_report_field(report, "Category") or "Unknown")
     confidence = html.escape(_extract_report_field(report, "Confidence") or "Unknown")
-    seven_day_trend = html.escape(_extract_report_field(report, "7-day trend") or "N/A")
-    memory_at_oom = html.escape(_extract_report_field(report, "Container RSS at OOM") or _extract_report_field(report, "Memory (used_bytes) at OOM") or "N/A")
-    maxmemory = html.escape(_extract_report_field(report, "Maxmemory config") or "N/A")
-    command_rate = html.escape(_extract_report_field(report, "Command rate before OOM") or "N/A")
 
     # Extract the Recommended Action section
     recommended_action = ""
@@ -382,87 +603,79 @@ def _send_report_to_chat(
     )
     if action_match:
         recommended_action = action_match.group(1).strip()
-        if len(recommended_action) > 400:
-            recommended_action = recommended_action[:397] + "..."
+        if len(recommended_action) > 600:
+            recommended_action = recommended_action[:597] + "..."
         recommended_action = html.escape(recommended_action)
 
     masked_email = _mask_email(customer_email)
-
-    # Short confidence for subtitle (e.g. "High" from "High — detailed explanation")
     confidence_short = confidence.split("—")[0].split("-")[0].strip() if confidence else "Unknown"
 
+    if is_recurring:
+        card_title = f"🔁 Recurring OOM: {category}"
+        text_prefix = f"🔁 Recurring OOM Triage — {pod} ({namespace}) {CHAT_MENTIONS}"
+    else:
+        card_title = f"🤖 OOM Triage: {category}"
+        text_prefix = f"🤖 OOM Triage Complete — {pod} ({namespace}) {CHAT_MENTIONS}"
+
+    sections = [
+        {
+            "widgets": [
+                {"keyValue": {"topLabel": "Customer", "content": f"{customer_name} ({masked_email})"}},
+                {"keyValue": {"topLabel": "Cluster / Namespace", "content": f"{cluster} / {namespace}"}},
+                {"keyValue": {"topLabel": "Pod / Container", "content": f"{pod} / {container}"}},
+                {"keyValue": {"topLabel": "Diagnosis", "content": f"{category} ({confidence_short})"}},
+            ]
+        },
+        {
+            "widgets": [{
+                "textParagraph": {
+                    "text": f"<b>Recommended Action:</b><br>{recommended_action}" if recommended_action else "<i>See full report in GitHub issue</i>",
+                }
+            }]
+        },
+    ]
+
+    # Buttons section — Grafana links + issue link
+    buttons = [
+        {
+            "textButton": {
+                "text": "Memory metrics",
+                "onClick": {"openLink": {"url": grafana_memory_url}},
+            }
+        },
+        {
+            "textButton": {
+                "text": "Pod overview",
+                "onClick": {"openLink": {"url": grafana_pods_url}},
+            }
+        },
+    ]
+    if issue_number and issue_repo:
+        buttons.insert(0, {
+            "textButton": {
+                "text": f"Issue #{issue_number}",
+                "onClick": {"openLink": {"url": f"https://github.com/{issue_repo}/issues/{issue_number}"}},
+            }
+        })
+    sections.append({"widgets": [{"buttons": buttons}]})
+
     payload = {
-        "text": f"🤖 OOM Triage Complete — {pod} ({namespace}) {CHAT_MENTIONS}",
+        "text": text_prefix,
         "cards": [{
             "header": {
-                "title": f"🤖 OOM Triage: {category}",
+                "title": card_title,
                 "subtitle": f"{masked_email} — {confidence_short}",
             },
-            "sections": [
-                {
-                    "widgets": [
-                        {"keyValue": {"topLabel": "Customer", "content": f"{customer_name} ({masked_email})"}},
-                        {"keyValue": {"topLabel": "Subscription ID", "content": subscription_id}},
-                        {"keyValue": {"topLabel": "Cluster / Namespace", "content": f"{cluster} / {namespace}"}},
-                        {"keyValue": {"topLabel": "Pod / Container", "content": f"{pod} / {container}"}},
-                        {"keyValue": {"topLabel": "Time (Israel)", "content": timestamp}},
-                    ]
-                },
-                {
-                    "widgets": [
-                        {"keyValue": {"topLabel": "Diagnosis", "content": category}},
-                        {"keyValue": {"topLabel": "Confidence", "content": confidence}},
-                        {"keyValue": {"topLabel": "7-Day Trend", "content": seven_day_trend}},
-                        {"keyValue": {"topLabel": "Memory at OOM", "content": memory_at_oom}},
-                        {"keyValue": {"topLabel": "Maxmemory", "content": maxmemory}},
-                        {"keyValue": {"topLabel": "Command Rate", "content": command_rate}},
-                    ]
-                },
-                {
-                    "widgets": [{
-                        "textParagraph": {
-                            "text": f"<b>Recommended Action:</b><br>{recommended_action}" if recommended_action else "<i>See full report in logs</i>",
-                        }
-                    }]
-                },
-                {
-                    "widgets": [{
-                        "buttons": [
-                            {
-                                "textButton": {
-                                    "text": "Memory metrics",
-                                    "onClick": {"openLink": {"url": grafana_memory_url}},
-                                }
-                            },
-                            {
-                                "textButton": {
-                                    "text": "Pod overview",
-                                    "onClick": {"openLink": {"url": grafana_pods_url}},
-                                }
-                            },
-                        ]
-                    }]
-                },
-            ],
+            "sections": sections,
         }],
     }
 
     try:
-        # Send the card summary
         response = requests.post(webhook_url, json=payload, timeout=30, verify=verify_ssl)
         response.raise_for_status()
-        print("AI triage card sent to Google Chat.")
-
-        # Send full report as a follow-up message — scrub PII and sensitive URLs
-        scrubbed_report = _scrub_report(report)
-        full_report_payload = {
-            "text": f"📋 *Full AI OOM Triage Report — {pod} ({namespace})*\n\n{scrubbed_report}",
-        }
-        follow_up = requests.post(webhook_url, json=full_report_payload, timeout=30, verify=verify_ssl)
-        follow_up.raise_for_status()
-        print("Full triage report sent to Google Chat.")
+        print("AI triage summary sent to Google Chat.")
     except requests.RequestException as e:
-        print(f"⚠️  Failed to send AI triage report to Google Chat: {e}", file=sys.stderr)
+        print(f"⚠️  Failed to send AI triage summary to Google Chat: {e}", file=sys.stderr)
 
 
 async def run_triage(args):
@@ -580,6 +793,11 @@ def main():
 
     google_chat_webhook = os.environ.get("GOOGLE_CHAT_WEBHOOK_URL", "")
 
+    # GitHub issue tracking (optional — gracefully skip if not configured)
+    github_token = os.environ.get("ISSUE_GITHUB_TOKEN", "")
+    issue_repo = os.environ.get("ISSUE_REPO", "")
+    project_id = os.environ.get("PROJECT_ID")  # Optional project board ID
+
     try:
         report = asyncio.run(run_triage(args))
         if report:
@@ -591,9 +809,54 @@ def main():
             print(scrubbed_report)
             print(f"{'='*60}")
 
-            # Send to Google Chat
+            # --- GitHub issue tracking ---
+            issue_number = None
+            is_recurring = False
+            if github_token and issue_repo:
+                try:
+                    github = GitHubIssueManager(github_token, issue_repo, project_id)
+
+                    print("\n🔍 Searching for existing OOM issue...")
+                    existing = github.find_existing_issue(
+                        args.customer_email, args.namespace,
+                    )
+
+                    if existing:
+                        is_recurring = True
+                        issue_number = existing
+                        github.add_comment(
+                            issue_number=existing,
+                            pod=args.pod,
+                            namespace=args.namespace,
+                            cluster=args.cluster,
+                            container=args.container,
+                            timestamp=timestamp,
+                            report=report,
+                            grafana_memory_url=grafana_memory_url,
+                            grafana_pods_url=grafana_pods_url,
+                        )
+                    else:
+                        issue_number = github.create_issue(
+                            customer_name=args.customer_name,
+                            customer_email=args.customer_email,
+                            subscription_id=args.subscription_id,
+                            pod=args.pod,
+                            namespace=args.namespace,
+                            cluster=args.cluster,
+                            container=args.container,
+                            timestamp=timestamp,
+                            report=report,
+                            grafana_memory_url=grafana_memory_url,
+                            grafana_pods_url=grafana_pods_url,
+                        )
+                except Exception as e:
+                    print(f"⚠️  GitHub issue creation failed (non-fatal): {e}", file=sys.stderr)
+            else:
+                print("⚠️  ISSUE_GITHUB_TOKEN or ISSUE_REPO not set, skipping issue creation", file=sys.stderr)
+
+            # --- Google Chat summary (compact — full report lives in the issue) ---
             if google_chat_webhook:
-                _send_report_to_chat(
+                _send_summary_to_chat(
                     report=report,
                     webhook_url=google_chat_webhook,
                     customer_name=args.customer_name,
@@ -606,10 +869,20 @@ def main():
                     grafana_memory_url=grafana_memory_url,
                     grafana_pods_url=grafana_pods_url,
                     timestamp=timestamp,
+                    issue_number=issue_number,
+                    issue_repo=issue_repo,
+                    is_recurring=is_recurring,
                     verify_ssl=verify_ssl,
                 )
             else:
                 print("⚠️  GOOGLE_CHAT_WEBHOOK_URL not set, skipping chat notification", file=sys.stderr)
+
+            # Output for GitHub Actions
+            github_output = os.environ.get("GITHUB_OUTPUT")
+            if github_output:
+                with open(github_output, "a") as f:
+                    f.write(f"issue_number={issue_number or ''}\n")
+                    f.write(f"is_recurring={str(is_recurring).lower()}\n")
         else:
             print("ERROR: No triage report generated", file=sys.stderr, flush=True)
             sys.exit(1)
