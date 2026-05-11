@@ -11,7 +11,7 @@ module "org_policy_domain_whitelist" {
 
 module "org_policy_skip_default_network" {
   source  = "terraform-google-modules/org-policy/google"
-  version = "~> 5.3.0"
+  version = "~> 7.2.0"
 
   organization_id = var.org_id
 
@@ -25,7 +25,7 @@ module "org_policy_skip_default_network" {
 
 module "org_policy_disable_sa_keys" {
   source  = "terraform-google-modules/org-policy/google"
-  version = "~> 5.3.0"
+  version = "~> 7.2.0"
 
   organization_id = var.org_id
 
@@ -39,7 +39,7 @@ module "org_policy_disable_sa_keys" {
 
 module "org_policy_storage_enforce_public_access_prevention" {
   source  = "terraform-google-modules/org-policy/google"
-  version = "~> 5.3.0"
+  version = "~> 7.2.0"
 
   organization_id = var.org_id
 

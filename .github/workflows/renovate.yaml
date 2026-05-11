@@ -14,7 +14,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Run Renovate
-        uses: renovatebot/github-action@79dc0ba74dc3de28db0a7aeb1d0b95d5bf5fde2a # v41
+        uses: renovatebot/github-action@693b9ef15eec82123529a37c782242f091365961 # v46.1.14
         with:
           configurationFile: renovate.json
           token: ${{ secrets.RENOVATE_TOKEN || secrets.GITHUB_TOKEN }}
@@ -22,3 +22,10 @@ jobs:
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           RENOVATE_PLATFORM: github
           LOG_LEVEL: info
+          # Let Renovate install tools (e.g. opentofu) on demand inside its own
+          # container via containerbase, so postUpgradeTasks can run `tofu init`.
+          RENOVATE_BINARY_SOURCE: install
+          # allowedCommands is an admin-only setting; must be passed via env,
+          # not via renovate.json. Restrict to the exact command we run from
+          # postUpgradeTasks (anchored regex).
+          RENOVATE_ALLOWED_COMMANDS: '["^tofu init -upgrade -backend=false -input=false$"]'
