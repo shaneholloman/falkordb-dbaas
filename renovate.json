@@ -36,6 +36,13 @@
       "automerge": false,
       "schedule": ["before 6am on Monday"],
       "commitMessageTopic": "all major dependencies"
+    },
+    {
+      "description": "Keep OpenTelemetry packages in lockstep so the experimental (0.x) and stable (1.x/2.x) tracks don't desync (must be last to override catch-all group above)",
+      "matchPackageNames": ["@opentelemetry/**"],
+      "groupName": "opentelemetry",
+      "groupSlug": "opentelemetry",
+      "commitMessageTopic": "opentelemetry packages"
     }
   ],
   "customManagers": [
