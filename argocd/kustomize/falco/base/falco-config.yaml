@@ -54,11 +54,12 @@ data:
     outputs_queue:
       capacity: 256
 
-    # Metadata enrichment from K8s API
-    metadata_download:
-      max_mb: 100
-      chunk_wait_us: 1000
-      watch_freq_sec: 1
+    # Container engines — CRI socket paths for K8s metadata
+    container_engines:
+      cri:
+        sockets:
+          - /run/containerd/containerd.sock
+          - /run/crio/crio.sock
 
     # Rate limiting: max alerts per second
     outputs:
@@ -89,7 +90,7 @@ data:
       output: >
         Container escape attempt via nsenter
         (user=%user.name container=%container.name image=%container.image.repository
-         command=%proc.cmdline ns=%proc.ns pod=%k8s.pod.name)
+         command=%proc.cmdline pod=%k8s.pod.name)
       priority: CRITICAL
       tags: [container, escape, soc2, mitre_privilege_escalation]
 

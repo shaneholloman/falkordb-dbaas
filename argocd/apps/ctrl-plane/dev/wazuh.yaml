@@ -195,6 +195,24 @@ spec:
               - name: wazuh-accepted-cves
                 configMap:
                   name: wazuh-accepted-cves
+              # cont-init.d script to inject cluster key after 0-wazuh-init
+              - name: cluster-key-injector
+                configMap:
+                  name: wazuh-cluster-key-injector
+                  defaultMode: 0755
+              # Cluster key secret for injection into ossec.conf
+              - name: cluster-key
+                secret:
+                  secretName: wazuh-cluster-key
+              # Stunnel TLS sidecar volumes
+              - name: stunnel-config
+                configMap:
+                  name: syslog-tls-stunnel
+              - name: syslog-tls-cert
+                secret:
+                  secretName: wazuh-syslog-tls
+              - name: stunnel-tmp
+                emptyDir: {}
             additionalVolumeMounts:
               - name: google-chat-integration
                 mountPath: /var/ossec/integrations/custom-google-chat
@@ -207,19 +225,33 @@ spec:
               - name: google-chat-webhook
                 mountPath: /var/ossec/etc/secrets/google-chat
                 readOnly: true
-              # Custom Phase-2 rules — extends localRules from helm values.
+              # Custom Phase-2 rules — mount into the config-mount directory so
+              # the chart's init script (cp -r /wazuh-config-mount/* /var/ossec)
+              # copies them to the right place.  Mounting directly at
+              # /var/ossec/etc/rules/ would create a RO subPath that blocks the cp.
               - name: wazuh-custom-rules
-                mountPath: /var/ossec/etc/rules/local_rules.xml
+                mountPath: /wazuh-config-mount/etc/rules/local_rules.xml
                 subPath: local_rules.xml
                 readOnly: true
               - name: wazuh-custom-decoders
-                mountPath: /var/ossec/etc/decoders/local_decoder.xml
+                mountPath: /wazuh-config-mount/etc/decoders/local_decoder.xml
                 subPath: local_decoder.xml
                 readOnly: true
               # CDB list of risk-accepted CVEs (used by suppression rule 100404).
+              # Mounted into config-mount so 0-wazuh-init copies it (avoids
+              # RO subPath conflicting with chown on /var/ossec/etc/lists).
               - name: wazuh-accepted-cves
-                mountPath: /var/ossec/etc/lists/accepted-cves
+                mountPath: /wazuh-config-mount/etc/lists/accepted-cves
                 subPath: accepted-cves
+                readOnly: true
+              # Inject cluster key after 0-wazuh-init copies the config template.
+              # Runs as cont-init.d/1-inject-key (between 0-wazuh-init and 2-manager).
+              - name: cluster-key-injector
+                mountPath: /etc/cont-init.d/1-inject-key
+                subPath: inject-key.sh
+                readOnly: true
+              - name: cluster-key
+                mountPath: /run/secrets/cluster-key
                 readOnly: true
             # Appended to the template-generated ossec.conf
             extraConf: |
@@ -292,9 +324,9 @@ spec:
                       - |
                         # Inject cluster key from SealedSecret into ossec.conf
                         OSSEC_CONF=/mnt/master/wazuh/var/ossec/etc/ossec.conf
-                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/CLUSTER_KEY)
+                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/key)
                         if [ -f "$OSSEC_CONF" ]; then
-                          sed -i "s|<key>.*</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
+                          sed -i "s|<key>placeholder-replaced-at-runtime</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
                         fi
                         # Also configure API rate limits
                         API_YAML=/mnt/master/wazuh/var/ossec/api/configuration/api.yaml
@@ -364,18 +396,6 @@ spec:
                       capabilities:
                         drop:
                           - ALL
-                volumes:
-                  - name: stunnel-config
-                    configMap:
-                      name: syslog-tls-stunnel
-                  - name: syslog-tls-cert
-                    secret:
-                      secretName: wazuh-syslog-tls
-                  - name: stunnel-tmp
-                    emptyDir: {}
-                  - name: cluster-key
-                    secret:
-                      secretName: wazuh-cluster-key
           worker:
             enabled: true
             replicas: 1
@@ -388,6 +408,48 @@ spec:
                 memory: "4Gi"
             storageSize: 50Gi
             storageClass: "standard-rwo"
+            additionalVolumes:
+              - name: cluster-key-injector
+                configMap:
+                  name: wazuh-cluster-key-injector
+                  defaultMode: 0755
+              - name: cluster-key
+                secret:
+                  secretName: wazuh-cluster-key
+            additionalVolumeMounts:
+              - name: cluster-key-injector
+                mountPath: /etc/cont-init.d/1-inject-key
+                subPath: inject-key.sh
+                readOnly: true
+              - name: cluster-key
+                mountPath: /run/secrets/cluster-key
+                readOnly: true
+            extraSpec:
+              pod:
+                initContainers:
+                  - name: init-cluster-key
+                    image: alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339
+                    command: ["sh", "-c"]
+                    args:
+                      - |
+                        OSSEC_CONF=/mnt/worker/wazuh/var/ossec/etc/ossec.conf
+                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/key)
+                        if [ -f "$OSSEC_CONF" ]; then
+                          sed -i "s|<key>placeholder-replaced-at-runtime</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
+                        fi
+                    volumeMounts:
+                      - name: wazuh-manager-worker
+                        mountPath: /mnt/worker
+                      - name: cluster-key
+                        mountPath: /run/secrets/cluster-key
+                        readOnly: true
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 16Mi
+                      limits:
+                        cpu: 10m
+                        memory: 16Mi
 
         indexer:
           enabled: true
@@ -441,7 +503,7 @@ spec:
               cert-manager.io/cluster-issuer: letsencrypt-prod
             host: "wazuh.security.dev.internal.falkordb.cloud"
             tls:
-              - secretName: dashboard-tls
+              - secretName: dashboard-ingress-tls
                 hosts:
                   - wazuh.security.dev.internal.falkordb.cloud
           # SOC 2 dashboard import on startup
@@ -470,24 +532,32 @@ spec:
                       - /bin/sh
                       - -c
                       - |
-                        WAZUH_YML=/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
-                        # Wait for wazuh.yml to be created by the plugin (up to 120s)
-                        for i in $(seq 1 60); do
-                          [ -f "$WAZUH_YML" ] && break
-                          sleep 2
-                        done
-                        if [ -f "$WAZUH_YML" ]; then
-                          API_USER=$(cat /run/secrets/api-cred/API_USERNAME)
-                          API_PASS=$(cat /run/secrets/api-cred/API_PASSWORD)
-                          # Escape sed-special characters in credentials
-                          ESC_USER=$(printf '%s' "$API_USER" | sed 's/[&|\\]/\\&/g')
-                          ESC_PASS=$(printf '%s' "$API_PASS" | sed 's/[&|\\]/\\&/g')
-                          sed -i "/hosts:/,/password:/{s|username:.*|username: $ESC_USER|;s|password:.*|password: $ESC_PASS|}" "$WAZUH_YML"
-                        fi
-                        sleep 30 && curl -sS -k --fail -XPOST \
-                          "https://localhost:5601/api/saved_objects/_import?overwrite=true" \
-                          -H "osd-xsrf: true" \
-                          --form file=@/usr/share/wazuh-dashboard/config/security-dashboards.ndjson
+                        # Background the entire hook so kubelet does not kill the
+                        # container while waiting for the dashboard to become ready.
+                        (
+                          WAZUH_YML=/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
+                          # Wait for wazuh.yml to be created by the plugin (up to 120s)
+                          for i in $(seq 1 60); do
+                            [ -f "$WAZUH_YML" ] && break
+                            sleep 2
+                          done
+                          if [ -f "$WAZUH_YML" ]; then
+                            API_USER=$(cat /run/secrets/api-cred/API_USERNAME)
+                            API_PASS=$(cat /run/secrets/api-cred/API_PASSWORD)
+                            ESC_USER=$(printf '%s' "$API_USER" | sed 's/[&|\\]/\\&/g')
+                            ESC_PASS=$(printf '%s' "$API_PASS" | sed 's/[&|\\]/\\&/g')
+                            sed -i "/hosts:/,/password:/{s|username:.*|username: $ESC_USER|;s|password:.*|password: $ESC_PASS|}" "$WAZUH_YML"
+                          fi
+                          # Wait for dashboard to be ready, then import saved objects
+                          for i in $(seq 1 30); do
+                            curl -sS -k -o /dev/null -w '' "http://localhost:5601/api/status" 2>/dev/null && break
+                            sleep 5
+                          done
+                          curl -sS -k --fail -XPOST \
+                            "https://localhost:5601/api/saved_objects/_import?overwrite=true" \
+                            -H "osd-xsrf: true" \
+                            --form file=@/usr/share/wazuh-dashboard/config/security-dashboards.ndjson
+                        ) &
 
   destination:
     server: https://kubernetes.default.svc
@@ -502,6 +572,6 @@ spec:
   ignoreDifferences:
     - group: ""
       kind: Secret
-      name: wazuh-dashboard-tls
+      name: dashboard-ingress-tls
       jsonPointers:
         - /data

@@ -7,3 +7,4 @@ resources:
   - networkpolicy.yaml
   - pdb.yaml
   - syslog-tls.yaml
+  - cluster-key-injector.yaml
