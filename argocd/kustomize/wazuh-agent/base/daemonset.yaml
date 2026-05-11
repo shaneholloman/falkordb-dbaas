@@ -98,6 +98,16 @@ spec:
               add:
                 # Read host files (logs, /etc, /proc) for FIM and log collection
                 - DAC_READ_SEARCH
+                # Override DAC checks so the s6-init scripts (running as root)
+                # can write to /var/ossec/etc and other wazuh-group-owned dirs.
+                - DAC_OVERRIDE
+                # The wazuh-agent entrypoint setuid/setgid to the 'wazuh' user
+                # to drop privileges for the daemon processes.
+                - SETUID
+                - SETGID
+                # cont-init scripts chown/chmod /var/ossec contents on startup.
+                - CHOWN
+                - FOWNER
                 # Monitor processes on the host (ps, /proc inspection)
                 - SYS_PTRACE
                 # Needed for rootcheck and host audit

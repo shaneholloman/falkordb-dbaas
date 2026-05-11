@@ -190,13 +190,16 @@ spec:
               - name: google-chat-webhook
                 mountPath: /var/ossec/etc/secrets/google-chat
                 readOnly: true
-              # Custom Phase-2 rules — extends localRules from helm values.
+              # Custom Phase-2 rules — mount into the config-mount directory so
+              # the chart's init script (cp -r /wazuh-config-mount/* /var/ossec)
+              # copies them to the right place.  Mounting directly at
+              # /var/ossec/etc/rules/ would create a RO subPath that blocks the cp.
               - name: wazuh-custom-rules
-                mountPath: /var/ossec/etc/rules/local_rules.xml
+                mountPath: /wazuh-config-mount/etc/rules/local_rules.xml
                 subPath: local_rules.xml
                 readOnly: true
               - name: wazuh-custom-decoders
-                mountPath: /var/ossec/etc/decoders/local_decoder.xml
+                mountPath: /wazuh-config-mount/etc/decoders/local_decoder.xml
                 subPath: local_decoder.xml
                 readOnly: true
               # CDB list of risk-accepted CVEs (used by suppression rule 100404).
@@ -419,7 +422,7 @@ spec:
               cert-manager.io/cluster-issuer: letsencrypt-prod
             host: "wazuh.security.internal.falkordb.cloud"
             tls:
-              - secretName: dashboard-tls
+              - secretName: dashboard-ingress-tls
                 hosts:
                   - wazuh.security.internal.falkordb.cloud
           extraSpec:
@@ -479,6 +482,6 @@ spec:
   ignoreDifferences:
     - group: ""
       kind: Secret
-      name: wazuh-dashboard-tls
+      name: dashboard-ingress-tls
       jsonPointers:
         - /data
