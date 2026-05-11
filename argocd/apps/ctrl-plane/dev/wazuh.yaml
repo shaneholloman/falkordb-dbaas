@@ -200,6 +200,19 @@ spec:
                 configMap:
                   name: wazuh-cluster-key-injector
                   defaultMode: 0755
+              # Cluster key secret for injection into ossec.conf
+              - name: cluster-key
+                secret:
+                  secretName: wazuh-cluster-key
+              # Stunnel TLS sidecar volumes
+              - name: stunnel-config
+                configMap:
+                  name: syslog-tls-stunnel
+              - name: syslog-tls-cert
+                secret:
+                  secretName: wazuh-syslog-tls
+              - name: stunnel-tmp
+                emptyDir: {}
             additionalVolumeMounts:
               - name: google-chat-integration
                 mountPath: /var/ossec/integrations/custom-google-chat
@@ -381,18 +394,6 @@ spec:
                       capabilities:
                         drop:
                           - ALL
-                volumes:
-                  - name: stunnel-config
-                    configMap:
-                      name: syslog-tls-stunnel
-                  - name: syslog-tls-cert
-                    secret:
-                      secretName: wazuh-syslog-tls
-                  - name: stunnel-tmp
-                    emptyDir: {}
-                  - name: cluster-key
-                    secret:
-                      secretName: wazuh-cluster-key
           worker:
             enabled: true
             replicas: 1
@@ -405,6 +406,48 @@ spec:
                 memory: "4Gi"
             storageSize: 50Gi
             storageClass: "standard-rwo"
+            additionalVolumes:
+              - name: cluster-key-injector
+                configMap:
+                  name: wazuh-cluster-key-injector
+                  defaultMode: 0755
+              - name: cluster-key
+                secret:
+                  secretName: wazuh-cluster-key
+            additionalVolumeMounts:
+              - name: cluster-key-injector
+                mountPath: /etc/cont-init.d/1-inject-key
+                subPath: inject-key.sh
+                readOnly: true
+              - name: cluster-key
+                mountPath: /run/secrets/cluster-key
+                readOnly: true
+            extraSpec:
+              pod:
+                initContainers:
+                  - name: init-cluster-key
+                    image: alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339
+                    command: ["sh", "-c"]
+                    args:
+                      - |
+                        OSSEC_CONF=/mnt/worker/wazuh/var/ossec/etc/ossec.conf
+                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/CLUSTER_KEY)
+                        if [ -f "$OSSEC_CONF" ]; then
+                          sed -i "s|<key>.*</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
+                        fi
+                    volumeMounts:
+                      - name: wazuh-manager-worker
+                        mountPath: /mnt/worker
+                      - name: cluster-key
+                        mountPath: /run/secrets/cluster-key
+                        readOnly: true
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 16Mi
+                      limits:
+                        cpu: 10m
+                        memory: 16Mi
 
         indexer:
           enabled: true
