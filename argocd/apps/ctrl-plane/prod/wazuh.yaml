@@ -450,24 +450,32 @@ spec:
                       - /bin/sh
                       - -c
                       - |
-                        WAZUH_YML=/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
-                        # Wait for wazuh.yml to be created by the plugin (up to 120s)
-                        for i in $(seq 1 60); do
-                          [ -f "$WAZUH_YML" ] && break
-                          sleep 2
-                        done
-                        if [ -f "$WAZUH_YML" ]; then
-                          API_USER=$(cat /run/secrets/api-cred/API_USERNAME)
-                          API_PASS=$(cat /run/secrets/api-cred/API_PASSWORD)
-                          # Escape sed-special characters in credentials
-                          ESC_USER=$(printf '%s' "$API_USER" | sed 's/[&|\\]/\\&/g')
-                          ESC_PASS=$(printf '%s' "$API_PASS" | sed 's/[&|\\]/\\&/g')
-                          sed -i "/hosts:/,/password:/{s|username:.*|username: $ESC_USER|;s|password:.*|password: $ESC_PASS|}" "$WAZUH_YML"
-                        fi
-                        sleep 30 && curl -sS -k --fail -XPOST \
-                          "https://localhost:5601/api/saved_objects/_import?overwrite=true" \
-                          -H "osd-xsrf: true" \
-                          --form file=@/usr/share/wazuh-dashboard/config/security-dashboards.ndjson
+                        # Background the entire hook so kubelet does not kill the
+                        # container while waiting for the dashboard to become ready.
+                        (
+                          WAZUH_YML=/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
+                          # Wait for wazuh.yml to be created by the plugin (up to 120s)
+                          for i in $(seq 1 60); do
+                            [ -f "$WAZUH_YML" ] && break
+                            sleep 2
+                          done
+                          if [ -f "$WAZUH_YML" ]; then
+                            API_USER=$(cat /run/secrets/api-cred/API_USERNAME)
+                            API_PASS=$(cat /run/secrets/api-cred/API_PASSWORD)
+                            ESC_USER=$(printf '%s' "$API_USER" | sed 's/[&|\\]/\\&/g')
+                            ESC_PASS=$(printf '%s' "$API_PASS" | sed 's/[&|\\]/\\&/g')
+                            sed -i "/hosts:/,/password:/{s|username:.*|username: $ESC_USER|;s|password:.*|password: $ESC_PASS|}" "$WAZUH_YML"
+                          fi
+                          # Wait for dashboard to be ready, then import saved objects
+                          for i in $(seq 1 30); do
+                            curl -sS -k -o /dev/null -w '' "http://localhost:5601/api/status" 2>/dev/null && break
+                            sleep 5
+                          done
+                          curl -sS -k --fail -XPOST \
+                            "https://localhost:5601/api/saved_objects/_import?overwrite=true" \
+                            -H "osd-xsrf: true" \
+                            --form file=@/usr/share/wazuh-dashboard/config/security-dashboards.ndjson
+                        ) &
 
   destination:
     server: https://kubernetes.default.svc
