@@ -3,43 +3,55 @@
   "extends": [
     "config:recommended",
     ":dependencyDashboard",
-    ":semanticCommits",
-    ":separatePatchReleases"
+    ":semanticCommits"
   ],
   "schedule": ["before 6am on Monday"],
   "labels": ["dependencies"],
   "ignorePaths": ["**/node_modules/**"],
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 0,
+  "branchConcurrentLimit": 0,
+  "separateMajorMinor": false,
+  "separateMinorPatch": false,
+  "separateMultipleMajor": false,
+  "rebaseWhen": "behind-base-branch",
+  "recreateWhen": "always",
   "packageRules": [
     {
-      "description": "Group all GitHub Actions updates",
-      "matchManagers": ["github-actions"],
-      "groupName": "github-actions",
-      "automerge": false
+      "description": "Group all non-major dependency updates into a single weekly PR",
+      "matchPackageNames": ["*"],
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "bump", "rollback"],
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-non-major",
+      "automerge": false,
+      "schedule": ["before 6am on Monday"],
+      "commitMessageTopic": "all non-major dependencies"
     },
     {
-      "description": "Group npm minor and patch updates",
-      "matchManagers": ["npm"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "groupName": "npm minor and patch",
-      "automerge": false
+      "description": "Group all major dependency updates into a single weekly PR",
+      "matchPackageNames": ["*"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "all major dependencies",
+      "groupSlug": "all-major",
+      "automerge": false,
+      "schedule": ["before 6am on Monday"],
+      "commitMessageTopic": "all major dependencies"
     },
     {
-      "description": "OpenTofu / Terraform provider bumps",
+      "description": "Keep OpenTelemetry packages in lockstep so the experimental (0.x) and stable (1.x/2.x) tracks don't desync (must be last to override catch-all group above)",
+      "matchPackageNames": ["@opentelemetry/**"],
+      "groupName": "opentelemetry",
+      "groupSlug": "opentelemetry",
+      "commitMessageTopic": "opentelemetry packages"
+    },
+    {
+      "description": "After a Terraform/OpenTofu provider bump, regenerate the directory's .terraform.lock.hcl so 'constraints' stays in sync with the new version pin. Requires RENOVATE_BINARY_SOURCE=install and RENOVATE_ALLOWED_COMMANDS to whitelist the command (set in the workflow).",
       "matchManagers": ["terraform"],
-      "groupName": "opentofu providers",
-      "automerge": false
-    },
-    {
-      "description": "Docker base image updates",
-      "matchManagers": ["dockerfile"],
-      "groupName": "docker base images",
-      "automerge": false
-    },
-    {
-      "description": "Helm chart version updates in ArgoCD Application CRDs",
-      "matchManagers": ["helm-values", "helmv3"],
-      "groupName": "helm charts",
-      "automerge": false
+      "postUpgradeTasks": {
+        "commands": ["tofu init -upgrade -backend=false -input=false"],
+        "fileFilters": ["**/.terraform.lock.hcl"],
+        "executionMode": "update"
+      }
     }
   ],
   "customManagers": [
