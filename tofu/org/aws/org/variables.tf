@@ -1,3 +1,7 @@
+variable "environment" {
+  type = string
+}
+
 variable "workloads_ou_name" {
   type        = string
   description = "Name of the OU for workloads"

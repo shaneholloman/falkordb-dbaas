@@ -1,10 +1,11 @@
 # Private GKE cluster, node pools, and daily backup plan.
 #
 # Node pools:
-#   default-pool               — general workloads (0-100 nodes, e2-medium)
-#   observability-resources    — observability stack pods (0-20, e2-standard-2)
-#   observability-resources-large — Grafana/heavy pods (0-20, e2-standard-4)
+#   default-pool               — GKE-required default (0-1 nodes, e2-medium)
+#   observability-resources    — observability + Grafana pods (0-20, e2-standard-4)
 #   backend                    — backend API pods (0-20, e2-standard-2)
+#   security                   — Wazuh Manager (0-10, e2-standard-4, sysctls)
+#   security-infra             — Kyverno & Sealed Secrets (1-3, e2-small, always-on)
 #   public-pool                — internet-facing workloads (0-220, e2-standard-2,
 #                                 private_nodes=false for L4 LoadBalancer IPs)
 #
@@ -40,9 +41,9 @@ module "gke" {
   service_account_name                 = "gke-obs-${random_string.cluster_suffix.result}-nodes-sa"
   remove_default_node_pool             = true
   gce_pd_csi_driver                    = true
-  network_policy                       = false
+  network_policy                       = true
   monitoring_enable_managed_prometheus = false
-  enable_cost_allocation               = false
+  enable_cost_allocation               = true
   horizontal_pod_autoscaling           = false
   filestore_csi_driver                 = false
   disable_legacy_metadata_endpoints    = false
@@ -69,23 +70,13 @@ module "gke" {
       machine_type       = "e2-medium"
       disk_size_gb       = 30
       min_count          = 0
-      max_count          = 100
+      max_count          = 1
       image_type         = "COS_CONTAINERD"
       initial_node_count = 0
       max_pods_per_node  = 25
     },
     {
       name               = "observability-resources"
-      machine_type       = "e2-standard-2"
-      disk_size_gb       = 30
-      min_count          = 0
-      max_count          = 20
-      image_type         = "COS_CONTAINERD"
-      initial_node_count = 0
-      max_pods_per_node  = 25
-    },
-    {
-      name               = "observability-resources-large"
       machine_type       = "e2-standard-4"
       disk_size_gb       = 30
       min_count          = 0
@@ -104,6 +95,26 @@ module "gke" {
       initial_node_count = 0
       max_pods_per_node  = 25
     },
+    {
+      name               = "security"
+      machine_type       = "e2-standard-4"
+      disk_size_gb       = 30
+      min_count          = 0
+      max_count          = 10
+      image_type         = "COS_CONTAINERD"
+      initial_node_count = 0
+      max_pods_per_node  = 25
+    },
+    {
+      name               = "security-infra"
+      machine_type       = "e2-small"
+      disk_size_gb       = 30
+      min_count          = 1
+      max_count          = 3
+      image_type         = "COS_CONTAINERD"
+      initial_node_count = 1
+      max_pods_per_node  = 25
+    },
   ]
   node_pools_resource_labels = {
     "default-pool" = {
@@ -112,11 +123,41 @@ module "gke" {
     "observability-resources" = {
       "goog-gke-node-pool-provisioning-model" = "on-demand"
     }
-    "observability-resources-large" = {
-      "goog-gke-node-pool-provisioning-model" = "on-demand"
-    }
     "backend" = {
       "goog-gke-node-pool-provisioning-model" = "on-demand"
+    }
+    "security" = {
+      "goog-gke-node-pool-provisioning-model" = "on-demand"
+    }
+    "security-infra" = {
+      "goog-gke-node-pool-provisioning-model" = "on-demand"
+    }
+  }
+
+  node_pools_labels = {
+    "default-pool" = {
+      "node_pool" = "default"
+    }
+    "observability-resources" = {
+      "node_pool" = "observability"
+    }
+    "backend" = {
+      "node_pool" = "backend"
+    }
+    "security" = {
+      "node_pool" = "security"
+    }
+    "security-infra" = {
+      "node_pool" = "security-infra"
+    }
+  }
+
+  # OpenSearch / Wazuh Indexer requires vm.max_map_count >= 262144.
+  # Set at node pool level so it persists across reboots and pod restarts.
+  node_pools_linux_node_configs_sysctls = {
+    "security" = {
+      "net.core.somaxconn"    = "65535"
+      "vm.max_map_count"      = "262144"
     }
   }
 }
