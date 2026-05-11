@@ -189,43 +189,42 @@ class GoogleChatNotifier:
     ):
         payload = {
             "text": f"🚨 ContainerOOMKilled — {pod} ({namespace}) {CHAT_MENTIONS}",
-            "cardsV2": [{
-                "cardId": f"oom-alert-{namespace}-{pod}",
-                "card": {
-                    "header": {
-                        "title": "🚨 ContainerOOMKilled",
-                        "subtitle": f"{pod} in {namespace} @ {cluster}",
-                    },
-                    "sections": [
-                        {
-                            "widgets": [
-                                {"decoratedText": {"topLabel": "Customer", "text": f"{customer.name} ({customer.email})"}},
-                                {"decoratedText": {"topLabel": "Subscription ID", "text": customer.subscription_id}},
-                                {"decoratedText": {"topLabel": "Cluster", "text": cluster}},
-                                {"decoratedText": {"topLabel": "Namespace", "text": namespace}},
-                                {"decoratedText": {"topLabel": "Pod", "text": pod}},
-                                {"decoratedText": {"topLabel": "Container", "text": container}},
-                                {"decoratedText": {"topLabel": "Time (Israel)", "text": timestamp}},
-                            ]
-                        },
-                        {
-                            "widgets": [{
-                                "buttonList": {
-                                    "buttons": [
-                                        {
-                                            "text": "Memory metrics",
-                                            "onClick": {"openLink": {"url": grafana_memory_url}},
-                                        },
-                                        {
-                                            "text": "Pod overview",
-                                            "onClick": {"openLink": {"url": grafana_pods_url}},
-                                        },
-                                    ]
-                                }
-                            }]
-                        },
-                    ],
+            "cards": [{
+                "header": {
+                    "title": "🚨 ContainerOOMKilled",
+                    "subtitle": f"{pod} in {namespace} @ {cluster}",
                 },
+                "sections": [
+                    {
+                        "widgets": [
+                            {"keyValue": {"topLabel": "Customer", "content": f"{customer.name} ({customer.email})"}},
+                            {"keyValue": {"topLabel": "Subscription ID", "content": customer.subscription_id}},
+                            {"keyValue": {"topLabel": "Cluster", "content": cluster}},
+                            {"keyValue": {"topLabel": "Namespace", "content": namespace}},
+                            {"keyValue": {"topLabel": "Pod", "content": pod}},
+                            {"keyValue": {"topLabel": "Container", "content": container}},
+                            {"keyValue": {"topLabel": "Time (Israel)", "content": timestamp}},
+                        ]
+                    },
+                    {
+                        "widgets": [{
+                            "buttons": [
+                                {
+                                    "textButton": {
+                                        "text": "Memory metrics",
+                                        "onClick": {"openLink": {"url": grafana_memory_url}},
+                                    }
+                                },
+                                {
+                                    "textButton": {
+                                        "text": "Pod overview",
+                                        "onClick": {"openLink": {"url": grafana_pods_url}},
+                                    }
+                                },
+                            ]
+                        }]
+                    },
+                ],
             }],
         }
 
@@ -241,23 +240,20 @@ class GoogleChatNotifier:
                                            timestamp: str):
         payload = {
             "text": f"🚨 ContainerOOMKilled (non-FalkorDB) — {pod} ({namespace}) {CHAT_MENTIONS}",
-            "cardsV2": [{
-                "cardId": f"oom-unknown-{namespace}-{pod}",
-                "card": {
-                    "header": {
-                        "title": "🚨 ContainerOOMKilled (non-FalkorDB workload)",
-                        "subtitle": f"{pod} in {namespace} @ {cluster}",
-                    },
-                    "sections": [{
-                        "widgets": [
-                            {"decoratedText": {"topLabel": "Cluster", "text": cluster}},
-                            {"decoratedText": {"topLabel": "Namespace", "text": namespace}},
-                            {"decoratedText": {"topLabel": "Pod", "text": pod}},
-                            {"decoratedText": {"topLabel": "Container", "text": container}},
-                            {"decoratedText": {"topLabel": "Time (Israel)", "text": timestamp}},
-                        ]
-                    }],
+            "cards": [{
+                "header": {
+                    "title": "🚨 ContainerOOMKilled (non-FalkorDB workload)",
+                    "subtitle": f"{pod} in {namespace} @ {cluster}",
                 },
+                "sections": [{
+                    "widgets": [
+                        {"keyValue": {"topLabel": "Cluster", "content": cluster}},
+                        {"keyValue": {"topLabel": "Namespace", "content": namespace}},
+                        {"keyValue": {"topLabel": "Pod", "content": pod}},
+                        {"keyValue": {"topLabel": "Container", "content": container}},
+                        {"keyValue": {"topLabel": "Time (Israel)", "content": timestamp}},
+                    ]
+                }],
             }],
         }
 
@@ -273,27 +269,24 @@ class GoogleChatNotifier:
                                 error_details: Optional[str] = None):
         payload = {
             "text": f"❌ OOM Handler Failed {CHAT_MENTIONS}",
-            "cardsV2": [{
-                "cardId": f"oom-error-{namespace}-{pod}",
-                "card": {
-                    "header": {
-                        "title": "❌ OOM Handler Failed",
-                        "subtitle": f"Error processing OOM for {namespace}",
-                    },
-                    "sections": [{
-                        "widgets": [
-                            {"decoratedText": {"topLabel": "Cluster", "text": cluster}},
-                            {"decoratedText": {"topLabel": "Pod", "text": pod}},
-                            {"decoratedText": {"topLabel": "Namespace", "text": namespace}},
-                            {"decoratedText": {"topLabel": "Error", "text": error_message}},
-                        ]
-                    }],
+            "cards": [{
+                "header": {
+                    "title": "❌ OOM Handler Failed",
+                    "subtitle": f"Error processing OOM for {namespace}",
                 },
+                "sections": [{
+                    "widgets": [
+                        {"keyValue": {"topLabel": "Cluster", "content": cluster}},
+                        {"keyValue": {"topLabel": "Pod", "content": pod}},
+                        {"keyValue": {"topLabel": "Namespace", "content": namespace}},
+                        {"keyValue": {"topLabel": "Error", "content": error_message}},
+                    ]
+                }],
             }],
         }
 
         if error_details:
-            payload["cardsV2"][0]["card"]["sections"].append({
+            payload["cards"][0]["sections"].append({
                 "widgets": [{
                     "textParagraph": {
                         "text": f"<b>Details:</b><br><code>{error_details[:500]}</code>"
