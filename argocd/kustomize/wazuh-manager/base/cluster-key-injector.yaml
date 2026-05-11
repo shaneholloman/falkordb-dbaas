@@ -23,3 +23,10 @@ data:
     else
       echo "WARNING: cluster key file or ossec.conf not found" >&2
     fi
+    # Fix auth force timers — the Helm template sets 1h defaults but Wazuh
+    # only reads the first <auth> block, so extraConf overrides are ignored.
+    if [ -f "$OSSEC_CONF" ]; then
+      sed -i 's|<disconnected_time enabled="yes">1h</disconnected_time>|<disconnected_time enabled="yes">0</disconnected_time>|g' "$OSSEC_CONF"
+      sed -i 's|<after_registration_time>1h</after_registration_time>|<after_registration_time>0</after_registration_time>|g' "$OSSEC_CONF"
+      echo "Auth force timers set to 0"
+    fi
