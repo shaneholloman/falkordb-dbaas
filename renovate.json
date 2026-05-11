@@ -43,6 +43,15 @@
       "groupName": "opentelemetry",
       "groupSlug": "opentelemetry",
       "commitMessageTopic": "opentelemetry packages"
+    },
+    {
+      "description": "After a Terraform/OpenTofu provider bump, regenerate the directory's .terraform.lock.hcl so 'constraints' stays in sync with the new version pin. Requires RENOVATE_BINARY_SOURCE=install and RENOVATE_ALLOWED_COMMANDS to whitelist the command (set in the workflow).",
+      "matchManagers": ["terraform"],
+      "postUpgradeTasks": {
+        "commands": ["tofu init -upgrade -backend=false -input=false"],
+        "fileFilters": ["**/.terraform.lock.hcl"],
+        "executionMode": "update"
+      }
     }
   ],
   "customManagers": [
