@@ -195,6 +195,11 @@ spec:
               - name: wazuh-accepted-cves
                 configMap:
                   name: wazuh-accepted-cves
+              # cont-init.d script to inject cluster key after 0-wazuh-init
+              - name: cluster-key-injector
+                configMap:
+                  name: wazuh-cluster-key-injector
+                  defaultMode: 0755
             additionalVolumeMounts:
               - name: google-chat-integration
                 mountPath: /var/ossec/integrations/custom-google-chat
@@ -223,6 +228,15 @@ spec:
               - name: wazuh-accepted-cves
                 mountPath: /var/ossec/etc/lists/accepted-cves
                 subPath: accepted-cves
+                readOnly: true
+              # Inject cluster key after 0-wazuh-init copies the config template.
+              # Runs as cont-init.d/1-inject-key (between 0-wazuh-init and 2-manager).
+              - name: cluster-key-injector
+                mountPath: /etc/cont-init.d/1-inject-key
+                subPath: inject-key.sh
+                readOnly: true
+              - name: cluster-key
+                mountPath: /run/secrets/cluster-key
                 readOnly: true
             # Appended to the template-generated ossec.conf
             extraConf: |
