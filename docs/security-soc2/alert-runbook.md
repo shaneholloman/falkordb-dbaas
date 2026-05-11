@@ -119,10 +119,11 @@ All alerts route through VictoriaMetrics → Alertmanager → PagerDuty / Google
    ```
 
 3. Common causes:
-   - **Pod eviction**: Check node resource pressure. The Manager runs on the `security` node pool.
+   - **Pod eviction**: Check node resource pressure. The Manager runs on the `security` node pool (on-demand, ctrl-plane only).
    - **Disk full**: Check Indexer PVC usage. Wazuh stores event indices.
    - **OOM**: Check if the container was OOMKilled. Increase memory limits.
    - **Node pool scaling**: If the security node pool scaled to 0, it may take time to scale back up.
+   - **Spot eviction** (app-plane): Security CronJobs run on spot instances. If evicted, the CronJob will retry on the next scheduled run.
 
 4. If pod is stuck, try a restart:
    ```bash

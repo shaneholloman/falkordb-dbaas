@@ -40,7 +40,10 @@ tofu output evidence_locker_bucket  # → GCS bucket name
 tofu output prowler_uploader_email  # → Prowler GCP service account email
 ```
 
-The `security` node pool in GKE (e2-standard-4, 0–10 autoscale) is created as part of `gke.tf`. No separate step needed.
+The ctrl-plane `security` node pool in GKE (e2-standard-4, 0–10 autoscale) is created as part of `gke.tf`.
+App-plane security pools are provisioned automatically by the cluster-discovery service during onboarding:
+- **`security`** — spot/preemptible, scales 0→3, runs CronJob scanners (Prowler, Grype, etc.)
+- **`security-infra`** — on-demand, scales 1→2, runs Kyverno and Sealed Secrets
 
 ### 1.2 AWS IAM Role (if you have AWS spokes)
 

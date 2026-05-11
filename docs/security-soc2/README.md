@@ -62,7 +62,7 @@ All security workloads run in the **`security`** namespace on every cluster.
 ```
 tofu/
   runtime/gcp/infra/security.tf          # Wazuh IP, GCS bucket, Prowler SA, firewall
-  runtime/gcp/infra/gke.tf               # Security node pool (e2-standard-4, 0–10)
+  runtime/gcp/infra/gke.tf               # Node pools: security (spot, CronJobs), security-infra (Kyverno/SealedSecrets)
   org/aws/org/prowler.tf                 # AWS IAM role for Prowler
   runtime/azure/prowler.tf               # Azure AD service principal for Prowler (auto-rotating)
 
