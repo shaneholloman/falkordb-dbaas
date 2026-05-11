@@ -2,12 +2,12 @@ import { Cluster } from '../types';
 import { createObservabilityNodePool as createObservabilityNodePoolGCP, createSecurityNodePool as createSecurityNodePoolGCP, createSecurityInfraNodePool as createSecurityInfraNodePoolGCP } from './gcp/nodepool';
 import { createObservabilityNodePool as createObservabilityNodePoolAWS, createSecurityNodePool as createSecurityNodePoolAWS, createSecurityInfraNodePool as createSecurityInfraNodePoolAWS } from './aws/nodepool';
 import { createObservabilityNodePool as createObservabilityNodePoolAzure, createSecurityNodePool as createSecurityNodePoolAzure, createSecurityInfraNodePool as createSecurityInfraNodePoolAzure } from './azure/nodepool';
-import { deleteObservabilityNodePool as deleteObservabilityNodePoolGCP, deleteSecurityNodePool as deleteSecurityNodePoolGCP } from './gcp/nodepool-delete';
-import { deleteObservabilityNodePool as deleteObservabilityNodePoolAWS, deleteSecurityNodePool as deleteSecurityNodePoolAWS } from './aws/nodepool-delete';
-import { deleteObservabilityNodePool as deleteObservabilityNodePoolAzure, deleteSecurityNodePool as deleteSecurityNodePoolAzure } from './azure/nodepool-delete';
+import { deleteObservabilityNodePool as deleteObservabilityNodePoolGCP, deleteSecurityNodePool as deleteSecurityNodePoolGCP, deleteSecurityInfraNodePool as deleteSecurityInfraNodePoolGCP } from './gcp/nodepool-delete';
+import { deleteObservabilityNodePool as deleteObservabilityNodePoolAWS, deleteSecurityNodePool as deleteSecurityNodePoolAWS, deleteSecurityInfraNodePool as deleteSecurityInfraNodePoolAWS } from './aws/nodepool-delete';
+import { deleteObservabilityNodePool as deleteObservabilityNodePoolAzure, deleteSecurityNodePool as deleteSecurityNodePoolAzure, deleteSecurityInfraNodePool as deleteSecurityInfraNodePoolAzure } from './azure/nodepool-delete';
 import logger from '../logger';
 import { createObservabilityNodePoolAWSBYOA, createObservabilityNodePoolAzureBYOA, createObservabilityNodePoolGCPBYOA, createSecurityNodePoolAWSBYOA, createSecurityNodePoolAzureBYOA, createSecurityNodePoolGCPBYOA, createSecurityInfraNodePoolGCPBYOA, createSecurityInfraNodePoolAWSBYOA, createSecurityInfraNodePoolAzureBYOA } from './byoa/nodepool';
-import { deleteObservabilityNodePoolAWSBYOA, deleteObservabilityNodePoolAzureBYOA, deleteObservabilityNodePoolGCPBYOA, deleteSecurityNodePoolAWSBYOA, deleteSecurityNodePoolAzureBYOA, deleteSecurityNodePoolGCPBYOA } from './byoa/nodepool-delete';
+import { deleteObservabilityNodePoolAWSBYOA, deleteObservabilityNodePoolAzureBYOA, deleteObservabilityNodePoolGCPBYOA, deleteSecurityNodePoolAWSBYOA, deleteSecurityNodePoolAzureBYOA, deleteSecurityNodePoolGCPBYOA, deleteSecurityInfraNodePoolGCPBYOA, deleteSecurityInfraNodePoolAWSBYOA, deleteSecurityInfraNodePoolAzureBYOA } from './byoa/nodepool-delete';
 
 /**
  * Creates observability node pool for a cluster based on cloud provider and host mode
@@ -160,6 +160,36 @@ export function createSecurityInfraNodePool(cluster: Cluster) {
   }
 }
 
+/**
+ * Deletes security-infra node pool for a cluster based on cloud provider and host mode
+ * @param cluster - Target cluster
+ */
+export function deleteSecurityInfraNodePool(cluster: Cluster) {
+  if (cluster.hostMode === 'byoa') {
+    switch (cluster.cloud) {
+      case 'gcp':
+        return deleteSecurityInfraNodePoolGCPBYOA(cluster);
+      case 'aws':
+        return deleteSecurityInfraNodePoolAWSBYOA(cluster);
+      case 'azure':
+        return deleteSecurityInfraNodePoolAzureBYOA(cluster);
+      default:
+        logger.warn(`Skip security-infra node pool deletion for cloud provider ${cluster.cloud} BYOA cluster`);
+    }
+  }
+
+  switch (cluster.cloud) {
+    case 'gcp':
+      return deleteSecurityInfraNodePoolGCP(cluster);
+    case 'aws':
+      return deleteSecurityInfraNodePoolAWS(cluster);
+    case 'azure':
+      return deleteSecurityInfraNodePoolAzure(cluster);
+    default:
+      logger.warn(`Skip security-infra node pool deletion for cloud provider ${cluster.cloud}`);
+  }
+}
+
 // Re-export individual provider functions if needed
 export { createObservabilityNodePoolGCP, createObservabilityNodePoolAWS, createObservabilityNodePoolAzure };
 export { createObservabilityNodePoolAWSBYOA, createObservabilityNodePoolAzureBYOA, createObservabilityNodePoolGCPBYOA };
@@ -171,3 +201,5 @@ export { deleteSecurityNodePoolGCP, deleteSecurityNodePoolAWS, deleteSecurityNod
 export { deleteSecurityNodePoolAWSBYOA, deleteSecurityNodePoolAzureBYOA, deleteSecurityNodePoolGCPBYOA };
 export { createSecurityInfraNodePoolGCP, createSecurityInfraNodePoolAWS, createSecurityInfraNodePoolAzure };
 export { createSecurityInfraNodePoolGCPBYOA, createSecurityInfraNodePoolAWSBYOA, createSecurityInfraNodePoolAzureBYOA };
+export { deleteSecurityInfraNodePoolGCP, deleteSecurityInfraNodePoolAWS, deleteSecurityInfraNodePoolAzure };
+export { deleteSecurityInfraNodePoolGCPBYOA, deleteSecurityInfraNodePoolAWSBYOA, deleteSecurityInfraNodePoolAzureBYOA };
