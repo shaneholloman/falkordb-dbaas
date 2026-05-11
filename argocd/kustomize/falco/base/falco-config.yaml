@@ -89,7 +89,7 @@ data:
       output: >
         Container escape attempt via nsenter
         (user=%user.name container=%container.name image=%container.image.repository
-         command=%proc.cmdline ns=%proc.ns pod=%k8s.pod.name)
+         command=%proc.cmdline pod=%k8s.pod.name)
       priority: CRITICAL
       tags: [container, escape, soc2, mitre_privilege_escalation]
 
