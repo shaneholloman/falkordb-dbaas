@@ -7,7 +7,7 @@
 
 module "wazuh_ip" {
   source  = "terraform-google-modules/address/google"
-  version = "~> 3.2"
+  version = "~> 5.0"
 
   project_id = var.project_id
   region     = var.region
