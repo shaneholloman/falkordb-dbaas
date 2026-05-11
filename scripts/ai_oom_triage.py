@@ -296,7 +296,6 @@ ratio is high (> 1.5).]
 - Be concise but thorough. Evidence-based reasoning only.
 - If you cannot determine something, say so — don't guess.
 - **NEVER fabricate or assume replication/topology** — only state what the provided topology tells you.
-- Mask customer email addresses if they appear in logs.
 - Include actual metric values in your report, not just descriptions.
 - Replace NAMESPACE, POD, and CONTAINER placeholders in the PromQL queries with the actual values.
 - When reporting Network I/O, report the **peak** value observed, not just steady-state.
@@ -324,8 +323,7 @@ _SIGNED_URL_RE = re.compile(
 
 
 def _scrub_report(text: str) -> str:
-    """Scrub PII and sensitive content from a report before logging/sending."""
-    text = _EMAIL_RE.sub(lambda m: _mask_email(m.group(0)), text)
+    """Scrub sensitive content (signed URLs) from a report before logging."""
     text = _SIGNED_URL_RE.sub("[SIGNED-URL-REDACTED]", text)
     return text
 
@@ -482,13 +480,12 @@ class GitHubIssueManager:
 
         # Extract key fields for the title
         category = _extract_report_field(report, "Category") or "Unknown"
-        masked_email = _mask_email(customer_email)
 
         title = f"[OOM] {pod} in {namespace} ({cluster}) — {category} — {timestamp}"
 
         body = f"""## ContainerOOMKilled — AI Triage
 
-**Customer:** {customer_name} ({masked_email})
+**Customer:** {customer_name} ({customer_email})
 **Subscription ID:** {subscription_id}
 **Pod:** {pod}
 **Container:** {container}
@@ -500,7 +497,7 @@ class GitHubIssueManager:
 
 ---
 
-{_scrub_report(report)}
+{report}
 """
 
         customer_label = self._make_safe_label('customer', customer_email)
@@ -536,7 +533,7 @@ class GitHubIssueManager:
 
 ---
 
-{_scrub_report(report)}
+{report}
 """
         resp = self.session.post(
             f"{self.api_url}/repos/{self.repo}/issues/{issue_number}/comments",
@@ -583,7 +580,7 @@ A ContainerOOMKilled event has been detected. Please perform a full OOM triage.
 - Namespace: {args.namespace}
 - Cluster: {args.cluster}
 - Container: {args.container}
-- Customer: {args.customer_name} ({_mask_email(args.customer_email)})
+- Customer: {args.customer_name} ({args.customer_email})
 - Topology: {topology}
 """
     if args.falkordb_version:
@@ -686,7 +683,6 @@ def _send_summary_to_chat(
             recommended_action = recommended_action[:597] + "..."
         recommended_action = html.escape(recommended_action)
 
-    masked_email = _mask_email(customer_email)
     confidence_short = confidence.split("—")[0].split("-")[0].strip() if confidence else "Unknown"
 
     if is_recurring:
@@ -699,7 +695,7 @@ def _send_summary_to_chat(
     sections = [
         {
             "widgets": [
-                {"keyValue": {"topLabel": "Customer", "content": f"{customer_name} ({masked_email})"}},
+                {"keyValue": {"topLabel": "Customer", "content": f"{customer_name} ({customer_email})"}},
                 {"keyValue": {"topLabel": "Cluster / Namespace", "content": f"{cluster} / {namespace}"}},
                 {"keyValue": {"topLabel": "Pod / Container", "content": f"{pod} / {container}"}},
                 {"keyValue": {"topLabel": "Diagnosis", "content": f"{category} ({confidence_short})"}},
