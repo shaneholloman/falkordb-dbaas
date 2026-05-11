@@ -144,9 +144,17 @@ If RDB or AOF URLs are provided:
   - `INFO keyspace` — database size
   - `DBSIZE` — total key count
   - `GRAPH.LIST` — list all graphs
+  - For each graph: `GRAPH.MEMORY USAGE <name>` — **critical** for per-graph memory breakdown. \
+This returns: total_graph_sz_mb, label_matrices_sz_mb, relation_matrices_sz_mb, \
+amortized_node_block_sz_mb, amortized_node_attributes_by_label_sz_mb, \
+amortized_edge_block_sz_mb, amortized_edge_attributes_by_type_sz_mb, indices_sz_mb.
   - For each graph: `GRAPH.QUERY <name> "CALL db.labels()"` and \
 `GRAPH.QUERY <name> "CALL db.relationshipTypes()"` to understand the schema
   - `CONFIG GET maxmemory` — configured memory limit
+
+**Important:** Use `GRAPH.MEMORY USAGE` output to build the Memory Breakdown Table \
+in the report. This identifies which graph consumes the most memory and whether \
+the OOM is attributable to a single graph.
 
 ## Common OOM Patterns
 
@@ -180,40 +188,107 @@ After completing your analysis, output EXACTLY this structured report:
 - **Container memory limit:** [X MB]
 - **RSS / limit ratio:** [X%]
 - **Maxmemory config:** [X MB]
-- **Fragmentation ratio:** [RSS / used_bytes \u2014 if > 1.5 highlight CoW or fragmentation]
+- **Fragmentation ratio:** [RSS / used_bytes — if > 1.5 highlight CoW or fragmentation]
 
 ### Command Activity
-- **Command rate before OOM:** [X ops/sec \u2014 normal / elevated / spike]
-- **Command latency before OOM:** [X ms avg \u2014 normal / elevated / spike]
-- **Connected clients:** [X \u2014 normal / elevated / spike]
-- **Network I/O (peak):** [X KB/s in / X KB/s out \u2014 note if spike correlates with OOM]
+- **Command rate before OOM:** [X ops/sec — normal / elevated / spike]
+- **Command latency before OOM:** [X ms avg — normal / elevated / spike]
+- **Connected clients:** [X — normal / elevated / spike]
+- **Network I/O (peak):** [X KB/s in / X KB/s out — note if spike correlates with OOM]
 
 ### Log Analysis
 [Summary of any relevant findings from logs — errors, large queries, \
 slow operations, AOF/BGSAVE activity]
 
+### Memory Breakdown
+If GRAPH.MEMORY USAGE was run, include a table showing where memory is allocated. \
+This helps identify which graph or component is consuming the most memory. \
+If multiple graphs exist, identify which graph is the dominant consumer.
+
+| Component | Size (MB) | % of Total |
+|-----------|-----------|------------|
+| Graph: <name1> — node attributes | X | X% |
+| Graph: <name1> — edge attributes | X | X% |
+| Graph: <name1> — indices | X | X% |
+| Graph: <name1> — label matrices | X | X% |
+| Graph: <name1> — relation matrices | X | X% |
+| Graph: <name2> — total | X | X% |
+| ... | ... | ... |
+| Redis overhead + fragmentation | X | X% |
+| **Total** | **X** | **100%** |
+
+If RDB/AOF was not available, state: "Memory breakdown unavailable (no RDB/AOF dump provided)."
+
 ### Database State
-[If RDB/AOF was inspected: total keys, graph count, graph sizes, \
-memory breakdown from INFO memory]
+[If RDB/AOF was inspected: total keys, graph count, per-graph node/edge counts, \
+schema summary (labels, relationship types)]
 
 ### Root Cause Diagnosis
 **Category:** [One of: Legitimate Growth / Bulk Operation / Oversized Query / \
-Insufficient Headroom / Memory Fragmentation / Background Process (AOF/BGSAVE) / Other]
+Insufficient Headroom / Memory Fragmentation / Background Process (AOF/BGSAVE) / \
+Single Graph Dominance / Other]
 
 [Detailed explanation with evidence from the metrics and logs. \
 Explain WHY you chose this category and why other categories don't fit.]
 
+If one graph is consuming a disproportionate share of memory (>80%), call it out \
+explicitly as it may indicate a customer issue with that specific graph.
+
 **Confidence:** [High / Medium / Low] — [one-sentence justification]
 
+### Recurrence Likelihood
+**Likelihood:** [High / Medium / Low]
+
+[Assess the probability of this OOM happening again based on:
+- Memory growth trajectory (is the dataset growing toward the limit?)
+- Headroom remaining (how close is steady-state to the limit?)
+- Whether the trigger was a one-time event or a repeating pattern
+- Whether the underlying cause has been or can be resolved without intervention]
+
+### Known Issue Classification
+**Classification:** [New Pattern / Known Pattern — <pattern name>]
+
+Known OOM patterns to match against:
+1. **Fork CoW Spiral** — consecutive OOMs during BGSAVE/AOF rewrite on restart
+2. **Replication Full Sync** — OOM during replica reconnection after master restart
+3. **Dataset Growth** — gradual memory increase until headroom is exhausted
+4. **Bulk Ingestion Spike** — sudden memory spike from large data import
+5. **Query Memory Bomb** — single expensive query allocating excessive memory
+6. **Index Rebuild Storm** — memory spike during index creation or rebuild
+7. **Fragmentation Creep** — RSS growing due to memory fragmentation over time
+
+If this OOM matches a known pattern, state which one and explain the match. \
+If it's a genuinely new pattern, describe what makes it unique.
+
 ### Recommended Action
-[Specific actionable recommendation based on the diagnosis:
-- Legitimate Growth → Scale up memory / increase maxmemory
-- Bulk Operation → Advise customer to batch operations
-- Oversized Query → Identify the query pattern and suggest optimization
-- Insufficient Headroom → Scale up memory (the specific trigger doesn't matter)
-- Memory Fragmentation → Consider restart / CONFIG SET activedefrag yes
-- Background Process → Adjust AOF/BGSAVE scheduling or increase headroom
-- Other → Specific recommendation based on findings]
+[Specific actionable recommendation based on the diagnosis. \
+Reference FalkorDB documentation where applicable.
+
+FalkorDB-specific mitigations to consider:
+- **Scale up memory** — Increase maxmemory and container limits. Rule of thumb: \
+container_limit should be ≥ 1.5× maxmemory for standalone, ≥ 2× for replicated/cluster \
+to accommodate fork CoW and replication buffers.
+- **Query optimization** — If a specific query pattern caused the OOM, suggest using \
+GRAPH.EXPLAIN to analyze the query plan, or GRAPH.PROFILE to measure actual execution. \
+Consider adding indices (GRAPH.CONSTRAINT CREATE) to reduce scan-based memory usage. \
+Reference: https://docs.falkordb.com/commands/graph.explain.html
+- **Graph splitting** — If one graph dominates memory, consider splitting it into \
+multiple smaller graphs or archiving old data.
+- **Index tuning** — If indices consume a large portion of memory, review whether \
+all indices are necessary. Use GRAPH.MEMORY USAGE to see index sizes. \
+Reference: https://docs.falkordb.com/commands/graph.memory.html
+- **Timeout configuration** — Set TIMEOUT_DEFAULT and TIMEOUT_MAX via GRAPH.CONFIG SET \
+to prevent long-running queries from consuming excessive memory. \
+Reference: https://docs.falkordb.com/commands/graph.config-set.html
+- **AOF/BGSAVE tuning** — If fork CoW is the trigger, consider adjusting \
+auto-aof-rewrite-percentage / auto-aof-rewrite-min-size, or scheduling BGSAVE \
+during low-traffic periods.
+- **Replication buffer limits** — For replicated/cluster instances, configure \
+client-output-buffer-limit replica to cap replication buffer growth.
+- **Diskless replication** — Enable repl-diskless-sync yes to reduce memory pressure \
+during replica full sync.
+- **Active defragmentation** — Enable CONFIG SET activedefrag yes if fragmentation \
+ratio is high (> 1.5).]
 ```
 
 ## Constraints
@@ -225,6 +300,8 @@ Explain WHY you chose this category and why other categories don't fit.]
 - Include actual metric values in your report, not just descriptions.
 - Replace NAMESPACE, POD, and CONTAINER placeholders in the PromQL queries with the actual values.
 - When reporting Network I/O, report the **peak** value observed, not just steady-state.
+- Always run `GRAPH.MEMORY USAGE` for each graph when RDB/AOF is available — \
+the memory breakdown table is mandatory when database inspection is possible.
 """
 
 
@@ -594,6 +671,8 @@ def _send_summary_to_chat(
     # Extract key fields from the report
     category = html.escape(_extract_report_field(report, "Category") or "Unknown")
     confidence = html.escape(_extract_report_field(report, "Confidence") or "Unknown")
+    likelihood = html.escape(_extract_report_field(report, "Likelihood") or "N/A")
+    classification = html.escape(_extract_report_field(report, "Classification") or "N/A")
 
     # Extract the Recommended Action section
     recommended_action = ""
@@ -624,6 +703,8 @@ def _send_summary_to_chat(
                 {"keyValue": {"topLabel": "Cluster / Namespace", "content": f"{cluster} / {namespace}"}},
                 {"keyValue": {"topLabel": "Pod / Container", "content": f"{pod} / {container}"}},
                 {"keyValue": {"topLabel": "Diagnosis", "content": f"{category} ({confidence_short})"}},
+                {"keyValue": {"topLabel": "Recurrence Likelihood", "content": likelihood}},
+                {"keyValue": {"topLabel": "Pattern", "content": classification}},
             ]
         },
         {
