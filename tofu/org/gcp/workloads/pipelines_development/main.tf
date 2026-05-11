@@ -1,6 +1,6 @@
 module "project" {
   source  = "terraform-google-modules/project-factory/google"
-  version = "~> 14.4.0"
+  version = "~> 18.2.0"
 
   org_id          = var.org_id
   project_id      = var.project_id
