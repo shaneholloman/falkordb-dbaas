@@ -118,7 +118,7 @@ jobs:
       # ------------------------------------------------------------------ #
       - name: Setup omnistrate-ctl
         if: ${{ inputs.sign_only != 'true' }}
-        uses: omnistrate-oss/setup-omnistrate-ctl@0ac9e5945eb7019952b098c7d155b0c1b77b5c7a # v1
+        uses: omnistrate-oss/setup-omnistrate-ctl@bed787a7c815521e6de0c98e72ff3fb2735a959c # v1
 
       # ------------------------------------------------------------------ #
       # 2. Install kubectl (skipped in sign-only mode)
@@ -131,9 +131,9 @@ jobs:
       # 3. Set up Python
       # ------------------------------------------------------------------ #
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Install Python dependencies
         run: pip install google-cloud-storage
@@ -142,7 +142,7 @@ jobs:
       # 4. Checkout (for scripts/rdb_uploader.py)
       # ------------------------------------------------------------------ #
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       # ------------------------------------------------------------------ #
       # 5. Update kubeconfig via omnistrate-ctl (skipped in sign-only mode)
