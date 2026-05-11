@@ -194,6 +194,9 @@ jobs:
         env:
           ENVIRONMENT: ${{ inputs.environment }}
           GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          ISSUE_GITHUB_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ISSUE_REPO: 'FalkorDB/private'
+          PROJECT_ID: 'PVT_kwDOCFj3QM4BXV48'
           GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL_PRODUCTION_CHAT }}
           VMAUTH_URL: ${{ inputs.vmauth_url }}
           VMAUTH_METRICS_USERNAME: ${{ vars.VMMETRICS_USERNAME }}
