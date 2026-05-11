@@ -337,9 +337,9 @@ def _scrub_report(text: str) -> str:
 class GitHubIssueManager:
     """Manages GitHub issues for OOM event tracking.
 
-    Deduplicates by namespace — recurring OOMs on the same instance within
-    7 days are added as comments to the existing issue rather than creating
-    new issues.
+    Deduplicates by customer + namespace — recurring OOMs on the same instance
+    for the same customer within 7 days are added as comments to the existing
+    issue rather than creating new issues.
     """
 
     MAX_LABEL_LENGTH = 50
