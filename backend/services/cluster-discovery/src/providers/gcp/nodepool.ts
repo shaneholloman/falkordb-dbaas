@@ -128,6 +128,10 @@ export async function createSecurityNodePool(cluster: Cluster): Promise<void> {
           machineType: GCP.SECURITY_MACHINE_TYPE,
           diskSizeGb: GCP.DEFAULT_DISK_SIZE_GB,
           labels: { node_pool: 'security' },
+          spot: GCP.SECURITY_SPOT,
+          taints: [
+            { key: 'cloud.google.com/gke-spot', value: 'true', effect: 'NO_SCHEDULE' },
+          ],
         },
         autoscaling: {
           enabled: true,
@@ -140,8 +144,48 @@ export async function createSecurityNodePool(cluster: Cluster): Promise<void> {
       },
     });
 
-    logger.info({ cluster: cluster.name }, 'Security node pool created.');
+    logger.info({ cluster: cluster.name }, 'Security node pool created (spot).');
   } catch (error) {
     logger.error({ cluster: cluster.name, error }, 'Failed to ensure security node pool');
+  }
+}
+
+export async function createSecurityInfraNodePool(cluster: Cluster): Promise<void> {
+  try {
+    const parent = `projects/${process.env.APPLICATION_PLANE_GOOGLE_CLOUD_PROJECT}/locations/${cluster.region}/clusters/${cluster.name}`;
+
+    const [nodePools] = await client.listNodePools({ parent });
+
+    const existingPool = nodePools.nodePools?.find((np) => np.name === 'security-infra');
+
+    if (existingPool) {
+      logger.info({ cluster: cluster.name }, 'Security-infra node pool already exists.');
+      return;
+    }
+
+    await client.createNodePool({
+      parent,
+      nodePool: {
+        name: 'security-infra',
+        initialNodeCount: 1,
+        config: {
+          machineType: GCP.SECURITY_INFRA_MACHINE_TYPE,
+          diskSizeGb: GCP.DEFAULT_DISK_SIZE_GB,
+          labels: { node_pool: 'security-infra' },
+        },
+        autoscaling: {
+          enabled: true,
+          maxNodeCount: GCP.SECURITY_INFRA_MAX_NODES,
+          minNodeCount: GCP.SECURITY_INFRA_MIN_NODES,
+        },
+        maxPodsConstraint: {
+          maxPodsPerNode: GCP.DEFAULT_MAX_PODS_PER_NODE,
+        },
+      },
+    });
+
+    logger.info({ cluster: cluster.name }, 'Security-infra node pool created.');
+  } catch (error) {
+    logger.error({ cluster: cluster.name, error }, 'Failed to ensure security-infra node pool');
   }
 }

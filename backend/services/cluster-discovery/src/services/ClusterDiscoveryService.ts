@@ -84,6 +84,7 @@ export class ClusterDiscoveryService {
       // Ensure node pools exist and are up to date for all clusters
       await this.nodePoolService.createObservabilityNodePoolIfNeeded(cluster);
       await this.nodePoolService.createSecurityNodePoolIfNeeded(cluster);
+      await this.nodePoolService.createSecurityInfraNodePoolIfNeeded(cluster);
 
       // Register or update cluster
       await this.registrationService.registerOrUpdateCluster(cluster, existingSecret);

@@ -396,6 +396,10 @@ export async function createSecurityNodePoolGCPBYOA(cluster: Cluster): Promise<v
           machineType: GCP.SECURITY_MACHINE_TYPE,
           diskSizeGb: GCP.DEFAULT_DISK_SIZE_GB,
           labels: { node_pool: 'security' },
+          spot: GCP.SECURITY_SPOT,
+          taints: [
+            { key: 'cloud.google.com/gke-spot', value: 'true', effect: 'NO_SCHEDULE' },
+          ],
         },
         autoscaling: {
           enabled: true,
@@ -406,7 +410,7 @@ export async function createSecurityNodePoolGCPBYOA(cluster: Cluster): Promise<v
       },
     });
 
-    logger.info({ cluster: cluster.name }, 'Security node pool created for BYOA GCP cluster.');
+    logger.info({ cluster: cluster.name }, 'Security node pool created for BYOA GCP cluster (spot).');
   } catch (error) {
     logger.error(
       { cluster: cluster.name, errorName: (error as any)?.name, errorMessage: (error as any)?.message, errorDetails: error },
@@ -502,6 +506,7 @@ export async function createSecurityNodePoolAWSBYOA(cluster: Cluster): Promise<v
         nodeRole: nodeRole,
         instanceTypes: [AWS.SECURITY_INSTANCE_TYPE],
         diskSize: AWS.DEFAULT_DISK_SIZE_GB,
+        capacityType: AWS.SECURITY_CAPACITY_TYPE,
         scalingConfig: {
           minSize: AWS.SECURITY_MIN_NODES,
           maxSize: AWS.SECURITY_MAX_NODES,
@@ -511,7 +516,7 @@ export async function createSecurityNodePoolAWSBYOA(cluster: Cluster): Promise<v
       }),
     );
 
-    logger.info({ cluster: cluster.name }, 'Security node pool created for BYOA AWS cluster.');
+    logger.info({ cluster: cluster.name }, 'Security node pool created for BYOA AWS cluster (spot).');
   } catch (error) {
     logger.error(
       { cluster: cluster.name, errorName: (error as any)?.name, errorMessage: (error as any)?.message, errorDetails: error },
@@ -549,11 +554,15 @@ export async function createSecurityNodePoolAzureBYOA(cluster: Cluster): Promise
         minCount: AZURE.SECURITY_MIN_NODES,
         maxCount: AZURE.SECURITY_MAX_NODES,
         mode: 'User',
+        scaleSetPriority: 'Spot',
+        scaleSetEvictionPolicy: 'Delete',
+        spotMaxPrice: -1,
         nodeLabels: { node_pool: 'security' },
+        nodeTaints: ['kubernetes.azure.com/scalesetpriority=spot:NoSchedule'],
         type: 'VirtualMachineScaleSets',
       });
 
-      logger.info({ cluster: cluster.name }, 'Security node pool created for BYOA Azure cluster.');
+      logger.info({ cluster: cluster.name }, 'Security node pool created for BYOA Azure cluster (spot).');
       return;
     }
 
@@ -586,6 +595,168 @@ export async function createSecurityNodePoolAzureBYOA(cluster: Cluster): Promise
     logger.error(
       { cluster: cluster.name, errorName: (error as any)?.name, errorMessage: (error as any)?.message, errorDetails: error },
       'Failed to create security node pool for BYOA Azure cluster',
+    );
+  }
+}
+
+// ── Security-Infra Node Pool (BYOA) ────────────────────────────────────────
+
+export async function createSecurityInfraNodePoolGCPBYOA(cluster: Cluster): Promise<void> {
+  try {
+    if (!cluster.gcpAccountID || !cluster.gcpAccountNumber) {
+      logger.error({ cluster: cluster.name }, 'Missing gcpAccountID or gcpAccountNumber for BYOA cluster');
+      return;
+    }
+
+    const { authClient } = await getGCPBYOACredentials(cluster).catch((error) => {
+      logger.error({ cluster: cluster.name, errorName: error?.name, errorMessage: error?.message }, 'Failed to get GCP BYOA credentials');
+      throw error;
+    });
+
+    const client = new ClusterManagerClient({ authClient: authClient as any });
+    const parent = `projects/${cluster.gcpAccountID}/locations/${cluster.region}/clusters/${cluster.name}`;
+
+    const [nodePools] = await client.listNodePools({ parent });
+    const existingPool = nodePools.nodePools?.find((np) => np.name === 'security-infra');
+
+    if (existingPool) {
+      logger.info({ cluster: cluster.name }, 'Security-infra node pool already exists for BYOA GCP cluster.');
+      return;
+    }
+
+    await client.createNodePool({
+      parent,
+      nodePool: {
+        name: 'security-infra',
+        initialNodeCount: 1,
+        config: {
+          machineType: GCP.SECURITY_INFRA_MACHINE_TYPE,
+          diskSizeGb: GCP.DEFAULT_DISK_SIZE_GB,
+          labels: { node_pool: 'security-infra' },
+        },
+        autoscaling: {
+          enabled: true,
+          maxNodeCount: GCP.SECURITY_INFRA_MAX_NODES,
+          minNodeCount: GCP.SECURITY_INFRA_MIN_NODES,
+        },
+        maxPodsConstraint: { maxPodsPerNode: GCP.DEFAULT_MAX_PODS_PER_NODE },
+      },
+    });
+
+    logger.info({ cluster: cluster.name }, 'Security-infra node pool created for BYOA GCP cluster.');
+  } catch (error) {
+    logger.error(
+      { cluster: cluster.name, errorName: (error as any)?.name, errorMessage: (error as any)?.message, errorDetails: error },
+      'Failed to create security-infra node pool for BYOA GCP cluster',
+    );
+  }
+}
+
+export async function createSecurityInfraNodePoolAWSBYOA(cluster: Cluster): Promise<void> {
+  try {
+    if (!cluster.awsAccountID) {
+      logger.error({ cluster: cluster.name }, 'Missing awsAccountID for BYOA cluster');
+      return;
+    }
+
+    const credentials = await getAWSBYOACredentials(cluster);
+
+    const eksClient = new EKSClient({
+      credentials: {
+        accessKeyId: credentials.accessKeyId,
+        secretAccessKey: credentials.secretAccessKey,
+        sessionToken: credentials.sessionToken,
+      },
+      region: cluster.region,
+    });
+
+    const { cluster: awsCluster } = await eksClient.send(
+      new DescribeClusterCommand({ name: cluster.name }),
+    );
+
+    const nodePools = awsCluster.computeConfig?.nodePools || [];
+
+    if (nodePools.includes('security-infra')) {
+      logger.info({ cluster: cluster.name }, 'Security-infra node pool already exists for BYOA AWS cluster.');
+      return;
+    }
+
+    const subnetIds = awsCluster.resourcesVpcConfig.subnetIds;
+    const nodeRole = awsCluster.computeConfig.nodeRoleArn;
+
+    await eksClient.send(
+      new CreateNodegroupCommand({
+        clusterName: cluster.name,
+        nodegroupName: 'security-infra',
+        subnets: subnetIds,
+        nodeRole: nodeRole,
+        instanceTypes: [AWS.SECURITY_INFRA_INSTANCE_TYPE],
+        diskSize: AWS.DEFAULT_DISK_SIZE_GB,
+        scalingConfig: {
+          minSize: AWS.SECURITY_INFRA_MIN_NODES,
+          maxSize: AWS.SECURITY_INFRA_MAX_NODES,
+          desiredSize: 1,
+        },
+        labels: { node_pool: 'security-infra' },
+      }),
+    );
+
+    logger.info({ cluster: cluster.name }, 'Security-infra node pool created for BYOA AWS cluster.');
+  } catch (error) {
+    logger.error(
+      { cluster: cluster.name, errorName: (error as any)?.name, errorMessage: (error as any)?.message, errorDetails: error },
+      'Failed to create security-infra node pool for BYOA AWS cluster',
+    );
+  }
+}
+
+const SECURITY_INFRA_POOL_NAME_BYOA = AZURE.SECURITY_INFRA_POOL_NAME;
+
+export async function createSecurityInfraNodePoolAzureBYOA(cluster: Cluster): Promise<void> {
+  try {
+    if (!cluster.azureClientId || !cluster.azureTenantId || !cluster.azureResourceGroupName) {
+      logger.error({ cluster: cluster.name }, 'Missing Azure credentials for BYOA Azure cluster');
+      return;
+    }
+
+    const { credential } = await getAzureBYOACredentials(cluster).catch((error) => {
+      logger.error({ cluster: cluster.name, errorName: error?.name, errorMessage: error?.message }, 'Failed to get Azure BYOA credentials');
+      throw error;
+    });
+
+    const client = new ContainerServiceClient(credential, cluster.azureSubscriptionId);
+
+    let existingPool = null;
+    try {
+      existingPool = await client.agentPools.get(cluster.azureResourceGroupName, cluster.name, SECURITY_INFRA_POOL_NAME_BYOA);
+    } catch (error: any) {
+      if (error.statusCode !== 404 && error.code !== 'ResourceNotFound' && error.code !== 'AgentPoolNotFound') {
+        throw error;
+      }
+    }
+
+    if (existingPool) {
+      logger.info({ cluster: cluster.name }, 'Security-infra node pool already exists for BYOA Azure cluster.');
+      return;
+    }
+
+    await client.agentPools.beginCreateOrUpdateAndWait(cluster.azureResourceGroupName, cluster.name, SECURITY_INFRA_POOL_NAME_BYOA, {
+      count: 1,
+      vmSize: AZURE.SECURITY_INFRA_MACHINE_TYPE,
+      osDiskSizeGB: AZURE.DEFAULT_DISK_SIZE_GB,
+      enableAutoScaling: true,
+      minCount: AZURE.SECURITY_INFRA_MIN_NODES,
+      maxCount: AZURE.SECURITY_INFRA_MAX_NODES,
+      mode: 'User',
+      nodeLabels: { node_pool: 'security-infra' },
+      type: 'VirtualMachineScaleSets',
+    });
+
+    logger.info({ cluster: cluster.name }, 'Security-infra node pool created for BYOA Azure cluster.');
+  } catch (error) {
+    logger.error(
+      { cluster: cluster.name, errorName: (error as any)?.name, errorMessage: (error as any)?.message, errorDetails: error },
+      'Failed to create security-infra node pool for BYOA Azure cluster',
     );
   }
 }

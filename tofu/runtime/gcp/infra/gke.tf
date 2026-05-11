@@ -5,7 +5,8 @@
 #   observability-resources    — observability stack pods (0-20, e2-standard-2)
 #   observability-resources-large — Grafana/heavy pods (0-20, e2-standard-4)
 #   backend                    — backend API pods (0-20, e2-standard-2)
-#   security                   — Wazuh Manager (0-10, e2-standard-4)
+#   security                   — Wazuh Manager (0-10, e2-standard-4, sysctls)
+#   security-infra             — Kyverno & Sealed Secrets (1-3, e2-small, always-on)
 #   public-pool                — internet-facing workloads (0-220, e2-standard-2,
 #                                 private_nodes=false for L4 LoadBalancer IPs)
 #
@@ -115,6 +116,16 @@ module "gke" {
       initial_node_count = 0
       max_pods_per_node  = 25
     },
+    {
+      name               = "security-infra"
+      machine_type       = "e2-small"
+      disk_size_gb       = 30
+      min_count          = 1
+      max_count          = 3
+      image_type         = "COS_CONTAINERD"
+      initial_node_count = 1
+      max_pods_per_node  = 25
+    },
   ]
   node_pools_resource_labels = {
     "default-pool" = {
@@ -130,6 +141,9 @@ module "gke" {
       "goog-gke-node-pool-provisioning-model" = "on-demand"
     }
     "security" = {
+      "goog-gke-node-pool-provisioning-model" = "on-demand"
+    }
+    "security-infra" = {
       "goog-gke-node-pool-provisioning-model" = "on-demand"
     }
   }
@@ -149,6 +163,9 @@ module "gke" {
     }
     "security" = {
       "node_pool" = "security"
+    }
+    "security-infra" = {
+      "node_pool" = "security-infra"
     }
   }
 

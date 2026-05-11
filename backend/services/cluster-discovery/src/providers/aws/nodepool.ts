@@ -193,6 +193,7 @@ export async function createSecurityNodePool(cluster: Cluster): Promise<void> {
         nodeRole: nodeRole,
         instanceTypes: [AWS.SECURITY_INSTANCE_TYPE],
         diskSize: AWS.DEFAULT_DISK_SIZE_GB,
+        capacityType: AWS.SECURITY_CAPACITY_TYPE,
         scalingConfig: {
           minSize: AWS.SECURITY_MIN_NODES,
           maxSize: AWS.SECURITY_MAX_NODES,
@@ -204,8 +205,58 @@ export async function createSecurityNodePool(cluster: Cluster): Promise<void> {
       }),
     );
 
-    logger.info({ cluster: cluster.name }, 'Security node pool created.');
+    logger.info({ cluster: cluster.name }, 'Security node pool created (spot).');
   } catch (error) {
     logger.error({ cluster: cluster.name, error, errorName: (error as any)?.name, errorMessage: (error as any)?.message }, 'Failed to ensure security node pool');
+  }
+}
+
+export async function createSecurityInfraNodePool(cluster: Cluster): Promise<void> {
+  try {
+    const credentials = await getAWSCredentials();
+    const eksClient = new EKSClient({ credentials, region: cluster.region });
+
+    const { cluster: awsCluster } = await eksClient.send(
+      new DescribeClusterCommand({ name: cluster.name }),
+    );
+
+    const nodePools = awsCluster?.computeConfig?.nodePools;
+
+    if (nodePools?.includes('security-infra')) {
+      logger.info({ cluster: cluster.name }, 'Security-infra node pool already exists.');
+      return;
+    }
+
+    const subnetIds = awsCluster?.resourcesVpcConfig?.subnetIds;
+    const envNodeRole = process.env.OMNISTRATE_AWS_NODE_ROLE_ARN;
+    const clusterNodeRole = awsCluster?.computeConfig?.nodeRoleArn;
+    const nodeRole = envNodeRole && envNodeRole.trim() !== '' ? envNodeRole : clusterNodeRole;
+
+    if (!nodeRole) {
+      throw new Error('AWS node role ARN is not configured.');
+    }
+
+    await eksClient.send(
+      new CreateNodegroupCommand({
+        clusterName: cluster.name,
+        nodegroupName: 'security-infra',
+        subnets: subnetIds,
+        nodeRole: nodeRole,
+        instanceTypes: [AWS.SECURITY_INFRA_INSTANCE_TYPE],
+        diskSize: AWS.DEFAULT_DISK_SIZE_GB,
+        scalingConfig: {
+          minSize: AWS.SECURITY_INFRA_MIN_NODES,
+          maxSize: AWS.SECURITY_INFRA_MAX_NODES,
+          desiredSize: 1,
+        },
+        labels: {
+          node_pool: 'security-infra',
+        },
+      }),
+    );
+
+    logger.info({ cluster: cluster.name }, 'Security-infra node pool created.');
+  } catch (error) {
+    logger.error({ cluster: cluster.name, error, errorName: (error as any)?.name, errorMessage: (error as any)?.message }, 'Failed to ensure security-infra node pool');
   }
 }

@@ -124,15 +124,63 @@ export async function createSecurityNodePool(cluster: Cluster): Promise<void> {
       minCount: AZURE.SECURITY_MIN_NODES,
       maxCount: AZURE.SECURITY_MAX_NODES,
       mode: 'User',
+      scaleSetPriority: 'Spot',
+      scaleSetEvictionPolicy: 'Delete',
+      spotMaxPrice: -1, // pay up to on-demand price
       nodeLabels: { node_pool: 'security' },
+      nodeTaints: ['kubernetes.azure.com/scalesetpriority=spot:NoSchedule'],
       type: 'VirtualMachineScaleSets',
     });
 
-    logger.info({ cluster: cluster.name }, 'Security node pool created.');
+    logger.info({ cluster: cluster.name }, 'Security node pool created (spot).');
   } catch (error: any) {
     logger.error(
       { cluster: cluster.name, error, errorName: error?.name, errorMessage: error?.message },
       'Failed to ensure security node pool',
+    );
+  }
+}
+
+const SECURITY_INFRA_POOL_NAME = AZURE.SECURITY_INFRA_POOL_NAME;
+
+export async function createSecurityInfraNodePool(cluster: Cluster): Promise<void> {
+  try {
+    const client = createContainerServiceClient();
+
+    const resourceGroup =
+      (cluster.labels as Record<string, string>)?.['azure-resource-group'] ?? (await getResourceGroupForCluster(cluster.name));
+
+    let existingPool = null;
+    try {
+      existingPool = await client.agentPools.get(resourceGroup, cluster.name, SECURITY_INFRA_POOL_NAME);
+    } catch (error: any) {
+      if (error.statusCode !== 404 && error.code !== 'ResourceNotFound' && error.code !== 'AgentPoolNotFound') {
+        throw error;
+      }
+    }
+
+    if (existingPool) {
+      logger.info({ cluster: cluster.name }, 'Security-infra node pool already exists.');
+      return;
+    }
+
+    await client.agentPools.beginCreateOrUpdateAndWait(resourceGroup, cluster.name, SECURITY_INFRA_POOL_NAME, {
+      count: 1,
+      vmSize: AZURE.SECURITY_INFRA_MACHINE_TYPE,
+      osDiskSizeGB: AZURE.DEFAULT_DISK_SIZE_GB,
+      enableAutoScaling: true,
+      minCount: AZURE.SECURITY_INFRA_MIN_NODES,
+      maxCount: AZURE.SECURITY_INFRA_MAX_NODES,
+      mode: 'User',
+      nodeLabels: { node_pool: 'security-infra' },
+      type: 'VirtualMachineScaleSets',
+    });
+
+    logger.info({ cluster: cluster.name }, 'Security-infra node pool created.');
+  } catch (error: any) {
+    logger.error(
+      { cluster: cluster.name, error, errorName: error?.name, errorMessage: error?.message },
+      'Failed to ensure security-infra node pool',
     );
   }
 }

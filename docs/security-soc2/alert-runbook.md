@@ -183,6 +183,306 @@ All alerts route through VictoriaMetrics → Alertmanager → PagerDuty / Google
 
 ---
 
+## Grype Alerts
+
+### GrypeScanFailing
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | Grype CronJob has failed runs for >30 minutes |
+| **Expression** | `kube_job_status_failed{job_name=~"grype-cve-scan-.*"} > 0` |
+| **Impact** | Container image CVE scanning is degraded. New vulnerabilities won't be detected. |
+
+**Response:**
+
+1. Check the failed Job logs:
+   ```bash
+   FAILED_JOB=$(kubectl get jobs -n security -l app=grype --field-selector status.successful=0 -o name | tail -1)
+   kubectl logs $FAILED_JOB -n security
+   ```
+
+2. Common causes:
+   - **Registry auth failure**: Check image pull secret or Workload Identity binding
+   - **OOMKilled**: Increase memory limit — large images can exhaust the scanner
+   - **GCS upload failure**: Check `prowler-gcs-credentials` / Workload Identity for evidence locker access
+
+3. Trigger a manual retry:
+   ```bash
+   kubectl create job --from=cronjob/grype-cve-scan grype-retry -n security
+   ```
+
+---
+
+### GrypeScanStale
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | No successful Grype scan in over 48 hours |
+| **Expression** | `time() - max(kube_cronjob_status_last_successful_time{cronjob="grype-cve-scan"}) > 172800` |
+| **Impact** | Vulnerability data is stale. New CVEs published since the last scan are invisible. |
+
+**Response:** Same as `ProwlerScanStale` — check if suspended, check recent Jobs, trigger a manual run.
+
+---
+
+### GrypeCronJobSuspended
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | Grype CronJob has `suspend: true` for >1 hour |
+| **Expression** | `kube_cronjob_spec_suspend{cronjob="grype-cve-scan"} == 1` |
+| **Impact** | No new CVE scans will run until unsuspended. |
+
+**Response:** Determine who suspended it and why. Unsuspend: `kubectl patch cronjob grype-cve-scan -n security -p '{"spec":{"suspend":false}}'`
+
+---
+
+## Kube-bench Alerts
+
+### KubeBenchScanFailing
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | Kube-bench CronJob has failed runs for >30 minutes |
+| **Expression** | `kube_job_status_failed{job_name=~"kube-bench-cis-scan-.*"} > 0` |
+| **Impact** | CIS benchmark compliance scanning is degraded. |
+
+**Response:**
+
+1. Check the failed Job logs:
+   ```bash
+   FAILED_JOB=$(kubectl get jobs -n security -l app=kube-bench --field-selector status.successful=0 -o name | tail -1)
+   kubectl logs $FAILED_JOB -n security
+   ```
+
+2. Common causes:
+   - **Host path access denied**: kube-bench needs read access to `/etc`, `/var/lib/kubelet`, etc.
+   - **Auto-detection failure**: If the cloud provider isn't detected, the scan may fail. Consider adding an explicit `--benchmark` flag.
+
+---
+
+### KubeBenchScanStale
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | No successful kube-bench scan in over 7 days |
+| **Expression** | `time() - max(kube_cronjob_status_last_successful_time{cronjob="kube-bench-cis-scan"}) > 604800` |
+| **Impact** | CIS compliance data is stale. Weekly scan cadence is broken. |
+
+**Response:** Same pattern — check if suspended, check recent Jobs, trigger a manual run.
+
+---
+
+### KubeBenchCronJobSuspended
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | Kube-bench CronJob has `suspend: true` for >1 hour |
+| **Expression** | `kube_cronjob_spec_suspend{cronjob="kube-bench-cis-scan"} == 1` |
+| **Impact** | No CIS benchmark scans will run until unsuspended. |
+
+**Response:** Unsuspend: `kubectl patch cronjob kube-bench-cis-scan -n security -p '{"spec":{"suspend":false}}'`
+
+---
+
+## Kubescape Alerts
+
+### KubescapeScanFailing
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | Kubescape CronJob has failed runs for >30 minutes |
+| **Expression** | `kube_job_status_failed{job_name=~"kubescape-scan-.*"} > 0` |
+| **Impact** | MITRE ATT&CK / NSA hardening scanning is degraded. |
+
+**Response:**
+
+1. Check the failed Job logs:
+   ```bash
+   FAILED_JOB=$(kubectl get jobs -n security -l app=kubescape --field-selector status.successful=0 -o name | tail -1)
+   kubectl logs $FAILED_JOB -n security
+   ```
+
+2. Common causes:
+   - **API server connectivity**: Kubescape needs cluster-admin access to scan all resources
+   - **OOMKilled**: Large clusters with many resources can exhaust scanner memory
+
+---
+
+### KubescapeScanStale
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | No successful Kubescape scan in over 48 hours |
+| **Expression** | `time() - max(kube_cronjob_status_last_successful_time{cronjob="kubescape-scan"}) > 172800` |
+| **Impact** | Kubernetes security posture data is stale. |
+
+**Response:** Check if suspended, check recent Jobs, trigger a manual run.
+
+---
+
+### KubescapeCronJobSuspended
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | Kubescape CronJob has `suspend: true` for >1 hour |
+| **Expression** | `kube_cronjob_spec_suspend{cronjob="kubescape-scan"} == 1` |
+| **Impact** | No MITRE/NSA scans will run until unsuspended. |
+
+**Response:** Unsuspend: `kubectl patch cronjob kubescape-scan -n security -p '{"spec":{"suspend":false}}'`
+
+---
+
+## TruffleHog Alerts
+
+### TrufflehogScanFailing
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | TruffleHog CronJob has failed runs for >30 minutes |
+| **Expression** | `kube_job_status_failed{job_name=~"trufflehog-secret-scan-.*"} > 0` |
+| **Impact** | Secret leak detection is degraded. Leaked credentials in container images won't be found. |
+
+**Response:**
+
+1. Check the failed Job logs:
+   ```bash
+   FAILED_JOB=$(kubectl get jobs -n security -l app=trufflehog --field-selector status.successful=0 -o name | tail -1)
+   kubectl logs $FAILED_JOB -n security
+   ```
+
+2. Common causes:
+   - **Registry auth failure**: TruffleHog needs to pull and scan images
+   - **Timeout**: Very large images can exceed the scan deadline
+
+---
+
+### TrufflehogScanStale
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | No successful TruffleHog scan in over 48 hours |
+| **Expression** | `time() - max(kube_cronjob_status_last_successful_time{cronjob="trufflehog-secret-scan"}) > 172800` |
+| **Impact** | Secret detection data is stale. |
+
+**Response:** Check if suspended, check recent Jobs, trigger a manual run.
+
+---
+
+### TrufflehogCronJobSuspended
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | TruffleHog CronJob has `suspend: true` for >1 hour |
+| **Expression** | `kube_cronjob_spec_suspend{cronjob="trufflehog-secret-scan"} == 1` |
+| **Impact** | No secret scans will run until unsuspended. |
+
+**Response:** Unsuspend: `kubectl patch cronjob trufflehog-secret-scan -n security -p '{"spec":{"suspend":false}}'`
+
+---
+
+## Compliance Report Alerts
+
+### ComplianceReportFailing
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | Compliance Report CronJob has failed runs for >30 minutes |
+| **Expression** | `kube_job_status_failed{job_name=~"compliance-report-.*"} > 0` |
+| **Impact** | Weekly evidence aggregation is degraded. SOC 2 audit packages won't be generated. |
+
+**Response:**
+
+1. Check the failed Job logs:
+   ```bash
+   FAILED_JOB=$(kubectl get jobs -n security -l app=compliance-report --field-selector status.successful=0 -o name | tail -1)
+   kubectl logs $FAILED_JOB -n security
+   ```
+
+2. Common causes:
+   - **GCS access failure**: Uses `gcloud storage` — check Workload Identity
+   - **Wazuh API unreachable**: The report pulls data from the Wazuh API
+
+---
+
+### ComplianceReportStale
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | No successful compliance report in over 7 days |
+| **Expression** | `time() - max(kube_cronjob_status_last_successful_time{cronjob="compliance-report"}) > 604800` |
+| **Impact** | Evidence aggregation cadence is broken. Auditors expect weekly reports. |
+
+**Response:** Check if suspended, check recent Jobs, trigger a manual run.
+
+---
+
+### ComplianceReportCronJobSuspended
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | Compliance Report CronJob has `suspend: true` for >1 hour |
+| **Expression** | `kube_cronjob_spec_suspend{cronjob="compliance-report"} == 1` |
+| **Impact** | No evidence packages will be generated until unsuspended. |
+
+**Response:** Unsuspend: `kubectl patch cronjob compliance-report -n security -p '{"spec":{"suspend":false}}'`
+
+---
+
+## Falco Alerts
+
+### FalcoDaemonSetUnavailable
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | Falco DaemonSet has unavailable pods for >15 minutes |
+| **Expression** | `kube_daemonset_status_number_unavailable{daemonset="falco"} > 0` |
+| **Impact** | Runtime threat detection is degraded on nodes without Falco. Syscall-based attacks won't be detected. |
+
+**Response:**
+
+1. Identify which nodes are missing Falco:
+   ```bash
+   kubectl get ds falco -n security
+   kubectl get pods -n security -l app=falco -o wide | grep -v Running
+   ```
+
+2. Common causes:
+   - **Kernel module failure**: Falco needs kernel headers or eBPF support. Check pod logs for driver errors.
+   - **Node pressure**: Falco pod evicted due to resource limits
+   - **Security context denied**: Falco needs privileged mode — ensure the Kyverno exclusion is in place
+
+---
+
+### FalcoDaemonSetMisscheduled
+
+| Field | Value |
+|-------|-------|
+| **Severity** | warning |
+| **Fires when** | Falco pods are scheduled on unexpected nodes for >15 minutes |
+| **Expression** | `kube_daemonset_status_number_misscheduled{daemonset="falco"} > 0` |
+| **Impact** | Falco is running on nodes where it shouldn't be. Investigate scheduling. |
+
+**Response:** Same as `WazuhAgentDaemonSetMisscheduled` — check for taint/label changes on nodes.
+
+---
+
 ## Alert Escalation Matrix
 
 | Alert | Severity | On-Call Response Time | Escalation |
@@ -190,9 +490,26 @@ All alerts route through VictoriaMetrics → Alertmanager → PagerDuty / Google
 | WazuhManagerDown | Critical | 15 minutes | Page infrastructure + security team |
 | WazuhAgentDaemonSetUnavailable | Warning | 1 hour | Notify security team |
 | WazuhAgentDaemonSetMisscheduled | Warning | 4 hours | Notify security team |
+| FalcoDaemonSetUnavailable | Warning | 1 hour | Notify security team |
+| FalcoDaemonSetMisscheduled | Warning | 4 hours | Notify security team |
 | ProwlerScanFailing | Warning | 4 hours | Notify security team |
 | ProwlerScanStale | Warning | 8 hours | Notify security + compliance team |
 | ProwlerCronJobSuspended | Warning | 4 hours | Notify security team |
+| GrypeScanFailing | Warning | 4 hours | Notify security team |
+| GrypeScanStale | Warning | 8 hours | Notify security team |
+| GrypeCronJobSuspended | Warning | 4 hours | Notify security team |
+| KubeBenchScanFailing | Warning | 4 hours | Notify security team |
+| KubeBenchScanStale | Warning | Next business day | Notify security team |
+| KubeBenchCronJobSuspended | Warning | 4 hours | Notify security team |
+| KubescapeScanFailing | Warning | 4 hours | Notify security team |
+| KubescapeScanStale | Warning | 8 hours | Notify security team |
+| KubescapeCronJobSuspended | Warning | 4 hours | Notify security team |
+| TrufflehogScanFailing | Warning | 4 hours | Notify security team |
+| TrufflehogScanStale | Warning | 8 hours | Notify security team |
+| TrufflehogCronJobSuspended | Warning | 4 hours | Notify security team |
+| ComplianceReportFailing | Warning | 4 hours | Notify security + compliance team |
+| ComplianceReportStale | Warning | Next business day | Notify security + compliance team |
+| ComplianceReportCronJobSuspended | Warning | 4 hours | Notify security + compliance team |
 
 ---
 

@@ -65,6 +65,9 @@ tofu output prowler_role_arn  # → ARN for the prowler-aws-credentials Secret
 ### 1.3 Azure Service Principal (if you have Azure spokes)
 
 Creates an Azure AD application + service principal with `Reader` and `Security Reader` roles.
+The SP password auto-rotates via a `time_rotating` resource — OpenTofu will recreate the
+credential when the rotation period expires. Re-run `tofu apply` and re-seal the secret
+(Step 6.5) after each rotation.
 
 ```bash
 cd tofu/runtime/azure
@@ -76,7 +79,7 @@ tofu apply
 Capture outputs:
 ```bash
 tofu output prowler_client_id
-tofu output -raw prowler_client_secret  # sensitive
+tofu output -raw prowler_client_secret  # sensitive — rotates automatically
 tofu output prowler_tenant_id
 tofu output prowler_subscription_id
 ```
@@ -188,7 +191,7 @@ argocd cluster get <CLUSTER_NAME> -o json | jq '.labels'
 | Label | Required By | Values |
 |-------|-------------|--------|
 | `role: app-plane` | All spoke ApplicationSets | `app-plane` |
-| `cloud_provider` | Prowler ApplicationSet (routes to cloud-specific overlay) | `gcp`, `aws`, `azure` |
+| `cloud_provider` | All security ApplicationSets (Prowler, Grype, Kube-bench, Kubescape, TruffleHog, Falco) — routes to cloud-specific overlay | `gcp`, `aws`, `azure` |
 | `host_mode` | Informational (not used by security stack selectors) | `managed`, `byoa` |
 
 Without `role: app-plane` and `cloud_provider`, the ApplicationSets will not generate Applications for the cluster.
@@ -318,6 +321,26 @@ vi argocd/kustomize/prowler/overlays/gcp-dev/secrets.env
   certs/app-plane/sealed-secrets/dev/pub-cert.pem
 ```
 
+### 6.7 Scanner Secrets (Grype, Kube-bench, Kubescape, TruffleHog)
+
+Each scanner has per-cloud × per-env overlays with `secrets.env` files.
+The pattern is the same: edit the `.env`, seal it, commit the sealed YAML.
+
+```bash
+# Example: Grype ctrl-plane prod
+vi argocd/kustomize/grype/overlays/ctrl-plane-prod/secrets.env
+./scripts/seal_env.sh argocd/kustomize/grype/overlays/ctrl-plane-prod/secrets.env security \
+  certs/ctrl-plane/sealed-secrets/prod/pub-cert.pem
+
+# Example: Kube-bench AWS dev (app-plane cert)
+vi argocd/kustomize/kube-bench/overlays/aws-dev/secrets.env
+./scripts/seal_env.sh argocd/kustomize/kube-bench/overlays/aws-dev/secrets.env security \
+  certs/app-plane/sealed-secrets/dev/pub-cert.pem
+```
+
+Repeat for every `{grype,kube-bench,kubescape,trufflehog}/overlays/*/secrets.env`
+that still contains `PLACEHOLDER_RUN_SEAL_ENV_SH` or `REPLACE_WITH_SEALED_VALUE`.
+
 ### Secret Summary
 
 | Secret | `.env` Location | Clusters | Keys |
@@ -330,6 +353,10 @@ vi argocd/kustomize/prowler/overlays/gcp-dev/secrets.env
 | `prowler-gcs-credentials` | `prowler/overlays/{aws,azure}-*/secrets.env` | AWS + Azure spokes | `sa-key.json` |
 | `prowler-infra` | `prowler/overlays/*/secrets.env` | All spokes | `evidence-bucket` |
 | `sealed-secrets-app-plane-key` | `cluster-discovery/overlays/*/sealed-secrets-key.env` | Ctrl-plane (injected to app-plane by cluster-discovery) | `SEALED_SECRETS_TLS_CRT`, `SEALED_SECRETS_TLS_KEY` |
+| `grype-*` | `grype/overlays/*/secrets.env` | All | `sa-key.json`, `evidence-bucket`, etc. |
+| `kube-bench-*` | `kube-bench/overlays/*/secrets.env` | All | `sa-key.json`, `evidence-bucket`, etc. |
+| `kubescape-*` | `kubescape/overlays/*/secrets.env` | All | `sa-key.json`, `evidence-bucket`, etc. |
+| `trufflehog-*` | `trufflehog/overlays/*/secrets.env` | All | `sa-key.json`, `evidence-bucket`, etc. |
 
 TLS secrets (`wazuh-dashboard-tls`) are auto-provisioned by cert-manager via the `letsencrypt-prod` ClusterIssuer.
 
@@ -367,9 +394,15 @@ kubectl apply -f argocd/apps/ctrl-plane/dev/wazuh-rules.yaml
 
 Deploys the custom rules ConfigMap and dashboard saved objects. The Manager auto-reloads rules when the ConfigMap is mounted.
 
-### 7.3 ThreatMapper Console
+### 7.3 Kyverno Policies (Control Plane + Spokes)
 
-> **Removed.** ThreatMapper has been decommissioned (project abandoned, Helm charts no longer available).
+```bash
+kubectl apply -f argocd/apps/ctrl-plane/dev/kyverno.yaml
+kubectl apply -f argocd/apps/ctrl-plane/dev/kyverno-policies.yaml
+kubectl apply -f argocd/apps/app-plane/dev/kyverno-policies.yaml
+```
+
+Deploys the Kyverno engine and the `disallow-privileged-containers` ClusterPolicy (Audit mode).
 
 ### 7.4 Wazuh Agents (Control Plane)
 
@@ -395,9 +428,14 @@ kubectl apply -f argocd/apps/app-plane/dev/wazuh-agent.yaml
 
 The ApplicationSet will generate one Application per cluster labeled `role: app-plane`.
 
-### 7.6 ThreatMapper Sensors (Control Plane + Spokes)
+### 7.6 Falco (Control Plane + Spokes)
 
-> **Removed.** ThreatMapper has been decommissioned.
+```bash
+kubectl apply -f argocd/apps/ctrl-plane/dev/falco.yaml
+kubectl apply -f argocd/apps/app-plane/dev/falco.yaml
+```
+
+Deploys Falco DaemonSet for runtime threat detection. Alerts forward to Wazuh on syslog port 514.
 
 ### 7.7 Prowler (Spoke Clusters)
 
@@ -418,9 +456,85 @@ Verify results appear in the evidence locker:
 gsutil ls "gs://$(tofu -chdir=tofu/runtime/gcp/infra output -raw evidence_locker_bucket)/prowler/"
 ```
 
+### 7.8 Grype (All Clusters)
+
+```bash
+kubectl apply -f argocd/apps/ctrl-plane/dev/grype.yaml
+kubectl apply -f argocd/apps/app-plane/dev/grype.yaml
+```
+
+Grype scans container images for CVEs and forwards findings to Wazuh.
+
+### 7.9 Kube-bench (All Clusters)
+
+```bash
+kubectl apply -f argocd/apps/ctrl-plane/dev/kube-bench.yaml
+kubectl apply -f argocd/apps/app-plane/dev/kube-bench.yaml
+```
+
+CIS benchmark scanning for Kubernetes node configuration.
+
+### 7.10 Kubescape (All Clusters)
+
+```bash
+kubectl apply -f argocd/apps/ctrl-plane/dev/kubescape.yaml
+kubectl apply -f argocd/apps/app-plane/dev/kubescape.yaml
+```
+
+Kubescape scans for MITRE ATT&CK, NSA hardening, and all available controls.
+
+### 7.11 TruffleHog (All Clusters)
+
+```bash
+kubectl apply -f argocd/apps/ctrl-plane/dev/trufflehog.yaml
+kubectl apply -f argocd/apps/app-plane/dev/trufflehog.yaml
+```
+
+Secret leak detection across deployed container images.
+
+### 7.12 Compliance Report (Control Plane)
+
+```bash
+kubectl apply -f argocd/apps/ctrl-plane/dev/compliance-report.yaml
+```
+
+Aggregates evidence from all scanners into the GCS evidence locker.
+
 ---
 
-## Step 8 — Verify End-to-End
+## Step 8 — AI Security Triage (GitHub Actions)
+
+The weekly AI-powered security triage workflow is defined in
+`.github/workflows/ai-security-triage.yml`. It uses Copilot to review
+firing alerts, Wazuh findings, and Grype CVEs, and creates a GitHub
+issue with prioritized remediations.
+
+### 8.1 Configure Secrets & Variables
+
+Add these to the GitHub repo settings (Settings → Secrets and variables → Actions):
+
+**Secrets** (per environment: `dev` and `prod`):
+- `WAZUH_API_PASSWORD_DEV` / `WAZUH_API_PASSWORD_PROD`
+- `COPILOT_TOKEN` (GitHub token with Copilot access — may already exist from crash triage)
+- `PRIVATE_REPO_TOKEN` (PAT for creating issues — may already exist)
+
+**Variables** (per environment):
+- `VMAUTH_URL_DEV` / `VMAUTH_URL_PROD`
+- `WAZUH_API_URL_DEV` / `WAZUH_API_URL_PROD`
+- `WAZUH_API_USERNAME`
+- `VMAUTH_USERNAME` (may already exist from crash triage)
+
+### 8.2 Test a Manual Run
+
+```bash
+gh workflow run ai-security-triage.yml -f environment=dev
+```
+
+The cron schedule runs every Monday at 08:00 UTC (prod only by default).
+
+---
+
+## Step 9 — Verify End-to-End
 
 ### Observability
 
@@ -453,9 +567,18 @@ export WAZUH_CA_BUNDLE="/path/to/wazuh-ca.pem"         # optional
 - [ ] Wazuh Agents registered from all clusters
 - [ ] Prowler CronJob completed at least one run
 - [ ] Prowler results visible in GCS evidence locker
+- [ ] Grype CronJob completed at least one run
+- [ ] Kube-bench CronJob completed at least one run
+- [ ] Kubescape CronJob completed at least one run
+- [ ] TruffleHog CronJob completed at least one run
+- [ ] Falco DaemonSet running on all nodes
+- [ ] Kyverno policies applied (Audit mode)
+- [ ] Compliance Report CronJob completed at least one run
 - [ ] Grafana SOC 2 dashboard showing data
-- [ ] VMRule alerts loaded (no `ProwlerScanStale` firing)
+- [ ] Wazuh dashboards showing scanner findings
+- [ ] VMRule alerts loaded (no `*ScanStale` or `*Down` alerts firing)
 - [ ] Google Chat integration receives Wazuh alerts
+- [ ] AI Security Triage workflow runs successfully (manual test)
 
 ---
 

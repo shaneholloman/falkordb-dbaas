@@ -50,6 +50,7 @@ export type ClusterRole = (typeof CLUSTER_ROLE)[keyof typeof CLUSTER_ROLE];
 export const NODE_POOL_NAME = {
   OBSERVABILITY: 'observability',
   SECURITY: 'security',
+  SECURITY_INFRA: 'security-infra',
   DEFAULT: 'default',
 } as const;
 
@@ -58,11 +59,15 @@ export const AWS = {
   DEFAULT_ROLE_NAME: 'omnistrate-bootstrap-role',
   DEFAULT_INSTANCE_TYPE: 'm5.large', // 2 vCPU, 8 GB RAM
   SECURITY_INSTANCE_TYPE: 'm5.xlarge',
+  SECURITY_INFRA_INSTANCE_TYPE: 't3.small', // 2 vCPU, 2 GB RAM — Kyverno + Sealed Secrets
   DEFAULT_DISK_SIZE_GB: 50,
   DEFAULT_MIN_NODES: 1,
   DEFAULT_MAX_NODES: 10,
   SECURITY_MIN_NODES: 0,
   SECURITY_MAX_NODES: 3,
+  SECURITY_INFRA_MIN_NODES: 1,
+  SECURITY_INFRA_MAX_NODES: 2,
+  SECURITY_CAPACITY_TYPE: 'SPOT',
   WEB_IDENTITY_TOKEN_FILE: '/var/run/secrets/eks.amazonaws.com/serviceaccount/token',
 } as const;
 
@@ -70,11 +75,15 @@ export const AWS = {
 export const GCP = {
   DEFAULT_MACHINE_TYPE: 'e2-standard-2', // 2 vCPU, 8 GB RAM
   SECURITY_MACHINE_TYPE: 'e2-standard-4',
+  SECURITY_INFRA_MACHINE_TYPE: 'e2-small', // 2 vCPU, 2 GB RAM — Kyverno + Sealed Secrets
   DEFAULT_DISK_SIZE_GB: 50,
   DEFAULT_MIN_NODES: 1,
   DEFAULT_MAX_NODES: 10,
   SECURITY_MIN_NODES: 0,
   SECURITY_MAX_NODES: 3,
+  SECURITY_INFRA_MIN_NODES: 1,
+  SECURITY_INFRA_MAX_NODES: 2,
+  SECURITY_SPOT: true,
   DEFAULT_MAX_PODS_PER_NODE: 25,
   WORKLOAD_IDENTITY_POOL_PATH:
     'projects/{projectNumber}/locations/global/workloadIdentityPools/omnistrate-bootstrap-id-pool/providers/omnistrate-oidc-prov',
@@ -85,13 +94,18 @@ export const GCP = {
 export const AZURE = {
   DEFAULT_MACHINE_TYPE: 'Standard_B2ms', // 2 vCPU, 8 GB RAM
   SECURITY_MACHINE_TYPE: 'Standard_D4s_v3',
+  SECURITY_INFRA_MACHINE_TYPE: 'Standard_B2s', // 2 vCPU, 4 GB RAM — Kyverno + Sealed Secrets
   OBSERVABILITY_POOL_NAME: 'obsrv',
   SECURITY_POOL_NAME: 'security',
+  SECURITY_INFRA_POOL_NAME: 'secinfra',
   DEFAULT_DISK_SIZE_GB: 50,
   DEFAULT_MIN_NODES: 1,
   DEFAULT_MAX_NODES: 10,
   SECURITY_MIN_NODES: 0,
   SECURITY_MAX_NODES: 3,
+  SECURITY_INFRA_MIN_NODES: 1,
+  SECURITY_INFRA_MAX_NODES: 2,
+  SECURITY_SPOT: true,
 } as const;
 
 // Labels

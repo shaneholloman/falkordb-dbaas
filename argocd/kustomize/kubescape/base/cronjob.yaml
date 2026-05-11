@@ -37,6 +37,19 @@ spec:
           restartPolicy: Never
           nodeSelector:
             node_pool: security
+          tolerations:
+            - key: cloud.google.com/gke-spot
+              operator: Equal
+              value: "true"
+              effect: NoSchedule
+            - key: eks.amazonaws.com/capacityType
+              operator: Equal
+              value: SPOT
+              effect: NoSchedule
+            - key: kubernetes.azure.com/scalesetpriority
+              operator: Equal
+              value: spot
+              effect: NoSchedule
           securityContext:
             seccompProfile:
               type: RuntimeDefault

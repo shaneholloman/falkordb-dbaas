@@ -16,7 +16,7 @@ spec:
         admissionController:
           replicas: 3
           nodeSelector:
-            node_pool: security
+            node_pool: security-infra
           container:
             resources:
               requests:
@@ -28,7 +28,7 @@ spec:
         backgroundController:
           replicas: 2
           nodeSelector:
-            node_pool: security
+            node_pool: security-infra
           resources:
             requests:
               cpu: 100m
@@ -38,10 +38,10 @@ spec:
               memory: 256Mi
         cleanupController:
           nodeSelector:
-            node_pool: security
+            node_pool: security-infra
         reportsController:
           nodeSelector:
-            node_pool: security
+            node_pool: security-infra
         # Audit mode by default — switch to enforce per-policy
         config:
           webhooks:

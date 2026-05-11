@@ -25,14 +25,22 @@ The security stack is designed to run autonomously. The following occur automati
 | Time (UTC) | Event | Component |
 |-------------|-------|-----------|
 | Continuous | Host log collection, FIM | Wazuh Agents |
-| 02:00 | SOC 2 compliance scan + upload | Prowler CronJob |
+| Continuous | Runtime syscall monitoring | Falco DaemonSet |
 | Continuous | Alert evaluation | VMRule (VictoriaMetrics) |
+| 02:00 | SOC 2 compliance scan + upload | Prowler CronJob |
+| 03:00 | Container image CVE scan | Grype CronJob |
+| 04:00 | CIS benchmark scan (weekly) | Kube-bench CronJob |
+| 05:00 | MITRE/NSA security scan | Kubescape CronJob |
+| 06:00 | Secret leak scan | TruffleHog CronJob |
+| Weekly (Mon 08:00) | AI security triage | GitHub Actions workflow |
+| Weekly | Evidence aggregation | Compliance Report CronJob |
 
 **Daily checks** (recommended):
 
 1. Verify the Grafana **SOC 2 Compliance** dashboard shows no red panels
-2. Check that no `ProwlerScanStale` or `WazuhManagerDown` alerts are firing
-3. If on-call, review Google Chat space for Wazuh rule 100101+ alerts (Prowler FAIL findings)
+2. Check that no `*ScanStale`, `*Down`, or `*Unavailable` alerts are firing
+3. If on-call, review Google Chat space for Wazuh rule 100101+ alerts
+4. Check the latest AI security triage issue in `FalkorDB/falkordb-dbaas` (label: `ai-triage,security`)
 
 ---
 
@@ -201,13 +209,24 @@ rm /tmp/new-key.json
 
 ### Azure Service Principal Secret
 
-1. Rotate via Azure portal or Tofu:
-   ```bash
-   cd tofu/runtime/azure
-   tofu taint azuread_application_password.prowler
-   tofu apply
-   ```
-2. Update `prowler-azure-credentials` on Azure spoke clusters
+The Azure SP password auto-rotates via a `time_rotating` OpenTofu resource.
+When the rotation period expires, re-apply and re-seal:
+
+```bash
+cd tofu/runtime/azure
+tofu apply
+# Capture new secret
+tofu output -raw prowler_client_secret
+```
+
+Then update the sealed secret for Azure spoke clusters:
+```bash
+vi argocd/kustomize/prowler/overlays/azure-dev/secrets.env
+# Update: client-secret=<new value from tofu output>
+./scripts/seal_env.sh argocd/kustomize/prowler/overlays/azure-dev/secrets.env security \
+  certs/app-plane/sealed-secrets/dev/pub-cert.pem
+# Commit and push — ArgoCD syncs the new SealedSecret
+```
 
 ---
 
@@ -269,11 +288,18 @@ Custom rules are in `argocd/kustomize/wazuh-rules/wazuh-custom-rules.yaml`.
 | 100100 | 3 | Prowler result received (base) |
 | 100101 | 10 | Prowler FAIL detected → Google Chat alert |
 | 100102 | 13 | Prowler critical severity FAIL |
+| 100103 | 12 | Prowler high severity FAIL |
 | 100200 | 12 | FIM critical path modified → Google Chat alert |
 | 100300 | 10 | Auth anomaly: brute force detection |
 | 100301 | 12 | Auth anomaly: privilege escalation |
 | 100302 | 10 | Auth anomaly: after-hours access |
 | 100303 | 13 | Auth anomaly: impossible travel |
+| 100400–100404 | 3–13 | Grype CVE detection (base, critical, high, medium, burst aggregation) |
+| 100450 | 3 | Grype accepted CVE (risk-accepted, suppressed from alerts) |
+| 100500–100503 | 3–13 | Falco runtime threat detection (container escape, priv escalation, etc.) |
+| 100600–100699 | 3–13 | TruffleHog secret leak detection |
+| 100700–100799 | 3–13 | Kube-bench CIS benchmark findings |
+| 100800–100899 | 3–13 | KubeScape MITRE/NSA findings |
 
 To add/modify rules:
 1. Edit `argocd/kustomize/wazuh-rules/wazuh-custom-rules.yaml`
