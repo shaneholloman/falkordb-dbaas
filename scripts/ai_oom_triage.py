@@ -727,14 +727,14 @@ def _send_summary_to_chat(
     sections = [
         {
             "widgets": [
-                {"keyValue": {"topLabel": "Customer", "content": f"{customer_name} ({customer_email})"}},
-                {"keyValue": {"topLabel": "Cluster", "content": cluster}},
-                {"keyValue": {"topLabel": "Pod", "content": f"{pod} ({container})"}},
-                {"keyValue": {"topLabel": "Namespace", "content": namespace}},
-                {"keyValue": {"topLabel": "Diagnosis", "content": category}},
-                {"keyValue": {"topLabel": "Confidence", "content": confidence}},
-                {"keyValue": {"topLabel": "Recurrence", "content": likelihood}},
-                {"keyValue": {"topLabel": "Pattern", "content": classification}},
+                {"decoratedText": {"topLabel": "Customer", "text": f"{customer_name} ({customer_email})"}},
+                {"decoratedText": {"topLabel": "Cluster", "text": cluster}},
+                {"decoratedText": {"topLabel": "Pod", "text": f"{pod} ({container})"}},
+                {"decoratedText": {"topLabel": "Namespace", "text": namespace}},
+                {"decoratedText": {"topLabel": "Diagnosis", "text": category}},
+                {"decoratedText": {"topLabel": "Confidence", "text": confidence}},
+                {"decoratedText": {"topLabel": "Recurrence", "text": likelihood}},
+                {"decoratedText": {"topLabel": "Pattern", "text": classification}},
             ]
         },
     ]
@@ -763,35 +763,32 @@ def _send_summary_to_chat(
     buttons = []
     if issue_url:
         buttons.append({
-            "textButton": {
-                "text": f"View Issue #{issue_number}",
-                "onClick": {"openLink": {"url": issue_url}},
-            }
+            "text": f"View Issue #{issue_number}",
+            "onClick": {"openLink": {"url": issue_url}},
         })
     buttons.extend([
         {
-            "textButton": {
-                "text": "Memory Metrics",
-                "onClick": {"openLink": {"url": grafana_memory_url}},
-            }
+            "text": "Memory Metrics",
+            "onClick": {"openLink": {"url": grafana_memory_url}},
         },
         {
-            "textButton": {
-                "text": "Pod Overview",
-                "onClick": {"openLink": {"url": grafana_pods_url}},
-            }
+            "text": "Pod Overview",
+            "onClick": {"openLink": {"url": grafana_pods_url}},
         },
     ])
-    sections.append({"widgets": [{"buttons": buttons}]})
+    sections.append({"widgets": [{"buttonList": {"buttons": buttons}}]})
 
     payload = {
         "text": text_prefix,
-        "cards": [{
-            "header": {
-                "title": card_title,
-                "subtitle": subtitle,
+        "cardsV2": [{
+            "cardId": f"oom-triage-{namespace}-{pod}",
+            "card": {
+                "header": {
+                    "title": card_title,
+                    "subtitle": subtitle,
+                },
+                "sections": sections,
             },
-            "sections": sections,
         }],
     }
 
