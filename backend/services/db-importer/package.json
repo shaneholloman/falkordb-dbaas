@@ -45,7 +45,7 @@
     "@sinclair/typebox": "^0.34.49",
     "awilix": "^10.0.2",
     "aws-eks-token": "^1.0.5",
-    "bullmq": "5.69.2",
+    "bullmq": "5.76.7",
     "dotenv": "^16.6.1",
     "falkordb": "^6.6.2",
     "fastify": "^5.8.5",

@@ -19,7 +19,7 @@
   "author": "",
   "license": "SSPL",
   "dependencies": {
-    "@autotelic/fastify-opentelemetry": "^0.20.0",
+    "@autotelic/fastify-opentelemetry": "^0.23.0",
     "@aws-sdk/client-eks": "^3.1030.0",
     "@aws-sdk/client-sts": "^3.1030.0",
     "@falkordb/configs": "workspace:*",
@@ -35,7 +35,7 @@
     "@sinclair/typebox": "^0.34.49",
     "awilix": "^10.0.2",
     "aws-eks-token": "^1.0.5",
-    "bullmq": "5.69.2",
+    "bullmq": "5.76.7",
     "dotenv": "^16.6.1",
     "express": "^5.2.1",
     "firebase-admin": "^12.7.0",
