@@ -238,8 +238,10 @@ spec:
                 subPath: local_decoder.xml
                 readOnly: true
               # CDB list of risk-accepted CVEs (used by suppression rule 100404).
+              # Mounted into config-mount so 0-wazuh-init copies it (avoids
+              # RO subPath conflicting with chown on /var/ossec/etc/lists).
               - name: wazuh-accepted-cves
-                mountPath: /var/ossec/etc/lists/accepted-cves
+                mountPath: /wazuh-config-mount/etc/lists/accepted-cves
                 subPath: accepted-cves
                 readOnly: true
               # Inject cluster key after 0-wazuh-init copies the config template.
@@ -322,9 +324,9 @@ spec:
                       - |
                         # Inject cluster key from SealedSecret into ossec.conf
                         OSSEC_CONF=/mnt/master/wazuh/var/ossec/etc/ossec.conf
-                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/CLUSTER_KEY)
+                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/key)
                         if [ -f "$OSSEC_CONF" ]; then
-                          sed -i "s|<key>.*</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
+                          sed -i "s|<key>placeholder-replaced-at-runtime</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
                         fi
                         # Also configure API rate limits
                         API_YAML=/mnt/master/wazuh/var/ossec/api/configuration/api.yaml
@@ -431,9 +433,9 @@ spec:
                     args:
                       - |
                         OSSEC_CONF=/mnt/worker/wazuh/var/ossec/etc/ossec.conf
-                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/CLUSTER_KEY)
+                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/key)
                         if [ -f "$OSSEC_CONF" ]; then
-                          sed -i "s|<key>.*</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
+                          sed -i "s|<key>placeholder-replaced-at-runtime</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
                         fi
                     volumeMounts:
                       - name: wazuh-manager-worker
