@@ -1,6 +1,6 @@
 module "bootstrap" {
   source  = "terraform-google-modules/bootstrap/google"
-  version = "~> 7.0"
+  version = "~> 12.0"
 
   org_id     = var.org_id
   folder_id  = var.parent_folder_id
