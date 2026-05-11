@@ -323,7 +323,12 @@ _SIGNED_URL_RE = re.compile(
 
 
 def _scrub_report(text: str) -> str:
-    """Scrub sensitive content (signed URLs) from a report before logging."""
+    """Scrub sensitive content from a report before logging to stdout.
+
+    Masks emails and signed URLs. This is only used for console output —
+    the GitHub issue and Google Chat get the unmasked report.
+    """
+    text = _EMAIL_RE.sub(lambda m: _mask_email(m.group(0)), text)
     text = _SIGNED_URL_RE.sub("[SIGNED-URL-REDACTED]", text)
     return text
 
@@ -659,10 +664,11 @@ def _send_summary_to_chat(
     is_recurring: bool = False,
     verify_ssl: bool = True,
 ):
-    """Send a compact AI triage summary to Google Chat (no full report).
+    """Send AI triage summary to Google Chat.
 
-    The full triage report is stored in the GitHub issue instead of chat
-    to reduce channel noise.
+    The full triage report is stored in the GitHub issue — the chat card
+    includes the key diagnosis, evidence, and recommended action with a
+    link to the full report.
     """
 
     # Extract key fields from the report
@@ -671,69 +677,111 @@ def _send_summary_to_chat(
     likelihood = html.escape(_extract_report_field(report, "Likelihood") or "N/A")
     classification = html.escape(_extract_report_field(report, "Classification") or "N/A")
 
-    # Extract the Recommended Action section
+    # Extract the Recommended Action section (full section)
     recommended_action = ""
     action_match = re.search(
-        r'###\s*Recommended Action\s*\n+(.+?)(?:\n###|\n```|\Z)',
+        r'###\s*Recommended Action\s*\n+(.+?)(?:\n###|\n##|\Z)',
         report, re.DOTALL | re.IGNORECASE,
     )
     if action_match:
         recommended_action = action_match.group(1).strip()
-        if len(recommended_action) > 600:
-            recommended_action = recommended_action[:597] + "..."
+        if len(recommended_action) > 1500:
+            recommended_action = recommended_action[:1497] + "..."
         recommended_action = html.escape(recommended_action)
 
-    confidence_short = confidence.split("—")[0].split("-")[0].strip() if confidence else "Unknown"
+    # Extract root cause evidence chain
+    evidence_html = ""
+    evidence_match = re.search(
+        r'\*\*Evidence chain:\*\*\s*\n(.+?)(?:\n\n(?:Other|Additional|\*\*Confidence)|\Z)',
+        report, re.DOTALL | re.IGNORECASE,
+    )
+    if evidence_match:
+        raw = evidence_match.group(1).strip()
+        # Take first 3 numbered points
+        lines = []
+        for line in raw.split('\n'):
+            stripped = line.strip()
+            if stripped and stripped[0].isdigit() and '.' in stripped[:3]:
+                lines.append(stripped)
+                if len(lines) >= 3:
+                    break
+        if lines:
+            evidence_html = html.escape('\n'.join(lines))
+            if len(evidence_html) > 500:
+                evidence_html = evidence_html[:497] + "..."
+
+    # Build issue URL
+    issue_url = ""
+    if issue_number and issue_repo:
+        issue_url = f"https://github.com/{issue_repo}/issues/{issue_number}"
 
     if is_recurring:
-        card_title = f"🔁 Recurring OOM: {category}"
+        card_title = "🔁 Recurring OOM Triage"
+        subtitle = f"Same instance OOM again — {customer_email}"
         text_prefix = f"🔁 Recurring OOM Triage — {pod} ({namespace}) {CHAT_MENTIONS}"
     else:
-        card_title = f"🤖 OOM Triage: {category}"
+        card_title = "🤖 OOM Triage Complete"
+        subtitle = f"Customer: {customer_email}"
         text_prefix = f"🤖 OOM Triage Complete — {pod} ({namespace}) {CHAT_MENTIONS}"
 
     sections = [
         {
             "widgets": [
                 {"keyValue": {"topLabel": "Customer", "content": f"{customer_name} ({customer_email})"}},
-                {"keyValue": {"topLabel": "Cluster / Namespace", "content": f"{cluster} / {namespace}"}},
-                {"keyValue": {"topLabel": "Pod / Container", "content": f"{pod} / {container}"}},
-                {"keyValue": {"topLabel": "Diagnosis", "content": f"{category} ({confidence_short})"}},
-                {"keyValue": {"topLabel": "Recurrence Likelihood", "content": likelihood}},
+                {"keyValue": {"topLabel": "Cluster", "content": cluster}},
+                {"keyValue": {"topLabel": "Pod", "content": f"{pod} ({container})"}},
+                {"keyValue": {"topLabel": "Namespace", "content": namespace}},
+                {"keyValue": {"topLabel": "Diagnosis", "content": category}},
+                {"keyValue": {"topLabel": "Confidence", "content": confidence}},
+                {"keyValue": {"topLabel": "Recurrence", "content": likelihood}},
                 {"keyValue": {"topLabel": "Pattern", "content": classification}},
             ]
         },
-        {
-            "widgets": [{
-                "textParagraph": {
-                    "text": f"<b>Recommended Action:</b><br>{recommended_action}" if recommended_action else "<i>See full report in GitHub issue</i>",
-                }
-            }]
-        },
     ]
 
-    # Buttons section — Grafana links + issue link
-    buttons = [
+    # Evidence section
+    if evidence_html:
+        sections.append({
+            "widgets": [{
+                "textParagraph": {
+                    "text": f"<b>Key Evidence:</b><br><code>{evidence_html}</code>",
+                }
+            }]
+        })
+
+    # Recommended action section
+    if recommended_action:
+        sections.append({
+            "widgets": [{
+                "textParagraph": {
+                    "text": f"<b>Recommended Action:</b><br>{recommended_action}",
+                }
+            }]
+        })
+
+    # Buttons section
+    buttons = []
+    if issue_url:
+        buttons.append({
+            "textButton": {
+                "text": f"View Issue #{issue_number}",
+                "onClick": {"openLink": {"url": issue_url}},
+            }
+        })
+    buttons.extend([
         {
             "textButton": {
-                "text": "Memory metrics",
+                "text": "Memory Metrics",
                 "onClick": {"openLink": {"url": grafana_memory_url}},
             }
         },
         {
             "textButton": {
-                "text": "Pod overview",
+                "text": "Pod Overview",
                 "onClick": {"openLink": {"url": grafana_pods_url}},
             }
         },
-    ]
-    if issue_number and issue_repo:
-        buttons.insert(0, {
-            "textButton": {
-                "text": f"Issue #{issue_number}",
-                "onClick": {"openLink": {"url": f"https://github.com/{issue_repo}/issues/{issue_number}"}},
-            }
-        })
+    ])
     sections.append({"widgets": [{"buttons": buttons}]})
 
     payload = {
@@ -741,7 +789,7 @@ def _send_summary_to_chat(
         "cards": [{
             "header": {
                 "title": card_title,
-                "subtitle": f"{masked_email} — {confidence_short}",
+                "subtitle": subtitle,
             },
             "sections": sections,
         }],

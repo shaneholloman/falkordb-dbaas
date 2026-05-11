@@ -207,6 +207,7 @@ jobs:
           CUSTOMER_EMAIL: ${{ needs.analyze-oom.outputs.customer_email }}
           SUBSCRIPTION_ID: ${{ needs.analyze-oom.outputs.subscription_id }}
         run: |
+          echo "::add-mask::$CUSTOMER_EMAIL"
           cd scripts
           # Determine topology from pod name convention
           # node-s-* / node-f-* = standalone (free-tier or single-node)
