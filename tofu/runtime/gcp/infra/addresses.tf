@@ -10,7 +10,7 @@
 
 module "argocd_ip" {
   source  = "terraform-google-modules/address/google"
-  version = "~> 3.2"
+  version = "~> 5.0"
 
   project_id = var.project_id
   region     = var.region
@@ -24,7 +24,7 @@ module "argocd_ip" {
 
 module "grafana_ip" {
   source  = "terraform-google-modules/address/google"
-  version = "~> 3.2"
+  version = "~> 5.0"
 
   project_id = var.project_id
   region     = var.region
@@ -38,7 +38,7 @@ module "grafana_ip" {
 
 module "vmauth_ip" {
   source  = "terraform-google-modules/address/google"
-  version = "~> 3.2"
+  version = "~> 5.0"
 
   project_id = var.project_id
   region     = var.region
@@ -52,7 +52,7 @@ module "vmauth_ip" {
 
 module "customer_observability_ip" {
   source  = "terraform-google-modules/address/google"
-  version = "~> 3.2"
+  version = "~> 5.0"
 
   project_id = var.project_id
   region     = var.region
