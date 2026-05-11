@@ -23,6 +23,13 @@ spec:
         helm:
           valuesObject:
             fullnameOverride: node-exporter
+            resources:
+              requests:
+                cpu: 50m
+                memory: 32Mi
+              limits:
+                cpu: 200m
+                memory: 64Mi
       destination:
         server: "{{.server}}"
         namespace: node-exporter

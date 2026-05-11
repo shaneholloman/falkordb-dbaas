@@ -27,6 +27,13 @@ spec:
               retentionPeriod: 30d
               nodeSelector:
                 node_pool: observability
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 2Gi
               persistentVolume:
                 enabled: true
                 size: 50Gi

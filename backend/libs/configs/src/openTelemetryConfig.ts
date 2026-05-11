@@ -4,7 +4,7 @@ import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 
 import { RandomIdGenerator } from '@opentelemetry/sdk-trace-base';
 import { tracing } from '@opentelemetry/sdk-node';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { ATTR_DEPLOYMENT_ENVIRONMENT_NAME } from '@opentelemetry/semantic-conventions/incubating';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -36,7 +36,7 @@ export const init = (serviceName: string, environment: string) => {
 
   const provider = new NodeSDK({
     idGenerator: new CustomIDGenerator(),
-    resource: new Resource({
+    resource: resourceFromAttributes({
       [ATTR_SERVICE_NAME]: serviceName,
       [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: environment,
     }),

@@ -13,6 +13,8 @@ spec:
       labels:
         app: auth-proxy
     spec:
+      nodeSelector:
+        node_pool: backend
       containers:
         - name: auth-proxy-web
           image: us-central1-docker.pkg.dev/PROJECT/frontend/auth-proxy-web:latest
