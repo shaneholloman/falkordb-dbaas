@@ -17,12 +17,15 @@ resource "azuread_service_principal" "prowler" {
   owners    = var.aad_application_owner_object_ids
 }
 
+resource "time_rotating" "prowler_secret" {
+  rotation_hours = var.client_secret_validity_hours
+}
+
 resource "azuread_service_principal_password" "prowler" {
   service_principal_id = azuread_service_principal.prowler.id
-  end_date             = timeadd(timestamp(), "${var.client_secret_validity_hours}h")
 
-  lifecycle {
-    ignore_changes = [end_date]
+  rotate_when_changed = {
+    rotation = time_rotating.prowler_secret.id
   }
 }
 

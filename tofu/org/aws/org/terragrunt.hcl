@@ -1,8 +1,6 @@
-# Terragrunt shim for org/gcp/workloads
-# (was tofu/gcp/org/workloads)
+# Terragrunt shim for org/aws/org
 #
-# Manages GCP workloads folder structure: control plane, application plane,
-# and optional pipelines-development projects.
+# Manages AWS Organization structure: Workloads OU and app-plane account.
 # Apply manually; it is NOT part of the CI runtime pipeline.
 
 include "root" {

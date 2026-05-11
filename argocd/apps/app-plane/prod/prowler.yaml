@@ -13,7 +13,7 @@ spec:
           matchLabels:
             role: app-plane
         values:
-          cloud: '{{ index .metadata.labels "cloud" }}'
+          cloud: '{{ index .metadata.labels "cloud_provider" }}'
   template:
     metadata:
       name: '{{ regexFind "h?c-[A-Za-z0-9]+" .name }}-prowler'

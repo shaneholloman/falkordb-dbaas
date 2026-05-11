@@ -21,8 +21,4 @@ resource "aws_organizations_account" "account" {
   tags = {
     "env" = var.environment
   }
-  
-  tags_all = {
-    "env" = var.environment
-  }
 }
