@@ -1,0 +1,240 @@
+# Falco configuration — rules, outputs, and engine settings.
+# Syslog output forwards all alerts to Wazuh Manager.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-config
+  namespace: security
+  labels:
+    app: falco
+data:
+  falco.yaml: |
+    # Engine: modern_ebpf (no kernel module, no privileged container)
+    engine:
+      kind: modern_ebpf
+      modern_ebpf:
+        buf_size_preset: 4
+
+    # Rules files
+    rules_files:
+      - /etc/falco/falco_rules.yaml
+      - /etc/falco/falco_rules.local.yaml
+      - /etc/falco/rules.d
+
+    # Minimum priority for alerts (default is debug; we raise to warning)
+    priority: warning
+
+    # Output settings — JSON for structured parsing
+    json_output: true
+    json_include_output_property: true
+    json_include_tags_property: true
+
+    # Syslog output — forwards to Wazuh Manager
+    syslog_output:
+      enabled: true
+
+    # Stdout output — for kubectl logs
+    stdout_output:
+      enabled: true
+
+    # File output — disabled (using syslog + stdout)
+    file_output:
+      enabled: false
+
+    # HTTP output — disabled
+    http_output:
+      enabled: false
+
+    # gRPC output — disabled
+    grpc:
+      enabled: false
+
+    # Buffered outputs for performance
+    buffered_outputs: true
+    outputs_queue:
+      capacity: 256
+
+    # Metadata enrichment from K8s API
+    metadata_download:
+      max_mb: 100
+      chunk_wait_us: 1000
+      watch_freq_sec: 1
+
+    # Rate limiting: max alerts per second
+    outputs:
+      rate: 100
+      max_burst: 200
+
+    # Log level
+    log_level: info
+    log_stderr: true
+
+    # Syscall event drops — log but don't exit
+    syscall_event_drops:
+      threshold: 0.1
+      actions:
+        - log
+
+  falco_rules.local.yaml: |
+    # Local rule overrides and custom rules for SOC 2 compliance.
+    #
+    # These supplement the default Falco rules with SOC 2-specific
+    # detection patterns for container security.
+
+    # ── Container Escape Detection ────────────────────────────
+    - rule: Container Escape via nsenter
+      desc: Detects nsenter usage which may indicate container escape attempts
+      condition: >
+        spawned_process and container and proc.name = nsenter
+      output: >
+        Container escape attempt via nsenter
+        (user=%user.name container=%container.name image=%container.image.repository
+         command=%proc.cmdline ns=%proc.ns pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [container, escape, soc2, mitre_privilege_escalation]
+
+    - rule: Container Escape via mount
+      desc: Detects mount syscall in containers which may indicate escape attempts
+      condition: >
+        spawned_process and container
+        and proc.name in (mount, umount, umount2)
+        and not proc.pname in (dockerd, containerd, kubelet)
+      output: >
+        Suspicious mount operation in container
+        (user=%user.name container=%container.name image=%container.image.repository
+         command=%proc.cmdline pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [container, escape, soc2]
+
+    # ── Crypto Mining Detection ───────────────────────────────
+    - rule: Detect Crypto Miners
+      desc: Detects known cryptocurrency mining processes
+      condition: >
+        spawned_process and container
+        and (proc.name in (xmrig, minerd, minergate, cpuminer, ethminer)
+             or proc.name contains "stratum+tcp")
+      output: >
+        Cryptocurrency miner detected in container
+        (user=%user.name container=%container.name image=%container.image.repository
+         process=%proc.name command=%proc.cmdline pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [container, cryptomining, soc2]
+
+    # ── Sensitive File Access ─────────────────────────────────
+    - rule: Read Sensitive K8s Files
+      desc: Detects reads of K8s service account tokens
+      condition: >
+        open_read and container
+        and (fd.name startswith /var/run/secrets/kubernetes.io
+             or fd.name startswith /run/secrets/kubernetes.io)
+        and not proc.name in (kubelet, kube-proxy, coredns, falco)
+        and not k8s.ns.name = kube-system
+      output: >
+        Sensitive K8s file read in container
+        (user=%user.name file=%fd.name container=%container.name
+         image=%container.image.repository pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [container, filesystem, soc2, mitre_credential_access]
+
+    # ── Reverse Shell Detection ───────────────────────────────
+    - rule: Reverse Shell in Container
+      desc: Detects reverse shell attempts inside containers
+      condition: >
+        spawned_process and container
+        and ((proc.name in (bash, sh, zsh, dash, csh, ksh)
+              and proc.cmdline contains "/dev/tcp")
+             or (proc.name in (nc, ncat, nmap, socat)
+                 and proc.args contains "-e"))
+      output: >
+        Reverse shell detected in container
+        (user=%user.name container=%container.name image=%container.image.repository
+         command=%proc.cmdline pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [container, network, soc2, mitre_execution]
+
+    # ── Privilege Escalation ──────────────────────────────────
+    - rule: Setuid/Setgid Binary Execution in Container
+      desc: Detects execution of setuid/setgid binaries in containers
+      condition: >
+        spawned_process and container
+        and proc.name in (sudo, su, chroot, newgrp, sg)
+        and not k8s.ns.name = kube-system
+      output: >
+        Privilege escalation binary executed in container
+        (user=%user.name container=%container.name image=%container.image.repository
+         process=%proc.name command=%proc.cmdline pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [container, privilege, soc2, mitre_privilege_escalation]
+
+    # ── Trusted-workload exclusions ───────────────────────────
+    # The default Falco ruleset contains `not user_known_*` clauses on most
+    # noisy rules so operators can override without copy-pasting full rules.
+    # We extend these macros to whitelist known-benign workloads that would
+    # otherwise generate continuous false positives. Additions here only
+    # subtract events; they never broaden detection.
+
+    # Trusted operational tooling — runs shells / nsenter / privileged ops as
+    # part of normal operation. Limited to specific namespaces + pod prefixes.
+    - macro: trusted_operational_workload
+      condition: >
+        (k8s.ns.name = "argocd" and k8s.pod.name startswith "argocd-image-updater")
+        or (k8s.ns.name = "kube-system" and k8s.pod.name startswith "kured")
+        or (k8s.ns.name = "kube-system" and k8s.pod.name startswith "node-local-dns")
+        or (k8s.ns.name = "kube-system" and k8s.pod.name startswith "csi-")
+        or (k8s.ns.name = "logging" and k8s.pod.name startswith "fluent-bit")
+        or (k8s.ns.name = "logging" and k8s.pod.name startswith "fluentbit")
+        or (k8s.ns.name = "security" and k8s.pod.name startswith "falco")
+        or (k8s.ns.name = "security" and k8s.pod.name startswith "wazuh")
+        or (k8s.ns.name = "security" and k8s.pod.name startswith "prowler")
+        or (k8s.ns.name = "security" and k8s.pod.name startswith "grype")
+        or (k8s.ns.name = "security" and k8s.pod.name startswith "trufflehog")
+        or (k8s.ns.name = "security" and k8s.pod.name startswith "kubescape")
+        or (k8s.ns.name = "security" and k8s.pod.name startswith "kube-bench")
+        or (k8s.ns.name = "monitoring" and k8s.pod.name startswith "node-exporter")
+        or (k8s.ns.name = "monitoring" and k8s.pod.name startswith "victoria")
+        or (k8s.ns.name = "monitoring" and k8s.pod.name startswith "vmagent")
+
+    # Override Falco's default user_known_* macros (default: never_true) to
+    # match trusted workloads. This silences the default rules — our custom
+    # SOC2 rules above don't reference these macros and stay strict.
+    - macro: user_known_run_shell_in_container
+      condition: trusted_operational_workload
+
+    - macro: user_known_change_thread_namespace_activities
+      condition: trusted_operational_workload
+
+    - macro: user_known_write_below_etc_activities
+      condition: trusted_operational_workload
+
+    - macro: user_known_write_below_root_activities
+      condition: trusted_operational_workload
+
+    - macro: user_known_read_sensitive_files_activities
+      condition: trusted_operational_workload
+
+    - macro: user_known_non_sudo_setuid_conditions
+      condition: trusted_operational_workload
+
+    - macro: user_known_chmod
+      condition: trusted_operational_workload
+
+    - macro: user_known_drop_and_execute
+      condition: trusted_operational_workload
+
+    - macro: user_known_clear_log_activities
+      condition: trusted_operational_workload
+
+    - macro: user_known_modify_bin_dir_activities
+      condition: trusted_operational_workload
+
+    - macro: user_known_package_manager_in_container
+      condition: trusted_operational_workload
+
+    - macro: user_known_contact_k8s_api_activities
+      condition: >
+        trusted_operational_workload
+        or (k8s.ns.name = "argocd")
+        or (k8s.ns.name = "flux-system")
+
+    - macro: user_known_network_tool_activities
+      condition: trusted_operational_workload
