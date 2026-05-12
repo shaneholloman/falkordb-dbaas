@@ -27,7 +27,7 @@ This stack is a **prerequisite** for `runtime/gcp/k8s`.
 | `observability-resources`    | e2-standard-4  | 20        | VictoriaMetrics, Grafana, Alertmanager|
 | `backend`                    | e2-standard-2  | 20        | Backend API pods                      |
 | `security`                   | e2-standard-4  | 10        | Wazuh Manager (sysctls)               |
-| `security-infra`             | e2-small       | 3         | Kyverno, Sealed Secrets (always-on)   |
+| `security-infra`             | e2-medium      | 3         | Kyverno, Sealed Secrets (always-on)   |
 | `public-pool`                | e2-standard-2  | 220       | Internet-facing LBs (`private=false`) |
 
 All pools start at 0 nodes and autoscale (except `security-infra` which has min=1). The public-pool has

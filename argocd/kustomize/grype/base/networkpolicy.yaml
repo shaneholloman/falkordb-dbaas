@@ -1,6 +1,9 @@
 # NetworkPolicy — Grype CVE scanner CronJob pods
-# Allows egress to: DNS, K8s API, GCS, container registries, Wazuh syslog,
-# PyPI, GitHub (grype/syft binary download). Denies all ingress.
+# Denies all ingress. Egress unrestricted (batch job needs metadata server,
+# container registries, GCS, DNS, PyPI, GitHub, Wazuh syslog).
+# NOTE: Egress cannot be restricted while GKE uses Calico, because Calico
+# evaluates rules post-DNAT which breaks metadata server access (169.254.169.254
+# is DNAT'd to node-local pod on port 988).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -12,20 +15,4 @@ spec:
       app: grype
   policyTypes:
     - Ingress
-    - Egress
   ingress: []
-  egress:
-    # DNS resolution
-    - ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-    # HTTPS — K8s API, GCS, container registries, PyPI, GitHub releases
-    - ports:
-        - protocol: TCP
-          port: 443
-    # Wazuh syslog forwarding
-    - ports:
-        - protocol: TCP
-          port: 514

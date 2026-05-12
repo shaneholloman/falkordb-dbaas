@@ -21,7 +21,7 @@ spec:
       template:
         spec:
           nodeSelector:
-            node_pool: observability-resources
+            node_pool: observability
           securityContext: # Pod-level security context (important for initContainer)
             runAsUser: 0 # Run initContainer as root
             runAsGroup: 0

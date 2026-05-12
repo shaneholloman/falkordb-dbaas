@@ -1,6 +1,7 @@
 # NetworkPolicy — kube-bench CIS benchmark CronJob pods
-# Allows egress to: DNS, K8s API, GCS, Wazuh syslog, PyPI,
-# GitHub (kube-bench binary download). Denies all ingress.
+# Denies all ingress. Egress unrestricted (batch job needs metadata server,
+# GCS, DNS, PyPI, GitHub, K8s API, Wazuh syslog).
+# NOTE: Egress cannot be restricted while GKE uses Calico (post-DNAT eval).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -12,20 +13,4 @@ spec:
       app: kube-bench
   policyTypes:
     - Ingress
-    - Egress
   ingress: []
-  egress:
-    # DNS resolution
-    - ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-    # HTTPS — K8s API, GCS, PyPI, GitHub releases
-    - ports:
-        - protocol: TCP
-          port: 443
-    # Wazuh syslog forwarding
-    - ports:
-        - protocol: TCP
-          port: 514

@@ -70,9 +70,24 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 256Mi
+        # Required for modern_ebpf tracepoint attachment
+        - name: sys-kernel
+          hostPath:
+            path: /sys/kernel
+        # Tracefs for modern_ebpf on COS kernels
+        - name: sys-kernel-tracing
+          hostPath:
+            path: /sys/kernel/tracing
+        - name: sys-kernel-debug-tracing
+          hostPath:
+            path: /sys/kernel/debug/tracing
+        # Containerd socket for CRI metadata
+        - name: containerd-sock
+          hostPath:
+            path: /run/containerd/containerd.sock
       containers:
         - name: falco
-          image: falcosecurity/falco-no-driver:0.40.0
+          image: falcosecurity/falco:0.43.1
           resources:
             requests:
               cpu: "100m"
@@ -81,25 +96,14 @@ spec:
               cpu: "500m"
               memory: "512Mi"
           securityContext:
-            # modern_ebpf requires CAP_BPF + CAP_SYS_PTRACE + CAP_SYS_RESOURCE
-            privileged: false
-            capabilities:
-              add:
-                - BPF
-                - SYS_PTRACE
-                - SYS_RESOURCE
-                - PERFMON
-              drop:
-                - ALL
+            # modern_ebpf on GKE COS requires privileged mode for
+            # eBPF tracepoint attachment and /sys/kernel access
+            privileged: true
           env:
             - name: HOST_ROOT
               value: /host
-            - name: FALCO_BPF_PROBE
-              value: ""
           args:
             - /usr/bin/falco
-            - --cri
-            - /run/containerd/containerd.sock,/run/crio/crio.sock
             - -c
             - /etc/falco/falco.yaml
           volumeMounts:
@@ -114,6 +118,18 @@ spec:
               readOnly: true
             - name: dev-shm
               mountPath: /dev/shm
+            - name: sys-kernel
+              mountPath: /sys/kernel
+              readOnly: true
+            - name: sys-kernel-tracing
+              mountPath: /sys/kernel/tracing
+              readOnly: true
+            - name: sys-kernel-debug-tracing
+              mountPath: /sys/kernel/debug/tracing
+              readOnly: true
+            - name: containerd-sock
+              mountPath: /run/containerd/containerd.sock
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /healthz

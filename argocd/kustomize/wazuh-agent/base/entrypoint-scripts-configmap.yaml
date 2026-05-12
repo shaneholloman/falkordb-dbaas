@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-agent-entrypoint-scripts
+  namespace: security
+data:
+  00-restore-keys.sh: |
+    #!/bin/bash
+    # Restore saved agent keys from persistent storage so the agent
+    # reconnects with its existing identity instead of re-enrolling.
+    PERSIST="/var/ossec/data/client.keys"
+    TARGET="/var/ossec/etc/client.keys"
+    if [ -f "$PERSIST" ] && [ -s "$PERSIST" ]; then
+      cp "$PERSIST" "$TARGET"
+      chown wazuh:wazuh "$TARGET"
+      chmod 640 "$TARGET"
+      echo "[entrypoint] Restored agent keys from persistent storage"
+    else
+      echo "[entrypoint] No saved keys found — agent will enroll"
+    fi

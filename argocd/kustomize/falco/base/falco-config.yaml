@@ -45,29 +45,36 @@ data:
     http_output:
       enabled: false
 
-    # gRPC output — disabled
-    grpc:
-      enabled: false
-
     # Buffered outputs for performance
     buffered_outputs: true
     outputs_queue:
       capacity: 256
 
-    # Metadata enrichment from K8s API
-    metadata_download:
-      max_mb: 100
-      chunk_wait_us: 1000
-      watch_freq_sec: 1
+    # Container plugin (required since Falco 0.42+)
+    plugins:
+      - name: container
+        library_path: libcontainer.so
+        init_config: ""
 
-    # Rate limiting: max alerts per second
-    outputs:
-      rate: 100
-      max_burst: 200
+    load_plugins:
+      - container
+
+    # Container engines — CRI socket paths for K8s metadata
+    container_engines:
+      cri:
+        sockets:
+          - /run/containerd/containerd.sock
+          - /run/crio/crio.sock
 
     # Log level
     log_level: info
     log_stderr: true
+
+    # Health endpoint for readiness probes
+    webserver:
+      enabled: true
+      listen_port: 8765
+      k8s_healthz_endpoint: /healthz
 
     # Syscall event drops — log but don't exit
     syscall_event_drops:
@@ -89,7 +96,7 @@ data:
       output: >
         Container escape attempt via nsenter
         (user=%user.name container=%container.name image=%container.image.repository
-         command=%proc.cmdline ns=%proc.ns pod=%k8s.pod.name)
+         command=%proc.cmdline pod=%k8s.pod.name)
       priority: CRITICAL
       tags: [container, escape, soc2, mitre_privilege_escalation]
 

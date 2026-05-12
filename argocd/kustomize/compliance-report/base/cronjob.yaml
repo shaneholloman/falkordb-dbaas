@@ -38,7 +38,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: report
-              image: google/cloud-sdk:slim@sha256:b95d4a94d0f56298597e89926a7cccce2a2c7070b22b28a964247e36cced909c
+              image: google/cloud-sdk:slim@sha256:42d0af3434d40a895da768a87001b87938c3ff2a0f16c81a00e78b857b75b611
               command:
                 - /bin/bash
                 - -ec

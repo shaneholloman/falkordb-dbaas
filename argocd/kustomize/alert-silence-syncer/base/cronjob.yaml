@@ -63,4 +63,4 @@ spec:
           restartPolicy: Never
           serviceAccountName: alert-silence-syncer-sa
           nodeSelector:
-            node_pool: observability-resources
+            node_pool: observability

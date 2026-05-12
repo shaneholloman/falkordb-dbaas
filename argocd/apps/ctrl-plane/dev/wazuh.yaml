@@ -47,70 +47,17 @@ spec:
           authd:
             enabled: true
             existingSecret: "wazuh-manager-authd"
-          # Custom SOC 2 rules (injected into chart's wazuh-manager-config ConfigMap)
+          # Custom SOC 2 rules (full rules in wazuh-custom-rules ConfigMap,
+          # mounted to ruleset/rules/ to avoid conflicting with chart's config volume)
           localRules: |
-            <!-- SOC 2 Evidence Engine — Custom Rules -->
-            <group name="prowler_compliance,soc2">
-              <rule id="100100" level="3">
-                <decoded_as>json</decoded_as>
-                <field name="Provider">\w+</field>
-                <regex>"Status":\s*"\w+"</regex>
-                <description>Prowler compliance check result received.</description>
-                <group>prowler_compliance</group>
-              </rule>
-              <rule id="100101" level="10">
-                <if_sid>100100</if_sid>
-                <regex>"Status":\s*"FAIL"</regex>
-                <description>Prowler SOC 2 compliance check FAILED: $(CheckTitle) — $(StatusExtended)</description>
-                <group>prowler_compliance,soc2_fail</group>
-                <options>alert_by_email</options>
-              </rule>
-              <rule id="100102" level="13">
-                <if_sid>100101</if_sid>
-                <field name="Severity">critical</field>
-                <description>CRITICAL Prowler SOC 2 failure: $(CheckTitle) — $(StatusExtended)</description>
-                <group>prowler_compliance,soc2_fail,soc2_critical</group>
-              </rule>
-              <rule id="100103" level="12">
-                <if_sid>100101</if_sid>
-                <field name="Severity">high</field>
-                <description>HIGH Prowler SOC 2 failure: $(CheckTitle) — $(StatusExtended)</description>
-                <group>prowler_compliance,soc2_fail</group>
+            <group name="local,">
+              <rule id="100001" level="0">
+                <description>Placeholder local rule</description>
               </rule>
             </group>
-            <group name="fim_critical,soc2">
-              <rule id="100200" level="12">
-                <if_group>syscheck</if_group>
-                <match>/etc/passwd|/etc/shadow|/etc/group</match>
-                <description>SOC 2 CC6.1: Critical authentication file modified — $(file)</description>
-                <group>fim_critical,soc2_cc6</group>
-              </rule>
-              <rule id="100201" level="11">
-                <if_group>syscheck</if_group>
-                <match>/etc/ssh/sshd_config</match>
-                <description>SOC 2 CC6.1: SSH daemon configuration modified.</description>
-                <group>fim_critical,soc2_cc6</group>
-              </rule>
-              <rule id="100202" level="12">
-                <if_group>syscheck</if_group>
-                <match>/etc/kubernetes/pki</match>
-                <description>SOC 2 CC6.1: Kubernetes PKI certificate modified — $(file)</description>
-                <group>fim_critical,soc2_cc6</group>
-              </rule>
-            </group>
-            <group name="soc2_auth">
-              <rule id="100300" level="12" frequency="8" timeframe="120">
-                <if_matched_sid>5710</if_matched_sid>
-                <description>SOC 2 CC6.2: Possible SSH brute-force attack (8+ failures in 2 min).</description>
-                <group>soc2_auth,authentication_failures</group>
-              </rule>
-              <rule id="100301" level="11">
-                <if_sid>5402</if_sid>
-                <time>02:00-22:00</time>
-                <description>SOC 2 CC6.1: Privilege escalation outside maintenance window.</description>
-                <group>soc2_auth,privilege_escalation</group>
-              </rule>
-            </group>
+          # Custom decoders (full decoders in wazuh-custom-decoders ConfigMap)
+          localDecoders: |
+            <!-- local decoders placeholder -->
           # Pre-create agent groups so the register_agent.py script can assign
           # agents immediately without a 404 "group does not exist" error.
           agentGroupConf:
@@ -163,6 +110,10 @@ spec:
               type: ClusterIP
               annotations: {}
               ports:
+                - name: agents
+                  protocol: TCP
+                  port: 1514
+                  targetPort: 1514
                 - name: registration
                   protocol: TCP
                   port: 1515
@@ -184,6 +135,12 @@ spec:
               - name: google-chat-webhook
                 secret:
                   secretName: wazuh-google-chat-webhook
+              # Override the s6 filebeat finish script — the default kills the
+              # container when filebeat exits (even code 0 from close_inactive).
+              - name: filebeat-finish
+                configMap:
+                  name: wazuh-filebeat-finish
+                  defaultMode: 0755
               # Phase-2 custom rules/decoders + risk-accepted CVE list.
               # These ConfigMaps live in argocd/kustomize/wazuh-rules.
               - name: wazuh-custom-rules
@@ -195,6 +152,15 @@ spec:
               - name: wazuh-accepted-cves
                 configMap:
                   name: wazuh-accepted-cves
+              # cont-init.d script to inject cluster key after 0-wazuh-init
+              - name: cluster-key-injector
+                configMap:
+                  name: wazuh-cluster-key-injector
+                  defaultMode: 0755
+              # Cluster key secret for injection into ossec.conf
+              - name: cluster-key
+                secret:
+                  secretName: wazuh-cluster-key
             additionalVolumeMounts:
               - name: google-chat-integration
                 mountPath: /var/ossec/integrations/custom-google-chat
@@ -207,19 +173,34 @@ spec:
               - name: google-chat-webhook
                 mountPath: /var/ossec/etc/secrets/google-chat
                 readOnly: true
-              # Custom Phase-2 rules — extends localRules from helm values.
+              # Override filebeat finish script to prevent container crash
+              - name: filebeat-finish
+                mountPath: /etc/services.d/filebeat/finish
+                subPath: finish
+                readOnly: true
+              # Custom Phase-2 rules — mount directly into ruleset directory
+              # where Wazuh 4.14 loads them from <decoder_dir>ruleset/decoders</decoder_dir>
               - name: wazuh-custom-rules
-                mountPath: /var/ossec/etc/rules/local_rules.xml
+                mountPath: /var/ossec/ruleset/rules/9999-custom_rules.xml
                 subPath: local_rules.xml
                 readOnly: true
               - name: wazuh-custom-decoders
-                mountPath: /var/ossec/etc/decoders/local_decoder.xml
+                mountPath: /var/ossec/ruleset/decoders/9999-custom_decoders.xml
                 subPath: local_decoder.xml
                 readOnly: true
-              # CDB list of risk-accepted CVEs (used by suppression rule 100404).
+              # CDB list of risk-accepted CVEs (used by suppression rule 100404)
               - name: wazuh-accepted-cves
                 mountPath: /var/ossec/etc/lists/accepted-cves
                 subPath: accepted-cves
+                readOnly: true
+              # Inject cluster key after 0-wazuh-init copies the config template.
+              # Runs as cont-init.d/1-inject-key (between 0-wazuh-init and 2-manager).
+              - name: cluster-key-injector
+                mountPath: /etc/cont-init.d/1-inject-key
+                subPath: inject-key.sh
+                readOnly: true
+              - name: cluster-key
+                mountPath: /run/secrets/cluster-key
                 readOnly: true
             # Appended to the template-generated ossec.conf
             extraConf: |
@@ -292,9 +273,10 @@ spec:
                       - |
                         # Inject cluster key from SealedSecret into ossec.conf
                         OSSEC_CONF=/mnt/master/wazuh/var/ossec/etc/ossec.conf
-                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/CLUSTER_KEY)
+                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/key)
                         if [ -f "$OSSEC_CONF" ]; then
-                          sed -i "s|<key>.*</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
+                          # Replace placeholder OR any existing 32-char hex key
+                          sed -i "s|<key>[a-zA-Z0-9_-]\{1,\}</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
                         fi
                         # Also configure API rate limits
                         API_YAML=/mnt/master/wazuh/var/ossec/api/configuration/api.yaml
@@ -324,58 +306,6 @@ spec:
                       limits:
                         cpu: 10m
                         memory: 16Mi
-                # stunnel sidecar — TLS termination for syslog (port 1516 → 514)
-                containers:
-                  - name: syslog-tls
-                    image: alpine/socat:1.8.0.1@sha256:50b7de7ff6c3685d9f85bc83eb80d691b786c0ca79184b60b39ac8d883c3dcf1
-                    command: ["sh", "-c"]
-                    args:
-                      - |
-                        set -e
-                        CHECKSUM="d462cf2e317e97e30c4f5e14e13e0e79503030860db82fa40b880e1dc6a03b67"
-                        apk add --no-cache stunnel
-                        echo "${CHECKSUM}  $(which stunnel)" | sha256sum -c -
-                        exec stunnel /etc/stunnel/stunnel.conf
-                    ports:
-                      - containerPort: 1516
-                        protocol: TCP
-                    volumeMounts:
-                      - name: stunnel-config
-                        mountPath: /etc/stunnel/stunnel.conf
-                        subPath: stunnel.conf
-                        readOnly: true
-                      - name: syslog-tls-cert
-                        mountPath: /etc/stunnel/tls
-                        readOnly: true
-                      - name: stunnel-tmp
-                        mountPath: /tmp
-                    resources:
-                      requests:
-                        cpu: 10m
-                        memory: 32Mi
-                      limits:
-                        cpu: 50m
-                        memory: 64Mi
-                    securityContext:
-                      runAsNonRoot: true
-                      runAsUser: 65534
-                      allowPrivilegeEscalation: false
-                      readOnlyRootFilesystem: true
-                      capabilities:
-                        drop:
-                          - ALL
-                volumes:
-                  - name: stunnel-config
-                    configMap:
-                      name: syslog-tls-stunnel
-                  - name: syslog-tls-cert
-                    secret:
-                      secretName: wazuh-syslog-tls
-                  - name: stunnel-tmp
-                    emptyDir: {}
-                  - name: cluster-key
-                    secret:
-                      secretName: wazuh-cluster-key
           worker:
             enabled: true
             replicas: 1
@@ -388,6 +318,56 @@ spec:
                 memory: "4Gi"
             storageSize: 50Gi
             storageClass: "standard-rwo"
+            additionalVolumes:
+              - name: cluster-key-injector
+                configMap:
+                  name: wazuh-cluster-key-injector
+                  defaultMode: 0755
+              - name: cluster-key
+                secret:
+                  secretName: wazuh-cluster-key
+              - name: filebeat-finish
+                configMap:
+                  name: wazuh-filebeat-finish
+                  defaultMode: 0755
+            additionalVolumeMounts:
+              - name: cluster-key-injector
+                mountPath: /etc/cont-init.d/1-inject-key
+                subPath: inject-key.sh
+                readOnly: true
+              - name: cluster-key
+                mountPath: /run/secrets/cluster-key
+                readOnly: true
+              - name: filebeat-finish
+                mountPath: /etc/services.d/filebeat/finish
+                subPath: finish
+                readOnly: true
+            extraSpec:
+              pod:
+                initContainers:
+                  - name: init-cluster-key
+                    image: alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339
+                    command: ["sh", "-c"]
+                    args:
+                      - |
+                        OSSEC_CONF=/mnt/worker/wazuh/var/ossec/etc/ossec.conf
+                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/key)
+                        if [ -f "$OSSEC_CONF" ]; then
+                          sed -i "s|<key>placeholder-replaced-at-runtime</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
+                        fi
+                    volumeMounts:
+                      - name: wazuh-manager-worker
+                        mountPath: /mnt/worker
+                      - name: cluster-key
+                        mountPath: /run/secrets/cluster-key
+                        readOnly: true
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 16Mi
+                      limits:
+                        cpu: 10m
+                        memory: 16Mi
 
         indexer:
           enabled: true
@@ -441,7 +421,7 @@ spec:
               cert-manager.io/cluster-issuer: letsencrypt-prod
             host: "wazuh.security.dev.internal.falkordb.cloud"
             tls:
-              - secretName: dashboard-tls
+              - secretName: dashboard-ingress-tls
                 hosts:
                   - wazuh.security.dev.internal.falkordb.cloud
           # SOC 2 dashboard import on startup
@@ -470,24 +450,32 @@ spec:
                       - /bin/sh
                       - -c
                       - |
-                        WAZUH_YML=/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
-                        # Wait for wazuh.yml to be created by the plugin (up to 120s)
-                        for i in $(seq 1 60); do
-                          [ -f "$WAZUH_YML" ] && break
-                          sleep 2
-                        done
-                        if [ -f "$WAZUH_YML" ]; then
-                          API_USER=$(cat /run/secrets/api-cred/API_USERNAME)
-                          API_PASS=$(cat /run/secrets/api-cred/API_PASSWORD)
-                          # Escape sed-special characters in credentials
-                          ESC_USER=$(printf '%s' "$API_USER" | sed 's/[&|\\]/\\&/g')
-                          ESC_PASS=$(printf '%s' "$API_PASS" | sed 's/[&|\\]/\\&/g')
-                          sed -i "/hosts:/,/password:/{s|username:.*|username: $ESC_USER|;s|password:.*|password: $ESC_PASS|}" "$WAZUH_YML"
-                        fi
-                        sleep 30 && curl -sS -k --fail -XPOST \
-                          "https://localhost:5601/api/saved_objects/_import?overwrite=true" \
-                          -H "osd-xsrf: true" \
-                          --form file=@/usr/share/wazuh-dashboard/config/security-dashboards.ndjson
+                        # Background the entire hook so kubelet does not kill the
+                        # container while waiting for the dashboard to become ready.
+                        (
+                          WAZUH_YML=/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
+                          # Wait for wazuh.yml to be created by the plugin (up to 120s)
+                          for i in $(seq 1 60); do
+                            [ -f "$WAZUH_YML" ] && break
+                            sleep 2
+                          done
+                          if [ -f "$WAZUH_YML" ]; then
+                            API_USER=$(cat /run/secrets/api-cred/API_USERNAME)
+                            API_PASS=$(cat /run/secrets/api-cred/API_PASSWORD)
+                            ESC_USER=$(printf '%s' "$API_USER" | sed 's/[&|\\]/\\&/g')
+                            ESC_PASS=$(printf '%s' "$API_PASS" | sed 's/[&|\\]/\\&/g')
+                            sed -i "/hosts:/,/password:/{s|username:.*|username: $ESC_USER|;s|password:.*|password: $ESC_PASS|}" "$WAZUH_YML"
+                          fi
+                          # Wait for dashboard to be ready, then import saved objects
+                          for i in $(seq 1 30); do
+                            curl -sS -k -o /dev/null -w '' "http://localhost:5601/api/status" 2>/dev/null && break
+                            sleep 5
+                          done
+                          curl -sS -k --fail -XPOST \
+                            "https://localhost:5601/api/saved_objects/_import?overwrite=true" \
+                            -H "osd-xsrf: true" \
+                            --form file=@/usr/share/wazuh-dashboard/config/security-dashboards.ndjson
+                        ) &
 
   destination:
     server: https://kubernetes.default.svc
@@ -502,6 +490,6 @@ spec:
   ignoreDifferences:
     - group: ""
       kind: Secret
-      name: wazuh-dashboard-tls
+      name: dashboard-ingress-tls
       jsonPointers:
         - /data
