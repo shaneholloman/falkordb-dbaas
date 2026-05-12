@@ -234,6 +234,7 @@ spec:
                           sev = finding.get('severity', '')
                           severity_str = sev if isinstance(sev, str) else safe_get(sev, 'name', default='')
                           mapped = {
+                              'Scanner': 'prowler',
                               'Status': 'FAIL',
                               'Provider': safe_get(finding, 'cloud', 'provider'),
                               'CheckTitle': safe_get(finding, 'finding_info', 'title') or safe_get(finding, 'metadata', 'product', 'name'),
@@ -243,7 +244,7 @@ spec:
                               'ServiceName': safe_get(resources_0, 'group', 'name') or resources_0.get('type', ''),
                               'ResourceId': resources_0.get('uid', ''),
                               'Region': resources_0.get('region', ''),
-                              'ClusterName': cluster,
+                              'Cluster': cluster,
                           }
                           ts = time.strftime('%b %d %H:%M:%S')
                           msg = '<134>{} {} prowler: {}\n'.format(

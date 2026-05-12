@@ -1,0 +1,31 @@
+# Schedule scan pods on the security-infra node pool in AWS app-plane clusters.
+# Resources removed — t3.small nodes can't accommodate base requests.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trufflehog-secret-scan
+  namespace: security
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          nodeSelector:
+            node_pool: security-infra
+          tolerations:
+            - key: cloud.google.com/gke-spot
+              operator: Equal
+              value: "true"
+              effect: NoSchedule
+            - key: eks.amazonaws.com/capacityType
+              operator: Equal
+              value: SPOT
+              effect: NoSchedule
+            - key: kubernetes.azure.com/scalesetpriority
+              operator: Equal
+              value: spot
+              effect: NoSchedule
+            - key: CriticalAddonsOnly
+              operator: Exists
+              effect: NoSchedule
+
