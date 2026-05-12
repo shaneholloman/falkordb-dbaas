@@ -62,7 +62,7 @@ spec:
                 optional: true
           containers:
             - name: kubescape
-              image: quay.io/kubescape/kubescape:v3.0.18@sha256:8cee5d84fe0ab887e0c624b2a830dd144542f07773eb5180998ccc6d8ac83831
+              image: python:3.12-slim@sha256:bf73779de6dbd030f3d189eeeb246286965832761ace318c1518300f76c0840d
               resources:
                 requests:
                   cpu: "250m"
@@ -87,6 +87,8 @@ spec:
               env:
                 - name: HOME
                   value: /tmp
+                - name: KUBESCAPE_VERSION
+                  value: "3.0.18"
                 - name: EVIDENCE_BUCKET
                   valueFrom:
                     secretKeyRef:
@@ -110,6 +112,12 @@ spec:
                 - -c
                 - |
                   set -e
+
+                  # Install kubescape binary from GitHub releases
+                  KUBESCAPE_URL="https://github.com/kubescape/kubescape/releases/download/v${KUBESCAPE_VERSION}/kubescape-ubuntu-latest"
+                  python3 -c "import urllib.request; urllib.request.urlretrieve('${KUBESCAPE_URL}', '/tmp/kubescape')"
+                  chmod +x /tmp/kubescape
+                  export PATH="/tmp:$HOME/.local/bin:$PATH"
 
                   CLUSTER="${CLUSTER_NAME}"
                   OUTPUT_DIR="/tmp/kubescape-output"

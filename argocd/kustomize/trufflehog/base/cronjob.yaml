@@ -105,10 +105,17 @@ spec:
                 - |
                   set -e
 
+                  # Install trufflehog binary from GitHub releases
+                  THOG_VERSION="${TRUFFLEHOG_VERSION}"
+                  THOG_URL="https://github.com/trufflesecurity/trufflehog/releases/download/v${THOG_VERSION}/trufflehog_${THOG_VERSION}_linux_amd64.tar.gz"
+                  python3 -c "import urllib.request; urllib.request.urlretrieve('${THOG_URL}', '/tmp/trufflehog.tar.gz')"
+                  tar xzf /tmp/trufflehog.tar.gz -C /tmp trufflehog
+                  chmod +x /tmp/trufflehog
+
                   pip install --quiet --no-cache-dir --user \
                     google-cloud-storage kubernetes
 
-                  export PATH="$HOME/.local/bin:$PATH"
+                  export PATH="/tmp:$HOME/.local/bin:$PATH"
                   python3 <<'PYEOF'
                   import os, sys, json, subprocess, socket, time, glob
 
@@ -116,18 +123,8 @@ spec:
                   output_dir = '/tmp/trufflehog-output'
                   os.makedirs(output_dir, exist_ok=True)
 
-                  # ── Install trufflehog binary ──────────────────────────────
-                  version = os.environ.get('TRUFFLEHOG_VERSION', '3.88.0')
-                  print(f'Installing trufflehog v{version}...')
-                  subprocess.check_call([
-                      sys.executable, '-m', 'pip', 'install', '--quiet',
-                      '--no-cache-dir', '--user', f'trufflehog=={version}'
-                  ])
-                  thog_bin = os.path.expanduser('~/.local/bin/trufflehog')
-                  if not os.path.exists(thog_bin):
-                      # Try finding it via pip show
-                      import shutil
-                      thog_bin = shutil.which('trufflehog') or '/tmp/.local/bin/trufflehog'
+                  # ── trufflehog binary already installed to /tmp ─────────────
+                  thog_bin = '/tmp/trufflehog'
                   print(f'trufflehog binary: {thog_bin}')
 
                   # ── Discover running container images ──────────────────────

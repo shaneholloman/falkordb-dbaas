@@ -87,6 +87,8 @@ spec:
                 - name: WAZUH_SYSLOG_CA_PATH
                   value: /run/secrets/syslog-ca/ca.crt
               volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
                 - name: syslog-ca
                   mountPath: /run/secrets/syslog-ca
                   readOnly: true
@@ -357,6 +359,8 @@ spec:
                       print('Scan and GCS upload succeeded; syslog is best-effort.')
                   PYEOF
           volumes:
+            - name: tmp
+              emptyDir: {}
             - name: syslog-ca
               secret:
                 secretName: wazuh-syslog-ca
