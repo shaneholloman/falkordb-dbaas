@@ -134,17 +134,110 @@ data:
             finally:
                 os.close(fd)
 
+    # ── Alert exceptions ─────────────────────────────────────────
+    EXCEPTIONS_FILE = os.environ.get(
+        "WAZUH_ALERT_EXCEPTIONS", "/var/ossec/etc/alert-exceptions.json"
+    )
+
+    def _resolve_field(obj, dotpath):
+        """Resolve a dot-notation path like 'data.ResourceId' against a dict."""
+        parts = dotpath.split(".")
+        current = obj
+        for p in parts:
+            if isinstance(current, dict):
+                current = current.get(p, "")
+            else:
+                return ""
+        return str(current) if current else ""
+
+    def _is_excepted(alert_data):
+        """Return True if this alert matches any configured exception."""
+        if not os.path.isfile(EXCEPTIONS_FILE):
+            return False
+        try:
+            with open(EXCEPTIONS_FILE) as ef:
+                cfg = json.load(ef)
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"WARN: Cannot load exceptions file: {e}", file=sys.stderr)
+            return False
+        import re
+        rule_id = str(alert_data.get("rule", {}).get("id", ""))
+        alert_level = int(alert_data.get("rule", {}).get("level", 0))
+        for exc in cfg.get("exceptions", []):
+            # Check rule_id filter
+            if "rule_id" in exc and exc["rule_id"] != rule_id:
+                continue
+            # Check level_below filter
+            if "level_below" in exc and alert_level >= exc["level_below"]:
+                continue
+            # Check field + pattern filter
+            if "field" in exc and "pattern" in exc:
+                value = _resolve_field(alert_data, exc["field"])
+                pattern = exc["pattern"]
+                use_regex = exc.get("is_regex", False)
+                if use_regex:
+                    if not re.search(pattern, value):
+                        continue
+                else:
+                    if pattern not in value:
+                        continue
+            # All conditions matched → suppress
+            comment = exc.get("comment", "no comment")
+            print(
+                f"INFO: Alert suppressed by exception: {comment} "
+                f"(rule={rule_id})",
+                file=sys.stderr,
+            )
+            return True
+        return False
+
     with open(ALERT_FILE) as f:
         alert = json.load(f)
 
+    # Check exceptions before any processing
+    if _is_excepted(alert):
+        sys.exit(0)
+
     rule = alert.get("rule", {})
     agent = alert.get("agent", {})
+    data = alert.get("data", {})
     level = rule.get("level", 0)
 
     allowed, dropped_since = _check_rate_limit(level)
     if not allowed:
         # Drop silently — counter persisted; aggregate posted on next allow.
         sys.exit(0)
+
+    # ── Environment detection ─────────────────────────────────
+    # Derive environment from Cluster field or hostname in predecoder.
+    env_name = os.environ.get("WAZUH_ENVIRONMENT", "")
+    if not env_name:
+        cluster_name = data.get("Cluster") or data.get("ClusterName") or ""
+        hostname = alert.get("predecoder", {}).get("hostname", "")
+        candidate = cluster_name or hostname
+        if "prod" in candidate.lower():
+            env_name = "PROD"
+        elif "stag" in candidate.lower():
+            env_name = "STAGING"
+        else:
+            env_name = "DEV"
+
+    # ── Dashboard link ────────────────────────────────────────
+    # Build a direct link to the Wazuh dashboard filtered on this alert's rule.
+    # Derive dashboard URL from environment if not explicitly set.
+    DASHBOARD_BASE = os.environ.get("WAZUH_DASHBOARD_URL", "")
+    if not DASHBOARD_BASE:
+        if env_name == "PROD":
+            DASHBOARD_BASE = "https://wazuh.security.internal.falkordb.cloud"
+        else:
+            DASHBOARD_BASE = f"https://wazuh.security.{env_name.lower()}.internal.falkordb.cloud"
+    alert_id = alert.get("id", "")
+    rule_id = rule.get("id", "")
+    # Link to Discover view filtered by rule.id
+    dashboard_link = (
+        f"{DASHBOARD_BASE}/app/discover#/?"
+        f"_a=(query:(language:lucene,query:'rule.id:{rule_id}'))"
+    )
 
     # Map severity to emoji
     if level >= 13:
@@ -156,20 +249,99 @@ data:
     else:
         icon = "🔵"
 
-    text = (
-        f"{icon} *Wazuh Alert — Level {level}*\n"
-        f"*Rule:* {rule.get('id', 'N/A')} — {rule.get('description', 'No description')}\n"
-        f"*Agent:* {agent.get('name', 'N/A')} (ID: {agent.get('id', 'N/A')})\n"
-        f"*Groups:* {', '.join(rule.get('groups', []))}\n"
-        f"*Timestamp:* {alert.get('timestamp', 'N/A')}"
-    )
+    # ── Build scanner-specific detail lines ───────────────────
+    detail_lines = []
+    scanner = data.get("Scanner", "")
 
-    full_description = alert.get("data", {}).get("title", "") or rule.get("description", "")
-    if full_description:
-        # Truncate to avoid exceeding Google Chat message limit (4096 chars)
-        if len(full_description) > 500:
-            full_description = full_description[:500] + "…"
-        text += f"\n*Details:* {full_description}"
+    if scanner == "prowler":
+        check = data.get("CheckTitle", "")
+        status_ext = data.get("StatusExtended", "")
+        resource = data.get("ResourceId", "")
+        service = data.get("ServiceName", "")
+        region = data.get("Region", "")
+        detail_lines.append(f"*Check:* {check}")
+        if status_ext:
+            detail_lines.append(f"*Finding:* {status_ext}")
+        if resource:
+            detail_lines.append(f"*Resource:* {resource}")
+        if service:
+            detail_lines.append(f"*Service:* {service}")
+        if region:
+            detail_lines.append(f"*Region:* {region}")
+
+    elif scanner == "trufflehog":
+        detector = data.get("DetectorName", "")
+        image = data.get("ImageName", "")
+        verified = data.get("Verified", "")
+        source_id = data.get("SourceID", "")
+        detail_lines.append(f"*Detector:* {detector}")
+        if image:
+            detail_lines.append(f"*Image:* {image}")
+        detail_lines.append(f"*Verified:* {verified}")
+        if source_id:
+            detail_lines.append(f"*Source:* {source_id}")
+
+    elif scanner == "kube-bench":
+        test_num = data.get("TestNumber", "")
+        test_desc = data.get("TestDesc", "")
+        section = data.get("SectionDesc", "")
+        status = data.get("Status", "")
+        scored = data.get("Scored", "")
+        if test_num:
+            detail_lines.append(f"*Test:* [{test_num}] {test_desc}")
+        if section:
+            detail_lines.append(f"*Section:* {section}")
+        if status:
+            detail_lines.append(f"*Status:* {status} (scored: {scored})")
+
+    elif scanner == "kubescape":
+        ctrl_id = data.get("ControlID", "")
+        ctrl_name = data.get("ControlName", "")
+        framework = data.get("Framework", "")
+        severity = data.get("Severity", "")
+        if ctrl_id:
+            detail_lines.append(f"*Control:* [{ctrl_id}] {ctrl_name}")
+        if framework:
+            detail_lines.append(f"*Framework:* {framework}")
+        if severity:
+            detail_lines.append(f"*Severity:* {severity}")
+
+    elif scanner == "grype":
+        vuln_id = data.get("VulnerabilityID", "")
+        pkg = data.get("Package", "")
+        image = data.get("ImageName", "")
+        severity = data.get("Severity", "")
+        version = data.get("InstalledVersion", "")
+        if vuln_id:
+            detail_lines.append(f"*CVE:* {vuln_id}")
+        if pkg:
+            detail_lines.append(f"*Package:* {pkg} ({version})")
+        if image:
+            detail_lines.append(f"*Image:* {image}")
+        if severity:
+            detail_lines.append(f"*Severity:* {severity}")
+
+    # Fallback: if no scanner-specific fields, show rule description
+    if not detail_lines:
+        desc = rule.get("description", "")
+        if desc:
+            detail_lines.append(f"*Details:* {desc}")
+
+    # ── Compose message ──────────────────────────────────────
+    cluster_display = data.get("Cluster") or data.get("ClusterName") or ""
+
+    text = (
+        f"{icon} *Wazuh Alert — Level {level}* | `{env_name}`\n"
+        f"*Rule:* {rule_id} — {rule.get('description', 'No description')}\n"
+    )
+    if cluster_display:
+        text += f"*Cluster:* {cluster_display}\n"
+    text += f"*Groups:* {', '.join(rule.get('groups', []))}\n"
+
+    if detail_lines:
+        text += "\n".join(detail_lines) + "\n"
+
+    text += f"\n<{dashboard_link}|🔍 View in Dashboard>"
 
     if dropped_since > 0:
         text = (
@@ -177,6 +349,10 @@ data:
             f"in the previous {RATE_LIMIT_WINDOW}s window (cap: "
             f"{RATE_LIMIT_MAX}/window). Resuming delivery.\n\n"
         ) + text
+
+    # Truncate to stay within Google Chat's 4096-char limit
+    if len(text) > 4000:
+        text = text[:3990] + "\n…(truncated)"
 
     if not _post({"text": text}):
         sys.exit(1)

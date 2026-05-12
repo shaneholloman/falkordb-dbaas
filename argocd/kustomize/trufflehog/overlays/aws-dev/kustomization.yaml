@@ -14,3 +14,8 @@ generatorOptions:
   disableNameSuffixHash: true
 patches:
   - path: aws-credentials-patch.yaml
+  - path: remove-nodeselector-patch.yaml
+  - target:
+      kind: CronJob
+      name: trufflehog-secret-scan
+    path: remove-resources-patch.yaml
