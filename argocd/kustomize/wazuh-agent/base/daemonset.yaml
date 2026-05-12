@@ -165,31 +165,44 @@ spec:
                     # We start the three missing daemons individually rather than
                     # calling wazuh-control start, which hangs when agentd is
                     # already running (duplicate PID detection).
+                    # Helper: check if a daemon is alive using /proc instead
+                    # of kill -0 (which fails for non-root PIDs under hostPID).
+                    alive() { [ -n "$1" ] && [ -d "/proc/$1" ]; }
+
+                    start_missing() {
+                      for d in wazuh-modulesd wazuh-logcollector wazuh-syscheckd; do
+                        pidfile=$(ls /var/ossec/var/run/${d}-*.pid 2>/dev/null | head -1)
+                        pid=$(cat "$pidfile" 2>/dev/null)
+                        if ! alive "$pid"; then
+                          /var/ossec/bin/${d} 2>/dev/null &
+                        fi
+                      done
+                    }
+
                     for i in $(seq 1 30); do
                       if grep -q "Connected to the server" /var/ossec/logs/ossec.log 2>/dev/null; then
-                        for d in wazuh-modulesd wazuh-logcollector wazuh-syscheckd; do
-                          pidfile=$(ls /var/ossec/var/run/${d}-*.pid 2>/dev/null | head -1)
-                          if [ -z "$pidfile" ] || ! kill -0 "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null; then
-                            /var/ossec/bin/${d} 2>/dev/null &
-                          fi
-                        done
+                        start_missing
                         exit 0
                       fi
                       sleep 5
                     done
                     # Last-ditch: start missing daemons even if not connected
-                    for d in wazuh-modulesd wazuh-logcollector wazuh-syscheckd; do
-                      pidfile=$(ls /var/ossec/var/run/${d}-*.pid 2>/dev/null | head -1)
-                      if [ -z "$pidfile" ] || ! kill -0 "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null; then
-                        /var/ossec/bin/${d} 2>/dev/null &
-                      fi
-                    done
+                    start_missing
                     exit 0
+          # Custom probes: wazuh-control status uses kill -0 which fails
+          # for the wazuh-user agentd process under hostPID. Use /proc
+          # checks instead.
           livenessProbe:
             exec:
               command:
-                - /var/ossec/bin/wazuh-control
-                - status
+                - /bin/sh
+                - -c
+                - |
+                  for f in /var/ossec/var/run/wazuh-*.pid; do
+                    [ -f "$f" ] || exit 1
+                    [ -d "/proc/$(cat "$f")" ] || exit 1
+                  done
+                  [ "$(ls /var/ossec/var/run/wazuh-*.pid 2>/dev/null | wc -l)" -ge 5 ]
             initialDelaySeconds: 120
             periodSeconds: 60
             timeoutSeconds: 10
@@ -197,8 +210,14 @@ spec:
           readinessProbe:
             exec:
               command:
-                - /var/ossec/bin/wazuh-control
-                - status
+                - /bin/sh
+                - -c
+                - |
+                  for f in /var/ossec/var/run/wazuh-*.pid; do
+                    [ -f "$f" ] || exit 1
+                    [ -d "/proc/$(cat "$f")" ] || exit 1
+                  done
+                  [ "$(ls /var/ossec/var/run/wazuh-*.pid 2>/dev/null | wc -l)" -ge 5 ]
             initialDelaySeconds: 90
             periodSeconds: 30
             timeoutSeconds: 10
