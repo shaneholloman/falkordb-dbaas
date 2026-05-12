@@ -63,7 +63,7 @@ def _download_gcs_or_url(url: str, dest: str) -> Optional[str]:
             creds_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
             creds_exists = os.path.isfile(creds_file) if creds_file else False
             print(f"  GCS download: bucket={bucket_name}, blob={blob_name}, "
-                  f"GOOGLE_APPLICATION_CREDENTIALS={'exists' if creds_exists else 'MISSING (' + creds_file + ')'}",
+                  f"GOOGLE_APPLICATION_CREDENTIALS={'exists' if creds_exists else 'MISSING'}",
                   flush=True)
             client = gcs_storage.Client()
             bucket = client.bucket(bucket_name)
@@ -81,7 +81,9 @@ def _download_gcs_or_url(url: str, dest: str) -> Optional[str]:
         else:
             return f"ERROR: Unsupported URL scheme. Only gs:// and https:// from allowed hosts are supported."
     except Exception as exc:
-        return f"ERROR: Failed to download {url}: {exc}"
+        # Strip query params to avoid leaking signed-URL tokens in logs.
+        safe_url = url.split("?")[0] if url.startswith("https://") else url
+        return f"ERROR: Failed to download {safe_url}: {exc}"
     return None
 
 
@@ -406,6 +408,7 @@ async def run_falkordb_local(params: RunFalkorDBLocalParams) -> str:
         "docker", "run", "-d",
         "--name", "falkordb-oom-triage",
         "-p", "6399:6379",
+        "--security-opt=no-new-privileges",
         "-v", f"{data_dir}:/var/lib/falkordb/data",
     ]
     if has_aof:
