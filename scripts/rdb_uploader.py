@@ -222,6 +222,28 @@ def mask_in_actions(value: str) -> None:
         print(f"::add-mask::{value}")
 
 
+def gcs_object_exists(client: storage.Client, bucket: str, object_name: str) -> bool:
+    """Check if a GCS object exists without downloading it."""
+    try:
+        return client.bucket(bucket).blob(object_name).exists(client)
+    except Exception as e:
+        print(f"  ⚠️  Error checking GCS object {object_name}: {e}", file=sys.stderr)
+        return False
+
+
+def detect_aof_enabled(namespace: str, pod: str, container: str) -> bool:
+    """Query Redis to detect if appendonly is actually enabled.
+    
+    Falls back to pod-name heuristic if query fails (e.g., Redis down post-OOM).
+    """
+    cmd = ["sh", "-c", "export REDISCLI_AUTH=$(cat /run/secrets/adminpassword) && redis-cli --no-auth-warning CONFIG GET appendonly | grep -i yes"]
+    output = kubectl_exec_output(namespace, pod, container, cmd)
+    if output and "yes" in output.lower():
+        return True
+    # Fallback to pod naming convention if query fails
+    return pod not in ("node-f-0",)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Upload Redis RDB (and AOF) to GCS")
     parser.add_argument("--namespace",  required=True,  help="Kubernetes namespace")
@@ -232,15 +254,20 @@ def main() -> None:
                         help="Skip pod access; regenerate a signed GET URL for the existing GCS object")
     args = parser.parse_args()
 
-    # AOF is enabled for all pods except the standalone node-f-0
-    aof_enabled = args.pod != "node-f-0"
+    # Detect AOF mode: in sign-only mode use pod-name heuristic, in upload mode query Redis
+    if args.sign_only:
+        aof_enabled = args.pod not in ("node-f-0",)
+        aof_mode_source = "heuristic (sign-only mode)"
+    else:
+        aof_enabled = None  # will be set after pod verification in upload mode
+        aof_mode_source = "to be detected from Redis config"
 
     print(f"\n{'='*60}")
     print(f"RDB Uploader — {'sign-only' if args.sign_only else 'upload'} mode")
     print(f"  Pod:       {args.pod}")
     print(f"  Namespace: {args.namespace}")
     print(f"  Bucket:    gs://{args.bucket}/{args.namespace}/")
-    print(f"  AOF:       {aof_enabled}")
+    print(f"  AOF:       {aof_mode_source}")
     print(f"{'='*60}\n")
 
     rdb_object = f"{args.namespace}/dump.rdb"
@@ -250,13 +277,33 @@ def main() -> None:
 
     if args.sign_only:
         # ------------------------------------------------------------------
-        # Sign-only: output GCS paths without accessing the pod — no
-        # publicly-accessible signed URLs are produced.
+        # Sign-only: check GCS object existence before outputting paths
         # ------------------------------------------------------------------
-        print("[1/1] Outputting GCS paths (IAM authentication required to download)...")
-        write_github_output("rdb_url", rdb_gcs_path)
+        print("[1/1] Checking existing GCS artifacts...")
+        creds = _load_credentials()
+        client = storage.Client(credentials=creds)
+
+        rdb_exists_gcs = gcs_object_exists(client, args.bucket, rdb_object)
+        aof_exists_gcs = gcs_object_exists(client, args.bucket, aof_object) if aof_enabled else False
+
+        if rdb_exists_gcs:
+            print(f"  {rdb_gcs_path} — found in GCS.")
+            write_github_output("rdb_url", rdb_gcs_path)
+        elif aof_enabled and aof_exists_gcs:
+            print(f"  {rdb_gcs_path} — not found (RDB missing, AOF-only mode).")
+            write_github_output("rdb_upload_skipped", "true")
+        elif aof_enabled:
+            print(f"  ⚠️  {rdb_gcs_path} not found and {aof_gcs_path} not found.", file=sys.stderr)
+            raise RuntimeError("No usable persistence artifact found in GCS: missing dump.rdb and appendonlydir.tar.gz")
+        else:
+            raise RuntimeError(f"{rdb_gcs_path} not found in GCS and AOF is disabled.")
+
         if aof_enabled:
-            write_github_output("aof_url", aof_gcs_path)
+            if aof_exists_gcs:
+                print(f"  {aof_gcs_path} — found in GCS.")
+                write_github_output("aof_url", aof_gcs_path)
+            else:
+                print(f"  {aof_gcs_path} — not found in GCS.")
 
     else:
         # ------------------------------------------------------------------
@@ -266,6 +313,11 @@ def main() -> None:
             print("ERROR: --container is required in upload mode", file=sys.stderr)
             sys.exit(1)
 
+        # Detect actual AOF mode from Redis config
+        print("\n[1/6] Detecting Redis persistence mode...")
+        aof_enabled = detect_aof_enabled(args.namespace, args.pod, args.container)
+        print(f"  AOF enabled: {aof_enabled}")
+
         # Load credentials and GCS client (needed for PUT URL signing)
         creds = _load_credentials()
         client = storage.Client(credentials=creds)
@@ -273,7 +325,7 @@ def main() -> None:
         aof_blob = client.bucket(args.bucket).blob(aof_object)
 
         # 1. Generate signed PUT URLs (1h)
-        print("[1/4] Generating signed PUT URLs (1h)...")
+        print("\n[2/6] Generating signed PUT URLs (1h)...")
         rdb_put_url = get_signed_url(rdb_blob, creds, 60, method="PUT")
         mask_in_actions(rdb_put_url)
         print("  RDB PUT URL generated.")
@@ -285,10 +337,14 @@ def main() -> None:
             print("  AOF PUT URL generated.")
 
         # 2. Verify files exist on the pod before uploading
-        print("\n[2/4] Checking files exist on pod...")
-        if not kubectl_check_path(args.namespace, args.pod, args.container, "/data/dump.rdb"):
+        print("\n[3/6] Checking files exist on pod...")
+        rdb_exists = kubectl_check_path(args.namespace, args.pod, args.container, "/data/dump.rdb")
+        if rdb_exists:
+            print("  /data/dump.rdb — found.")
+        elif aof_enabled:
+            print("  ⚠️  /data/dump.rdb not found — appendonly is enabled, will upload AOF only.")
+        else:
             raise RuntimeError("/data/dump.rdb not found on pod. Redis may not have persisted to disk.")
-        print("  /data/dump.rdb — found.")
 
         if aof_enabled:
             if not kubectl_check_path(args.namespace, args.pod, args.container, "/data/appendonlydir", is_dir=True):
@@ -299,19 +355,22 @@ def main() -> None:
         falkordb_version = detect_falkordb_version(args.namespace, args.pod, args.container)
 
         # 3. Pod uploads directly to GCS via curl
-        print("\n[3/4] Uploading from pod to GCS...")
-        print("  Uploading dump.rdb...")
-        kubectl_exec(
-            args.namespace, args.pod, args.container,
-            [
-                "curl", "-X", "PUT", "--fail", "--silent", "--show-error",
-                "-H", "Content-Type: application/octet-stream",
-                "--upload-file", "/data/dump.rdb",
-                rdb_put_url,
-            ],
-            redact_args=[rdb_put_url],
-        )
-        print("  dump.rdb uploaded successfully.")
+        print("\n[4/6] Uploading from pod to GCS...")
+        if rdb_exists:
+            print("  Uploading dump.rdb...")
+            kubectl_exec(
+                args.namespace, args.pod, args.container,
+                [
+                    "curl", "-X", "PUT", "--fail", "--silent", "--show-error",
+                    "-H", "Content-Type: application/octet-stream",
+                    "--upload-file", "/data/dump.rdb",
+                    rdb_put_url,
+                ],
+                redact_args=[rdb_put_url],
+            )
+            print("  dump.rdb uploaded successfully.")
+        else:
+            print("  Skipping dump.rdb upload (file not found, appendonly mode).")
 
         if aof_enabled:
             aof_upload_failed = False
@@ -332,7 +391,7 @@ def main() -> None:
                 try:
                     kubectl_exec(args.namespace, args.pod, args.container, [
                         "tar", "-czf", "/data/appendonlydir.tar.gz",
-                        "-C", "/data/appendonlydir.snapshot", ".",
+                        "-C", "/data", "appendonlydir.snapshot",
                     ])
                 except RuntimeError:
                     print("  ⚠️  tar failed, checking pod status before retry...")
@@ -340,7 +399,7 @@ def main() -> None:
                     print("  Retrying tar...")
                     kubectl_exec(args.namespace, args.pod, args.container, [
                         "tar", "-czf", "/data/appendonlydir.tar.gz",
-                        "-C", "/data/appendonlydir.snapshot", ".",
+                        "-C", "/data", "appendonlydir.snapshot",
                     ])
                 print("  Uploading appendonlydir.tar.gz...")
                 kubectl_exec(
@@ -369,12 +428,24 @@ def main() -> None:
                         pass
                 print("  Cleanup complete.")
 
-        # 4. Output GCS paths (IAM authentication required to download)
-        print("\n[4/4] Outputting GCS paths...")
-        write_github_output("rdb_url", rdb_gcs_path)
+        # 4. Verify at least one artifact was uploaded
+        print("\n[5/6] Validating artifact uploads...")
+        uploaded_any = rdb_exists or (aof_enabled and not aof_upload_failed)
+        if not uploaded_any:
+            raise RuntimeError("No persistence artifact was uploaded: dump.rdb missing and AOF upload failed")
+        print("  At least one artifact successfully uploaded.")
+
+        # 5. Output GCS paths (IAM authentication required to download)
+        print("\n[6/6] Outputting GCS paths...")
+        if rdb_exists:
+            write_github_output("rdb_url", rdb_gcs_path)
+        else:
+            write_github_output("rdb_upload_skipped", "true")
 
         if aof_enabled and not aof_upload_failed:
             write_github_output("aof_url", aof_gcs_path)
+        elif aof_enabled and aof_upload_failed:
+            write_github_output("aof_upload_failed", "true")
 
         if falkordb_version:
             write_github_output("falkordb_version", falkordb_version)
