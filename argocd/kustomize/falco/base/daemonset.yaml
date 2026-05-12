@@ -87,7 +87,7 @@ spec:
             path: /run/containerd/containerd.sock
       containers:
         - name: falco
-          image: falcosecurity/falco-no-driver:0.39.2
+          image: falcosecurity/falco:0.43.1
           resources:
             requests:
               cpu: "100m"
@@ -102,8 +102,6 @@ spec:
           env:
             - name: HOST_ROOT
               value: /host
-            - name: FALCO_BPF_PROBE
-              value: ""
           args:
             - /usr/bin/falco
             - -c
