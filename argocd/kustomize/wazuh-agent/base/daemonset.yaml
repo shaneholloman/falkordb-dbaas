@@ -161,15 +161,29 @@ spec:
                     # Wait for agentd to connect (enrollment can take 30-90s on
                     # first boot while DNS and the manager come up), then start
                     # the remaining daemons that wazuh-control missed.
+                    #
+                    # We start the three missing daemons individually rather than
+                    # calling wazuh-control start, which hangs when agentd is
+                    # already running (duplicate PID detection).
                     for i in $(seq 1 30); do
                       if grep -q "Connected to the server" /var/ossec/logs/ossec.log 2>/dev/null; then
-                        /var/ossec/bin/wazuh-control start 2>/dev/null
+                        for d in wazuh-modulesd wazuh-logcollector wazuh-syscheckd; do
+                          pidfile=$(ls /var/ossec/var/run/${d}-*.pid 2>/dev/null | head -1)
+                          if [ -z "$pidfile" ] || ! kill -0 "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null; then
+                            /var/ossec/bin/${d} 2>/dev/null &
+                          fi
+                        done
                         exit 0
                       fi
                       sleep 5
                     done
-                    # Last-ditch attempt even if not connected yet
-                    /var/ossec/bin/wazuh-control start 2>/dev/null
+                    # Last-ditch: start missing daemons even if not connected
+                    for d in wazuh-modulesd wazuh-logcollector wazuh-syscheckd; do
+                      pidfile=$(ls /var/ossec/var/run/${d}-*.pid 2>/dev/null | head -1)
+                      if [ -z "$pidfile" ] || ! kill -0 "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null; then
+                        /var/ossec/bin/${d} 2>/dev/null &
+                      fi
+                    done
                     exit 0
           livenessProbe:
             exec:
