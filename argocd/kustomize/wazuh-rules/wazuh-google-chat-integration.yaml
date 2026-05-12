@@ -163,10 +163,13 @@ data:
 
     # ── Dashboard link ────────────────────────────────────────
     # Build a direct link to the Wazuh dashboard filtered on this alert's rule.
-    DASHBOARD_BASE = os.environ.get(
-        "WAZUH_DASHBOARD_URL",
-        "https://wazuh.security.dev.internal.falkordb.cloud"
-    )
+    # Derive dashboard URL from environment if not explicitly set.
+    DASHBOARD_BASE = os.environ.get("WAZUH_DASHBOARD_URL", "")
+    if not DASHBOARD_BASE:
+        if env_name == "PROD":
+            DASHBOARD_BASE = "https://wazuh.security.internal.falkordb.cloud"
+        else:
+            DASHBOARD_BASE = f"https://wazuh.security.{env_name.lower()}.internal.falkordb.cloud"
     alert_id = alert.get("id", "")
     rule_id = rule.get("id", "")
     # Link to Discover view filtered by rule.id
