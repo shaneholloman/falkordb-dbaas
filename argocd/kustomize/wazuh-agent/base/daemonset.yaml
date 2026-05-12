@@ -211,7 +211,9 @@ spec:
           hostPath:
             path: /etc
         - name: var-ossec-data
-          emptyDir: {}
+          hostPath:
+            path: /var/lib/wazuh-agent
+            type: DirectoryOrCreate
         - name: ossec-conf
           configMap:
             name: wazuh-agent-ossec-conf
