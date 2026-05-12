@@ -96,18 +96,9 @@ spec:
               cpu: "500m"
               memory: "512Mi"
           securityContext:
-            # modern_ebpf requires CAP_BPF + CAP_SYS_PTRACE + CAP_SYS_RESOURCE
-            # SYS_ADMIN needed on GKE COS for eBPF tracepoint attachment
-            privileged: false
-            capabilities:
-              add:
-                - BPF
-                - SYS_PTRACE
-                - SYS_RESOURCE
-                - PERFMON
-                - SYS_ADMIN
-              drop:
-                - ALL
+            # modern_ebpf on GKE COS requires privileged mode for
+            # eBPF tracepoint attachment and /sys/kernel access
+            privileged: true
           env:
             - name: HOST_ROOT
               value: /host
