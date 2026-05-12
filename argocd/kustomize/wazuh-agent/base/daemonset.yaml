@@ -151,6 +151,25 @@ spec:
               mountPath: /var/ossec/etc/rootCA.pem
               subPath: ca.crt
               readOnly: true
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    # Wait for agentd to connect (enrollment can take 30-90s on
+                    # first boot while DNS and the manager come up), then start
+                    # the remaining daemons that wazuh-control missed.
+                    for i in $(seq 1 30); do
+                      if grep -q "Connected to the server" /var/ossec/logs/ossec.log 2>/dev/null; then
+                        /var/ossec/bin/wazuh-control start 2>/dev/null
+                        exit 0
+                      fi
+                      sleep 5
+                    done
+                    # Last-ditch attempt even if not connected yet
+                    /var/ossec/bin/wazuh-control start 2>/dev/null
           livenessProbe:
             exec:
               command:
