@@ -65,7 +65,7 @@ spec:
               image: quay.io/kubescape/kubescape:v3.0.18@sha256:8cee5d84fe0ab887e0c624b2a830dd144542f07773eb5180998ccc6d8ac83831
               resources:
                 requests:
-                  cpu: "500m"
+                  cpu: "250m"
                   memory: "512Mi"
                 limits:
                   cpu: "2"

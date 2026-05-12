@@ -57,7 +57,7 @@ spec:
               image: toniblyx/prowler:4.6.1@sha256:04bbabd0a66bc0e9d68b3065524ad36df8c2886aab9bbbfef2f80464b026d2b1
               resources:
                 requests:
-                  cpu: "500m"
+                  cpu: "250m"
                   memory: "512Mi"
                 limits:
                   cpu: "1"
