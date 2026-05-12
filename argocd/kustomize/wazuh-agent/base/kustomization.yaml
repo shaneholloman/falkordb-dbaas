@@ -8,4 +8,3 @@ resources:
   - daemonset.yaml
   - ossec-conf-configmap.yaml
   - entrypoint-scripts-configmap.yaml
-  - pdb.yaml

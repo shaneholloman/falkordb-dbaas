@@ -1,0 +1,13 @@
+# Remove nodeSelector from CronJob pods — app-plane clusters
+# don't have a dedicated "security" node pool.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: prowler-soc2-scan
+  namespace: security
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          nodeSelector: null

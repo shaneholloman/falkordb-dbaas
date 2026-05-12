@@ -6,5 +6,4 @@ resources:
   - daemonset.yaml
   - rbac.yaml
   - falco-config.yaml
-  - pdb.yaml
   - priorityclass.yaml
