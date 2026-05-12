@@ -244,9 +244,34 @@ spec:
                               cfg_dir = os.path.join(root, 'cfg')
                               break
 
+                  # ── Detect Kubernetes version from API server ────────────
+                  k8s_version = None
+                  try:
+                      import ssl
+                      token_file = '/var/run/secrets/kubernetes.io/serviceaccount/token'
+                      ca_file = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+                      if os.path.exists(token_file):
+                          with open(token_file) as f:
+                              token = f.read().strip()
+                          req = urllib.request.Request(
+                              'https://kubernetes.default.svc/version',
+                              headers={'Authorization': f'Bearer {token}'},
+                          )
+                          ctx = ssl.create_default_context(cafile=ca_file)
+                          resp = urllib.request.urlopen(req, context=ctx, timeout=10)
+                          ver = json.loads(resp.read())
+                          major = ver.get('major', '').strip('+')
+                          minor = ver.get('minor', '').strip('+')
+                          k8s_version = f'{major}.{minor}'
+                          print(f'Detected Kubernetes version: {k8s_version}')
+                  except Exception as e:
+                      print(f'WARNING: Could not detect k8s version: {e}')
+
                   # ── Run kube-bench ─────────────────────────────────────────
                   result_file = os.path.join(output_dir, 'kube-bench-results.json')
                   cmd = [kb_bin, 'run', '--json', '--outputfile', result_file]
+                  if k8s_version:
+                      cmd.extend(['--version', k8s_version])
                   if os.path.isdir(cfg_dir):
                       cmd.extend(['--config-dir', cfg_dir])
                   print(f'Running: {" ".join(cmd)}')
