@@ -48,9 +48,13 @@ jobs:
     if: ${{ inputs.environment == 'dev' && !inputs.test }}
     steps:
       - name: Log dev environment OOM
+        env:
+          POD: ${{ inputs.pod }}
+          NAMESPACE: ${{ inputs.namespace }}
+          CONTAINER: ${{ inputs.container }}
         run: |
           echo "Environment is 'dev' — OOMKilled event noted."
-          echo "Pod: ${{ inputs.pod }}, Namespace: ${{ inputs.namespace }}, Container: ${{ inputs.container }}"
+          echo "Pod: $POD, Namespace: $NAMESPACE, Container: $CONTAINER"
 
   check-authorised-actor:
     runs-on: ubuntu-latest
