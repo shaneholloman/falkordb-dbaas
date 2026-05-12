@@ -170,6 +170,7 @@ spec:
                     done
                     # Last-ditch attempt even if not connected yet
                     /var/ossec/bin/wazuh-control start 2>/dev/null
+                    exit 0
           livenessProbe:
             exec:
               command:
