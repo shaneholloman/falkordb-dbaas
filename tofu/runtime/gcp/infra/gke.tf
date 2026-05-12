@@ -41,7 +41,7 @@ module "gke" {
   service_account_name                 = "gke-obs-${random_string.cluster_suffix.result}-nodes-sa"
   remove_default_node_pool             = true
   gce_pd_csi_driver                    = true
-  network_policy                       = true
+  network_policy                       = false
   monitoring_enable_managed_prometheus = false
   enable_cost_allocation               = true
   horizontal_pod_autoscaling           = false
@@ -107,7 +107,7 @@ module "gke" {
     },
     {
       name               = "security-infra"
-      machine_type       = "e2-small"
+      machine_type       = "e2-medium"
       disk_size_gb       = 30
       min_count          = 1
       max_count          = 3

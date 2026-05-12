@@ -59,7 +59,7 @@ export const AWS = {
   DEFAULT_ROLE_NAME: 'omnistrate-bootstrap-role',
   DEFAULT_INSTANCE_TYPE: 'm5.large', // 2 vCPU, 8 GB RAM
   SECURITY_INSTANCE_TYPE: 'm5.xlarge',
-  SECURITY_INFRA_INSTANCE_TYPE: 't3.small', // 2 vCPU, 2 GB RAM — Kyverno + Sealed Secrets
+  SECURITY_INFRA_INSTANCE_TYPE: 't3.medium', // 2 vCPU, 4 GB RAM — Kyverno + Sealed Secrets
   DEFAULT_DISK_SIZE_GB: 50,
   DEFAULT_MIN_NODES: 1,
   DEFAULT_MAX_NODES: 10,
@@ -75,7 +75,7 @@ export const AWS = {
 export const GCP = {
   DEFAULT_MACHINE_TYPE: 'e2-standard-2', // 2 vCPU, 8 GB RAM
   SECURITY_MACHINE_TYPE: 'e2-standard-4',
-  SECURITY_INFRA_MACHINE_TYPE: 'e2-small', // 2 vCPU, 2 GB RAM — Kyverno + Sealed Secrets
+  SECURITY_INFRA_MACHINE_TYPE: 'e2-medium', // 2 vCPU, 4 GB RAM — Kyverno + Sealed Secrets
   DEFAULT_DISK_SIZE_GB: 50,
   DEFAULT_MIN_NODES: 1,
   DEFAULT_MAX_NODES: 10,
