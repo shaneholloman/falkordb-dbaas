@@ -77,8 +77,10 @@ spec:
                   mountPath: /run/secrets/syslog-ca
                   readOnly: true
               env:
-                - name: HOME
-                  value: /tmp
+                - name: PYTHONUSERBASE
+                  value: /tmp/.local
+                - name: PIP_CACHE_DIR
+                  value: /tmp/.pip-cache
                 - name: EVIDENCE_BUCKET
                   valueFrom:
                     secretKeyRef:
@@ -142,7 +144,8 @@ spec:
 
                   # Upload results to the central GCS evidence locker.
                   # google-cloud-storage is not bundled in the Prowler image.
-                  pip install --quiet --user google-cloud-storage
+                  pip install --quiet --no-cache-dir --user google-cloud-storage
+                  export PATH="/tmp/.local/bin:$PATH"
 
                   export DATE_PATH OUTPUT_DIR
                   python3 <<'PYEOF'
