@@ -397,14 +397,22 @@ async def run_falkordb_local(params: RunFalkorDBLocalParams) -> str:
             os.rename(snapshot_dir, target_dir)
 
     image = f"falkordb/falkordb:{params.version}"
+    # The falkordb/falkordb image uses --dir /var/lib/falkordb/data (set by
+    # FALKORDB_DATA_PATH in run.sh).  Mount our data there so Redis finds
+    # dump.rdb / appendonlydir on startup.
+    # If an AOF directory is present, enable appendonly so Redis loads it.
+    has_aof = os.path.isdir(os.path.join(data_dir, "appendonlydir"))
+    docker_cmd = [
+        "docker", "run", "-d",
+        "--name", "falkordb-oom-triage",
+        "-p", "6399:6379",
+        "-v", f"{data_dir}:/var/lib/falkordb/data",
+    ]
+    if has_aof:
+        docker_cmd += ["-e", "REDIS_ARGS=--appendonly yes"]
+    docker_cmd.append(image)
     result = subprocess.run(
-        [
-            "docker", "run", "-d",
-            "--name", "falkordb-oom-triage",
-            "-p", "6399:6379",
-            "-v", f"{data_dir}:/data",
-            image,
-        ],
+        docker_cmd,
         capture_output=True,
         text=True,
     )
