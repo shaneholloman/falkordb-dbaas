@@ -7,4 +7,4 @@ metadata:
   annotations:
     cloud.google.com/load-balancer-type: "External"
 spec:
-  loadBalancerIP: "34.46.116.195"
+  loadBalancerIP: "34.171.172.83"

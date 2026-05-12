@@ -9,7 +9,7 @@ configMapGenerator:
     behavior: create
     literals:
       - cluster-name=app-plane-gcp-dev
-      - wazuh-syslog-host=34.46.116.195
+      - wazuh-syslog-host=34.171.172.83
 generatorOptions:
   disableNameSuffixHash: true
 patches:

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-filebeat-finish
+  namespace: security
+data:
+  finish: |
+    #!/usr/bin/env sh
+    # Override: let s6 restart filebeat instead of killing the container.
+    # The default finish script calls s6-svscanctl -t which terminates all
+    # services and crashes the pod.  Filebeat exits normally when the
+    # alerts.json file is inactive for close_inactive (5m default).
+    echo >&2 "Filebeat exited. code=${1} — s6 will restart it"
