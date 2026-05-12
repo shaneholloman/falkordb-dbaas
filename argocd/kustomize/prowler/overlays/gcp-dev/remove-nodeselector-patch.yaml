@@ -1,5 +1,4 @@
-# Remove nodeSelector from CronJob pods — app-plane clusters
-# don't have a dedicated "security" node pool.
+# Schedule scan pods on the observability node pool in GCP app-plane clusters.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -10,4 +9,5 @@ spec:
     spec:
       template:
         spec:
-          nodeSelector: null
+          nodeSelector:
+            node_pool: observability

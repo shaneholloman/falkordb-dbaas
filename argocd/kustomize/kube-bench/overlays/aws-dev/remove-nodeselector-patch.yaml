@@ -1,7 +1,4 @@
-# Remove nodeSelector from CronJob pods — app-plane clusters
-# don't have a dedicated "security" node pool.
-# Also add CriticalAddonsOnly toleration for AWS clusters where
-# workload nodes have this taint.
+# Schedule scan pods on the security-infra node pool in AWS app-plane clusters.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -12,7 +9,8 @@ spec:
     spec:
       template:
         spec:
-          nodeSelector: null
+          nodeSelector:
+            node_pool: security-infra
           tolerations:
             - key: cloud.google.com/gke-spot
               operator: Equal
