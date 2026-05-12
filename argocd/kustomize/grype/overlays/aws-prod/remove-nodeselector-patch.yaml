@@ -3,7 +3,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: trufflehog-secret-scan
+  name: grype-cve-scan
   namespace: security
 spec:
   jobTemplate:
@@ -28,4 +28,3 @@ spec:
             - key: CriticalAddonsOnly
               operator: Exists
               effect: NoSchedule
-

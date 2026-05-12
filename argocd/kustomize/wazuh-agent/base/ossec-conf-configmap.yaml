@@ -198,6 +198,12 @@ data:
         <log_format>syslog</log_format>
       </localfile>
 
+      <!-- Falco runtime alerts (file_output JSON on shared hostPath) -->
+      <localfile>
+        <log_format>json</log_format>
+        <location>/var/log/falco/alerts.json</location>
+      </localfile>
+
       <!-- Active response -->
       <active-response>
         <disabled>no</disabled>

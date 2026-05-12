@@ -1,5 +1,6 @@
 # Falco configuration — rules, outputs, and engine settings.
-# Syslog output forwards all alerts to Wazuh Manager.
+# File output writes JSON alerts to /var/log/falco/alerts.json (hostPath)
+# which wazuh-agent reads via <localfile> for ingestion into Wazuh.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -29,17 +30,21 @@ data:
     json_include_output_property: true
     json_include_tags_property: true
 
-    # Syslog output — forwards to Wazuh Manager
+    # Syslog output — disabled (requires /dev/log which doesn't exist
+    # on GKE COS / Amazon Linux nodes that use journald)
     syslog_output:
-      enabled: true
+      enabled: false
 
     # Stdout output — for kubectl logs
     stdout_output:
       enabled: true
 
-    # File output — disabled (using syslog + stdout)
+    # File output — writes JSON alerts to a hostPath volume that
+    # wazuh-agent reads via <localfile>, bridging Falco → Wazuh.
     file_output:
-      enabled: false
+      enabled: true
+      keep_alive: false
+      filename: /var/log/falco/alerts.json
 
     # HTTP output — disabled
     http_output:

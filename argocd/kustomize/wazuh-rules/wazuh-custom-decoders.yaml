@@ -46,9 +46,13 @@ data:
         <plugin_decoder>JSON_Decoder</plugin_decoder>
     </decoder>
 
-    <!-- Falco runtime threat detection -->
+    <!-- Falco runtime threat detection (syslog path — scan jobs forwarding via TCP) -->
     <decoder name="falco">
         <program_name>^falco</program_name>
+    </decoder>
+    <!-- Falco runtime threat detection (localfile path — file_output JSON read by wazuh-agent) -->
+    <decoder name="falco">
+        <prematch type="pcre2">"source"\s*:\s*"(syscall|k8s_audit|plugin)"</prematch>
     </decoder>
     <decoder name="falco-json">
         <parent>falco</parent>

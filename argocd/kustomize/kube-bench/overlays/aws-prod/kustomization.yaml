@@ -14,3 +14,4 @@ generatorOptions:
   disableNameSuffixHash: true
 patches:
   - path: aws-credentials-patch.yaml
+  - path: remove-nodeselector-patch.yaml

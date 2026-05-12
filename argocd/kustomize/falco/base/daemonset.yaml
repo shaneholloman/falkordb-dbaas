@@ -2,7 +2,8 @@
 #
 # Runs on every node, monitors syscalls for container escapes, suspicious
 # processes, network anomalies, and file system changes. Outputs JSON
-# alerts to syslog (Wazuh Manager) and stdout (kubectl logs).
+# alerts to /var/log/falco/alerts.json (read by wazuh-agent) and stdout
+# (kubectl logs).
 #
 # Uses modern_ebpf engine — no kernel module, no privileged container.
 apiVersion: apps/v1
@@ -85,6 +86,11 @@ spec:
         - name: containerd-sock
           hostPath:
             path: /run/containerd/containerd.sock
+        # Falco file_output directory (read by wazuh-agent localfile)
+        - name: var-log-falco
+          hostPath:
+            path: /var/log/falco
+            type: DirectoryOrCreate
       containers:
         - name: falco
           image: falcosecurity/falco:0.43.1
@@ -130,6 +136,8 @@ spec:
             - name: containerd-sock
               mountPath: /run/containerd/containerd.sock
               readOnly: true
+            - name: var-log-falco
+              mountPath: /var/log/falco
           livenessProbe:
             httpGet:
               path: /healthz

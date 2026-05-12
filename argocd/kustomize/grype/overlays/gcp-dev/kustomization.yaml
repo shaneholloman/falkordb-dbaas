@@ -15,3 +15,4 @@ generatorOptions:
 patches:
   - path: wi-patch.yaml
   - path: remove-nodeselector-patch.yaml
+  - path: resource-limits-patch.yaml

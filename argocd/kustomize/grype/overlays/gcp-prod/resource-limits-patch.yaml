@@ -1,0 +1,21 @@
+# Reduce grype memory limit to fit on e2-standard-2 nodes (6Gi allocatable)
+# alongside wazuh-agent, falco, and system pods.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: grype-cve-scan
+  namespace: security
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: grype
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "2"
+                  memory: "4Gi"

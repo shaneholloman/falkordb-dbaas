@@ -1,0 +1,9 @@
+# Annotate the prowler ServiceAccount with the IRSA role ARN
+# so EKS can inject AWS credentials via projected service account token.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prowler
+  namespace: security
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::119146126346:role/security/prowler-soc2-scanner

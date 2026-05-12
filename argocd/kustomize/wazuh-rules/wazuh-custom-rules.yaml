@@ -214,12 +214,24 @@ data:
 
     <!-- ================================================================
          Falco Runtime Threat Detection (100500-100599)
-         Matches Falco syslog output with JSON body. Falco sends events
-         via syslog_output to Wazuh Manager at port 514.
+         Matches Falco JSON output ingested via wazuh-agent localfile
+         (falco file_output → /var/log/falco/alerts.json → wazuh-agent).
          ================================================================ -->
     <group name="falco_runtime,soc2">
 
-      <!-- Base rule: any Falco event ingested -->
+      <!-- Base rule: Falco events via localfile (json log_format).
+           When wazuh-agent reads /var/log/falco/alerts.json with json log_format,
+           the built-in "json" decoder is applied automatically, so decoded_as is "json"
+           not "falco". We match on location + source field to identify falco events. -->
+      <rule id="100499" level="3">
+        <decoded_as>json</decoded_as>
+        <location>/var/log/falco/alerts.json</location>
+        <field name="source">\.+</field>
+        <description>Falco runtime event: $(rule) — $(output)</description>
+        <group>falco_runtime</group>
+      </rule>
+
+      <!-- Base rule: Falco events via syslog (program_name decoder path) -->
       <rule id="100500" level="3">
         <decoded_as>falco</decoded_as>
         <field name="rule">\.+</field>
@@ -229,7 +241,7 @@ data:
 
       <!-- Falco WARNING priority -->
       <rule id="100501" level="8">
-        <if_sid>100500</if_sid>
+        <if_sid>100499, 100500</if_sid>
         <field name="priority">Warning</field>
         <description>Falco WARNING: $(rule) — $(output)</description>
         <group>falco_runtime</group>
@@ -237,7 +249,7 @@ data:
 
       <!-- Falco ERROR priority — triggers notification (level >= 10) -->
       <rule id="100502" level="10">
-        <if_sid>100500</if_sid>
+        <if_sid>100499, 100500</if_sid>
         <field name="priority">Error</field>
         <description>Falco ERROR: $(rule) — $(output)</description>
         <group>falco_runtime,soc2_fail</group>
@@ -246,7 +258,7 @@ data:
 
       <!-- Falco CRITICAL priority -->
       <rule id="100503" level="13">
-        <if_sid>100500</if_sid>
+        <if_sid>100499, 100500</if_sid>
         <field name="priority">Critical</field>
         <description>CRITICAL Falco: $(rule) — $(output)</description>
         <group>falco_runtime,soc2_fail,soc2_critical</group>
@@ -254,7 +266,7 @@ data:
 
       <!-- Falco ALERT (highest) priority -->
       <rule id="100504" level="14">
-        <if_sid>100500</if_sid>
+        <if_sid>100499, 100500</if_sid>
         <field name="priority">Alert</field>
         <description>ALERT Falco: $(rule) — $(output)</description>
         <group>falco_runtime,soc2_fail,soc2_critical</group>
@@ -262,7 +274,7 @@ data:
 
       <!-- Container escape detected -->
       <rule id="100510" level="14">
-        <if_sid>100500</if_sid>
+        <if_sid>100499, 100500</if_sid>
         <match>Container Escape|nsenter|mount namespace</match>
         <description>CONTAINER ESCAPE ATTEMPT: $(rule) — $(output)</description>
         <group>falco_runtime,soc2_fail,soc2_critical,container_escape</group>
@@ -273,7 +285,7 @@ data:
 
       <!-- Crypto mining detection -->
       <rule id="100511" level="13">
-        <if_sid>100500</if_sid>
+        <if_sid>100499, 100500</if_sid>
         <match>Crypto Mining|stratum+tcp|xmr</match>
         <description>CRYPTO MINING detected: $(rule) — $(output)</description>
         <group>falco_runtime,soc2_fail,soc2_critical,crypto_mining</group>
@@ -284,7 +296,7 @@ data:
 
       <!-- Reverse shell detection -->
       <rule id="100512" level="14">
-        <if_sid>100500</if_sid>
+        <if_sid>100499, 100500</if_sid>
         <match>Reverse Shell</match>
         <description>REVERSE SHELL detected: $(rule) — $(output)</description>
         <group>falco_runtime,soc2_fail,soc2_critical,reverse_shell</group>

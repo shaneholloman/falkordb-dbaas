@@ -1,3 +1,0 @@
-# Remove resource requests/limits — t3.small security-infra nodes can't accommodate them.
-- op: remove
-  path: /spec/jobTemplate/spec/template/spec/containers/0/resources
