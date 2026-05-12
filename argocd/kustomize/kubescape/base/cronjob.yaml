@@ -131,7 +131,7 @@ spec:
                     --format json \
                     --output "${OUTPUT_DIR}/mitre-results.json" \
                     --severity-threshold high \
-                    --logger silent \
+                    --logger error \
                     2>"${OUTPUT_DIR}/mitre-stderr.log"; then
                     echo "ERROR: KubeScape MITRE scan failed. stderr:"
                     cat "${OUTPUT_DIR}/mitre-stderr.log"
@@ -143,7 +143,7 @@ spec:
                     --format json \
                     --output "${OUTPUT_DIR}/nsa-results.json" \
                     --severity-threshold high \
-                    --logger silent \
+                    --logger error \
                     2>"${OUTPUT_DIR}/nsa-stderr.log"; then
                     echo "ERROR: KubeScape NSA scan failed. stderr:"
                     cat "${OUTPUT_DIR}/nsa-stderr.log"
@@ -154,7 +154,7 @@ spec:
                   if ! kubescape scan framework allcontrols \
                     --format json \
                     --output "${OUTPUT_DIR}/allcontrols-results.json" \
-                    --logger silent \
+                    --logger error \
                     2>"${OUTPUT_DIR}/allcontrols-stderr.log"; then
                     echo "ERROR: KubeScape AllControls scan failed. stderr:"
                     cat "${OUTPUT_DIR}/allcontrols-stderr.log"

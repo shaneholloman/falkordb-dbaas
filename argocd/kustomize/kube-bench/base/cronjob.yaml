@@ -72,9 +72,7 @@ spec:
                 path: /lib/systemd
                 type: DirectoryOrCreate
             - name: srv-kubernetes
-              hostPath:
-                path: /srv/kubernetes
-                type: DirectoryOrCreate
+              emptyDir: {}
             - name: etc-kubernetes
               hostPath:
                 path: /etc/kubernetes
