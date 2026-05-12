@@ -105,6 +105,12 @@ spec:
                       name: kubescape-config
                       key: wazuh-syslog-host
                       optional: true
+                - name: GCP_PROJECT_ID
+                  valueFrom:
+                    configMapKeyRef:
+                      name: kubescape-config
+                      key: gcp-project-id
+                      optional: true
                 - name: WAZUH_SYSLOG_CA_PATH
                   value: /run/secrets/syslog-ca/ca.crt
               command:

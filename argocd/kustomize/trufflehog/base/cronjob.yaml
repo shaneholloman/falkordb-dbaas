@@ -97,6 +97,12 @@ spec:
                       name: trufflehog-config
                       key: wazuh-syslog-host
                       optional: true
+                - name: GCP_PROJECT_ID
+                  valueFrom:
+                    configMapKeyRef:
+                      name: trufflehog-config
+                      key: gcp-project-id
+                      optional: true
                 - name: WAZUH_SYSLOG_CA_PATH
                   value: /run/secrets/syslog-ca/ca.crt
               command:
