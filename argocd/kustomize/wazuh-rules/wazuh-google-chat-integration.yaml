@@ -134,8 +134,69 @@ data:
             finally:
                 os.close(fd)
 
+    # ── Alert exceptions ─────────────────────────────────────────
+    EXCEPTIONS_FILE = os.environ.get(
+        "WAZUH_ALERT_EXCEPTIONS", "/var/ossec/etc/alert-exceptions.json"
+    )
+
+    def _resolve_field(obj, dotpath):
+        """Resolve a dot-notation path like 'data.ResourceId' against a dict."""
+        parts = dotpath.split(".")
+        current = obj
+        for p in parts:
+            if isinstance(current, dict):
+                current = current.get(p, "")
+            else:
+                return ""
+        return str(current) if current else ""
+
+    def _is_excepted(alert_data):
+        """Return True if this alert matches any configured exception."""
+        if not os.path.isfile(EXCEPTIONS_FILE):
+            return False
+        try:
+            with open(EXCEPTIONS_FILE) as ef:
+                cfg = json.load(ef)
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"WARN: Cannot load exceptions file: {e}", file=sys.stderr)
+            return False
+        import re
+        rule_id = str(alert_data.get("rule", {}).get("id", ""))
+        alert_level = int(alert_data.get("rule", {}).get("level", 0))
+        for exc in cfg.get("exceptions", []):
+            # Check rule_id filter
+            if "rule_id" in exc and exc["rule_id"] != rule_id:
+                continue
+            # Check level_below filter
+            if "level_below" in exc and alert_level >= exc["level_below"]:
+                continue
+            # Check field + pattern filter
+            if "field" in exc and "pattern" in exc:
+                value = _resolve_field(alert_data, exc["field"])
+                pattern = exc["pattern"]
+                use_regex = exc.get("is_regex", False)
+                if use_regex:
+                    if not re.search(pattern, value):
+                        continue
+                else:
+                    if pattern not in value:
+                        continue
+            # All conditions matched → suppress
+            comment = exc.get("comment", "no comment")
+            print(
+                f"INFO: Alert suppressed by exception: {comment} "
+                f"(rule={rule_id})",
+                file=sys.stderr,
+            )
+            return True
+        return False
+
     with open(ALERT_FILE) as f:
         alert = json.load(f)
+
+    # Check exceptions before any processing
+    if _is_excepted(alert):
+        sys.exit(0)
 
     rule = alert.get("rule", {})
     agent = alert.get("agent", {})

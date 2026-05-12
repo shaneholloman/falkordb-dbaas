@@ -9,4 +9,3 @@ resources:
   - ossec-conf-configmap.yaml
   - entrypoint-scripts-configmap.yaml
   - pdb.yaml
-  - priorityclass.yaml

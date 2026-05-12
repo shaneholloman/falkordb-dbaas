@@ -1,0 +1,45 @@
+# Alert exceptions — alerts matching any rule here are silently dropped
+# and NOT forwarded to Google Chat.
+#
+# Each exception is a JSON object with field matchers. ALL fields in an
+# exception must match for the alert to be suppressed (AND logic).
+# Multiple exceptions use OR logic (match any → suppress).
+#
+# Supported match fields:
+#   rule_id       — exact match on rule.id (string)
+#   level_below   — suppress if alert level < this value (int)
+#   field         — dot-notation path into the alert JSON (e.g. "data.ResourceId")
+#   pattern       — substring or regex to match against the field value
+#   is_regex      — if true, treat pattern as regex (default: false, substring)
+#   comment       — human-readable reason (ignored by code)
+#
+# The ConfigMap is mounted at /var/ossec/etc/alert-exceptions.json
+# and read by the custom-google-chat integration on each invocation.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-alert-exceptions
+  namespace: security
+  labels:
+    app: wazuh
+    component: alert-exceptions
+data:
+  alert-exceptions.json: |
+    {
+      "exceptions": [
+        {
+          "comment": "Google Groups cannot have MFA — false positive",
+          "rule_id": "100103",
+          "field": "data.ResourceId",
+          "pattern": "admin@falkordb.cloud",
+          "is_regex": false
+        },
+        {
+          "comment": "Google Groups cannot have MFA — false positive",
+          "rule_id": "100103",
+          "field": "data.ResourceId",
+          "pattern": "devops@falkordb.cloud",
+          "is_regex": false
+        }
+      ]
+    }

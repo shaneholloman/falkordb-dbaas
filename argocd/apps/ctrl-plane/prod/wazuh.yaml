@@ -124,6 +124,10 @@ spec:
               - name: wazuh-accepted-cves
                 configMap:
                   name: wazuh-accepted-cves
+              # Alert exceptions — suppresses known false-positives from Google Chat
+              - name: alert-exceptions
+                configMap:
+                  name: wazuh-alert-exceptions
               # Override the s6 filebeat finish script — the default kills the
               # container when filebeat exits (even code 0 from close_inactive).
               - name: filebeat-finish
@@ -170,6 +174,11 @@ spec:
               - name: wazuh-accepted-cves
                 mountPath: /var/ossec/etc/lists/accepted-cves
                 subPath: accepted-cves
+                readOnly: true
+              # Alert exceptions file for Google Chat integration
+              - name: alert-exceptions
+                mountPath: /var/ossec/etc/alert-exceptions.json
+                subPath: alert-exceptions.json
                 readOnly: true
               # Inject cluster key after 0-wazuh-init copies the config template.
               # Runs as cont-init.d/1-inject-key (between 0-wazuh-init and 2-manager).
