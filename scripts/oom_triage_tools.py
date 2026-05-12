@@ -59,6 +59,12 @@ def _download_gcs_or_url(url: str, dest: str) -> Optional[str]:
         if url.startswith("gs://"):
             without_scheme = url[len("gs://"):]
             bucket_name, _, blob_name = without_scheme.partition("/")
+            # Log credential state for debugging GCS auth failures in CI.
+            creds_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+            creds_exists = os.path.isfile(creds_file) if creds_file else False
+            print(f"  GCS download: bucket={bucket_name}, blob={blob_name}, "
+                  f"GOOGLE_APPLICATION_CREDENTIALS={'exists' if creds_exists else 'MISSING (' + creds_file + ')'}",
+                  flush=True)
             client = gcs_storage.Client()
             bucket = client.bucket(bucket_name)
             bucket.blob(blob_name).download_to_filename(dest)
@@ -383,6 +389,12 @@ async def run_falkordb_local(params: RunFalkorDBLocalParams) -> str:
         err = _safe_extract_tar(aof_tar, data_dir)
         if err:
             return err
+        # rdb_uploader.py archives as "appendonlydir.snapshot" — rename to
+        # "appendonlydir" which is what Redis/FalkorDB expects on startup.
+        snapshot_dir = os.path.join(data_dir, "appendonlydir.snapshot")
+        target_dir = os.path.join(data_dir, "appendonlydir")
+        if os.path.isdir(snapshot_dir) and not os.path.isdir(target_dir):
+            os.rename(snapshot_dir, target_dir)
 
     image = f"falkordb/falkordb:{params.version}"
     result = subprocess.run(
