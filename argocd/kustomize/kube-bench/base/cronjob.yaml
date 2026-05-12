@@ -72,9 +72,7 @@ spec:
                 path: /lib/systemd
                 type: DirectoryOrCreate
             - name: srv-kubernetes
-              hostPath:
-                path: /srv/kubernetes
-                type: DirectoryOrCreate
+              emptyDir: {}
             - name: etc-kubernetes
               hostPath:
                 path: /etc/kubernetes
@@ -89,13 +87,9 @@ spec:
                 type: DirectoryOrCreate
             - name: tmp
               emptyDir: {}
-            - name: syslog-ca
-              secret:
-                secretName: wazuh-syslog-ca
-                optional: true
           containers:
             - name: kube-bench
-              image: python:3.12-slim@sha256:4386a385d81dba9f72ed72a6fe4237755d7f5440c84b417650f38336bbc43117
+              image: python:3.12-slim@sha256:bf73779de6dbd030f3d189eeeb246286965832761ace318c1518300f76c0840d
               resources:
                 requests:
                   cpu: "250m"
@@ -144,9 +138,6 @@ spec:
                   readOnly: true
                 - name: tmp
                   mountPath: /tmp
-                - name: syslog-ca
-                  mountPath: /run/secrets/syslog-ca
-                  readOnly: true
               env:
                 - name: HOME
                   value: /tmp
@@ -168,8 +159,12 @@ spec:
                       name: kube-bench-config
                       key: wazuh-syslog-host
                       optional: true
-                - name: WAZUH_SYSLOG_CA_PATH
-                  value: /run/secrets/syslog-ca/ca.crt
+                - name: GCP_PROJECT_ID
+                  valueFrom:
+                    configMapKeyRef:
+                      name: kube-bench-config
+                      key: gcp-project-id
+                      optional: true
               command:
                 - /bin/sh
                 - -c
@@ -246,9 +241,34 @@ spec:
                               cfg_dir = os.path.join(root, 'cfg')
                               break
 
+                  # ── Detect Kubernetes version from API server ────────────
+                  k8s_version = None
+                  try:
+                      import ssl
+                      token_file = '/var/run/secrets/kubernetes.io/serviceaccount/token'
+                      ca_file = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+                      if os.path.exists(token_file):
+                          with open(token_file) as f:
+                              token = f.read().strip()
+                          req = urllib.request.Request(
+                              'https://kubernetes.default.svc/version',
+                              headers={'Authorization': f'Bearer {token}'},
+                          )
+                          ctx = ssl.create_default_context(cafile=ca_file)
+                          resp = urllib.request.urlopen(req, context=ctx, timeout=10)
+                          ver = json.loads(resp.read())
+                          major = ver.get('major', '').strip('+')
+                          minor = ver.get('minor', '').strip('+')
+                          k8s_version = f'{major}.{minor}'
+                          print(f'Detected Kubernetes version: {k8s_version}')
+                  except Exception as e:
+                      print(f'WARNING: Could not detect k8s version: {e}')
+
                   # ── Run kube-bench ─────────────────────────────────────────
                   result_file = os.path.join(output_dir, 'kube-bench-results.json')
                   cmd = [kb_bin, 'run', '--json', '--outputfile', result_file]
+                  if k8s_version:
+                      cmd.extend(['--version', k8s_version])
                   if os.path.isdir(cfg_dir):
                       cmd.extend(['--config-dir', cfg_dir])
                   print(f'Running: {" ".join(cmd)}')
@@ -311,13 +331,24 @@ spec:
                   print(f'CIS Benchmark: PASS={summary["total_pass"]} FAIL={summary["total_fail"]} '
                         f'WARN={summary["total_warn"]} INFO={summary["total_info"]}')
 
+                  # ── Resolve GCP project for storage client ────────────────
+                  gcp_project = os.environ.get('GCP_PROJECT_ID', '')
+                  if not gcp_project:
+                      try:
+                          _req = urllib.request.Request(
+                              'http://metadata.google.internal/computeMetadata/v1/project/project-id',
+                              headers={'Metadata-Flavor': 'Google'})
+                          gcp_project = urllib.request.urlopen(_req, timeout=5).read().decode().strip()
+                      except Exception:
+                          pass
+
                   # ── Upload to GCS ──────────────────────────────────────────
                   try:
                       from google.cloud import storage as gcs
                       bucket_name = os.environ['EVIDENCE_BUCKET']
                       date_path = time.strftime('%Y/%m/%d')
                       prefix = f'kube-bench/{date_path}/{cluster}'
-                      gclient = gcs.Client()
+                      gclient = gcs.Client(project=gcp_project) if gcp_project else gcs.Client()
                       bucket = gclient.bucket(bucket_name)
                       for f_path in glob.glob(os.path.join(output_dir, '*.json')):
                           if os.path.isfile(f_path):
@@ -336,19 +367,9 @@ spec:
 
                   fwd_count = 0
                   try:
-                      import ssl as _ssl
-                      ctx = _ssl.create_default_context()
-                      ca_path = os.environ.get('WAZUH_SYSLOG_CA_PATH', '')
-                      if ca_path and os.path.isfile(ca_path):
-                          ctx.load_verify_locations(ca_path)
-                      else:
-                          print('WARNING: WAZUH_SYSLOG_CA_PATH not set or missing, TLS verification disabled')
-                          ctx.check_hostname = False
-                          ctx.verify_mode = _ssl.CERT_NONE
-                      raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                      raw_sock.settimeout(10)
-                      sock = ctx.wrap_socket(raw_sock, server_hostname=syslog_host)
-                      sock.connect((syslog_host, 1516))
+                      sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                      sock.settimeout(10)
+                      sock.connect((syslog_host, 514))
                       for f in findings:
                           ts = time.strftime('%b %d %H:%M:%S')
                           msg = '<134>{} {} kube-bench: {}\n'.format(
@@ -357,7 +378,7 @@ spec:
                           sock.sendall(msg.encode())
                           fwd_count += 1
                       sock.close()
-                      print(f'Forwarded {fwd_count} findings to Wazuh at {syslog_host}:1516 (TLS)')
+                      print(f'Forwarded {fwd_count} findings to Wazuh at {syslog_host}:514')
                   except Exception as e:
                       print(f'WARNING: Syslog forwarding failed: {e}')
                   PYEOF

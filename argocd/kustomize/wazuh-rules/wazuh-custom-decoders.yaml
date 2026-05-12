@@ -3,13 +3,17 @@
 # Deployed as a ConfigMap and mounted into the Wazuh Manager container
 # at /var/ossec/etc/decoders/local_decoder.xml.
 #
+# Uses parent-child decoder pattern required by Wazuh 4.14:
+#   Parent decoder matches syslog program_name
+#   Child decoder uses prematch + JSON_Decoder plugin to extract fields
+#
 # Decoders:
-#   grype      — Matches syslog program_name "grype", extracts JSON fields
-#   prowler    — Matches syslog program_name "prowler", extracts JSON fields
-#   falco      — Matches syslog program_name "falco", extracts JSON fields
-#   trufflehog — Matches syslog program_name "trufflehog", extracts JSON fields
-#   kube-bench — Matches syslog program_name "kube-bench", extracts JSON fields
-#   kubescape  — Matches syslog program_name "kubescape", extracts JSON fields
+#   grype      — CVE vulnerability scanner
+#   prowler    — Cloud compliance scanner
+#   falco      — Runtime threat detection
+#   trufflehog — Secret leak scanner
+#   kube-bench — CIS benchmark scanner
+#   kubescape  — Kubernetes security scanner
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -20,52 +24,64 @@ metadata:
     component: decoders
 data:
   local_decoder.xml: |
-    <!-- SOC 2 Evidence Engine — Custom Decoders -->
+    <!-- SOC 2 Evidence Engine — Custom Decoders (parent-child pattern) -->
 
-    <!-- Grype CVE scanner: syslog messages with program_name "grype"
-         containing a JSON body. JSON_Decoder plugin extracts all fields
-         (Scanner, ImageName, VulnerabilityID, Severity, Package, etc.) -->
+    <!-- Grype CVE scanner -->
     <decoder name="grype">
-        <program_name>grype</program_name>
+        <program_name>^grype</program_name>
+    </decoder>
+    <decoder name="grype-json">
+        <parent>grype</parent>
+        <prematch>^{</prematch>
         <plugin_decoder>JSON_Decoder</plugin_decoder>
     </decoder>
 
-    <!-- Prowler compliance scanner: syslog messages with program_name "prowler"
-         containing a JSON body. JSON_Decoder plugin extracts all fields
-         (Provider, CheckTitle, StatusExtended, Severity, etc.) -->
+    <!-- Prowler compliance scanner -->
     <decoder name="prowler">
-        <program_name>prowler</program_name>
+        <program_name>^prowler</program_name>
+    </decoder>
+    <decoder name="prowler-json">
+        <parent>prowler</parent>
+        <prematch>^{</prematch>
         <plugin_decoder>JSON_Decoder</plugin_decoder>
     </decoder>
 
-    <!-- Falco runtime threat detection: syslog messages with program_name "falco"
-         containing a JSON body. JSON_Decoder extracts fields
-         (output, priority, rule, time, etc.) -->
+    <!-- Falco runtime threat detection -->
     <decoder name="falco">
-        <program_name>falco</program_name>
+        <program_name>^falco</program_name>
+    </decoder>
+    <decoder name="falco-json">
+        <parent>falco</parent>
+        <prematch>^{</prematch>
         <plugin_decoder>JSON_Decoder</plugin_decoder>
     </decoder>
 
-    <!-- TruffleHog secret scanner: syslog messages with program_name "trufflehog"
-         containing a JSON body. JSON_Decoder extracts fields
-         (Scanner, DetectorName, Verified, ImageName, Cluster, etc.) -->
+    <!-- TruffleHog secret scanner -->
     <decoder name="trufflehog">
-        <program_name>trufflehog</program_name>
+        <program_name>^trufflehog</program_name>
+    </decoder>
+    <decoder name="trufflehog-json">
+        <parent>trufflehog</parent>
+        <prematch>^{</prematch>
         <plugin_decoder>JSON_Decoder</plugin_decoder>
     </decoder>
 
-    <!-- kube-bench CIS benchmark: syslog messages with program_name "kube-bench"
-         containing a JSON body. JSON_Decoder extracts fields
-         (Scanner, TestNumber, TestDesc, Status, Remediation, etc.) -->
+    <!-- kube-bench CIS benchmark -->
     <decoder name="kube-bench">
-        <program_name>kube-bench</program_name>
+        <program_name>^kube-bench</program_name>
+    </decoder>
+    <decoder name="kube-bench-json">
+        <parent>kube-bench</parent>
+        <prematch>^{</prematch>
         <plugin_decoder>JSON_Decoder</plugin_decoder>
     </decoder>
 
-    <!-- KubeScape security scanner: syslog messages with program_name "kubescape"
-         containing a JSON body. JSON_Decoder extracts fields
-         (Scanner, ControlID, ControlName, Framework, Severity, etc.) -->
+    <!-- KubeScape security scanner -->
     <decoder name="kubescape">
-        <program_name>kubescape</program_name>
+        <program_name>^kubescape</program_name>
+    </decoder>
+    <decoder name="kubescape-json">
+        <parent>kubescape</parent>
+        <prematch>^{</prematch>
         <plugin_decoder>JSON_Decoder</plugin_decoder>
     </decoder>

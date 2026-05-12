@@ -39,7 +39,7 @@ spec:
                 name: argocd-image-updater-git-secret
                 key: password
         nodeSelector:
-          node_pool: observability-resources
+          node_pool: observability
         serviceAccount:
           annotations:
             iam.gke.io/gcp-service-account: argocd-image-updater@ctrl-plane-prod-b1b92df2.iam.gserviceaccount.com

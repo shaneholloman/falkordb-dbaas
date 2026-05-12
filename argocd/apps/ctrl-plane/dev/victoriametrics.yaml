@@ -33,14 +33,14 @@ spec:
           operator:
             disable_prometheus_converter: true
           nodeSelector:
-            node_pool: observability-resources
+            node_pool: observability
         vmsingle:
           spec:
             port: "8429"
             retentionPeriod: 180d
             logFormat: json
             nodeSelector:
-              node_pool: observability-resources
+              node_pool: observability
             resources:
               requests:
                 memory: "2Gi"
@@ -61,7 +61,7 @@ spec:
         alertmanager:
           spec:
             nodeSelector:
-              node_pool: observability-resources
+              node_pool: observability
             secrets:
               - pagerduty-service-key
             configSecret: null
@@ -160,7 +160,7 @@ spec:
         vmalert:
           spec:
             nodeSelector:
-              node_pool: observability-resources
+              node_pool: observability
             externalLabels:
               environment: dev
             ruleSelector:

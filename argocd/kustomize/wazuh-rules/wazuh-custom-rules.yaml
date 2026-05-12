@@ -47,10 +47,6 @@ data:
         <match>"Status":"FAIL"</match>
         <description>Prowler SOC 2 compliance check FAILED: $(CheckTitle) — $(StatusExtended)</description>
         <group>prowler_compliance,soc2_fail</group>
-        <tsc>CC1.0,CC2.0,CC7.1</tsc>
-        <nist_800_53>CA-7,SI-4</nist_800_53>
-        <pci_dss>12.10.1</pci_dss>
-        <gdpr>III_14</gdpr>
         <options>alert_by_email</options>
       </rule>
 
@@ -60,10 +56,6 @@ data:
         <field name="Severity">critical</field>
         <description>CRITICAL Prowler SOC 2 failure: $(CheckTitle) — $(StatusExtended)</description>
         <group>prowler_compliance,soc2_fail,soc2_critical</group>
-        <tsc>CC7.1,CC7.2,CC7.3</tsc>
-        <nist_800_53>CA-7,SI-4,IR-4</nist_800_53>
-        <pci_dss>12.10.1,12.10.4</pci_dss>
-        <gdpr>III_14,IV_32</gdpr>
       </rule>
 
       <!-- Prowler FAIL — high severity -->
@@ -72,10 +64,6 @@ data:
         <field name="Severity">high</field>
         <description>HIGH Prowler SOC 2 failure: $(CheckTitle) — $(StatusExtended)</description>
         <group>prowler_compliance,soc2_fail</group>
-        <tsc>CC7.1,CC7.2</tsc>
-        <nist_800_53>CA-7,SI-4</nist_800_53>
-        <pci_dss>12.10.1</pci_dss>
-        <gdpr>III_14</gdpr>
       </rule>
 
     </group>
@@ -96,10 +84,6 @@ data:
         <mitre>
           <id>T1098</id>
         </mitre>
-        <tsc>CC6.1,CC6.8</tsc>
-        <nist_800_53>AC-2,AC-3,SI-7</nist_800_53>
-        <pci_dss>10.2.5,11.5</pci_dss>
-        <hipaa>164.312.b</hipaa>
       </rule>
 
       <!-- SSH configuration change -->
@@ -111,10 +95,6 @@ data:
         <mitre>
           <id>T1098.004</id>
         </mitre>
-        <tsc>CC6.1,CC6.6</tsc>
-        <nist_800_53>AC-17,SI-7</nist_800_53>
-        <pci_dss>11.5,2.2.4</pci_dss>
-        <hipaa>164.312.b</hipaa>
       </rule>
 
       <!-- Kubernetes PKI certificate change -->
@@ -126,10 +106,6 @@ data:
         <mitre>
           <id>T1552.004</id>
         </mitre>
-        <tsc>CC6.1,CC6.7</tsc>
-        <nist_800_53>SC-12,IA-5,SI-7</nist_800_53>
-        <pci_dss>3.5,11.5</pci_dss>
-        <hipaa>164.312.a.2.iv</hipaa>
       </rule>
 
     </group>
@@ -148,11 +124,6 @@ data:
         <mitre>
           <id>T1110</id>
         </mitre>
-        <tsc>CC6.1,CC6.2</tsc>
-        <nist_800_53>AC-7,AU-6,SI-4</nist_800_53>
-        <pci_dss>8.1.6,10.2.4</pci_dss>
-        <gdpr>IV_35.7.d</gdpr>
-        <hipaa>164.312.b</hipaa>
       </rule>
 
       <!-- Root/sudo escalation outside maintenance window -->
@@ -165,10 +136,6 @@ data:
           <id>T1078</id>
           <id>T1548</id>
         </mitre>
-        <tsc>CC6.1,CC6.3</tsc>
-        <nist_800_53>AC-2,AC-6,AU-12</nist_800_53>
-        <pci_dss>7.1,10.2.2</pci_dss>
-        <hipaa>164.312.b</hipaa>
       </rule>
 
     </group>
@@ -199,9 +166,6 @@ data:
         <field name="Severity">critical|high</field>
         <description>Grype CVE $(VulnerabilityID) [$(Severity)] in $(Package) on $(ImageName) — $(Cluster)</description>
         <group>grype_vuln,soc2_fail</group>
-        <tsc>CC7.1</tsc>
-        <nist_800_53>SI-2,RA-5,CM-8</nist_800_53>
-        <pci_dss>6.2,11.2.1</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -211,9 +175,6 @@ data:
         <field name="Severity">critical</field>
         <description>CRITICAL CVE $(VulnerabilityID) in $(Package) ($(InstalledVersion)) on $(ImageName) — $(Cluster)</description>
         <group>grype_vuln,soc2_fail,soc2_critical</group>
-        <tsc>CC7.1,CC7.2</tsc>
-        <nist_800_53>SI-2,RA-5,CM-8</nist_800_53>
-        <pci_dss>6.2,11.2.1</pci_dss>
       </rule>
 
       <!-- High CVE — individually logged, not notified -->
@@ -222,9 +183,6 @@ data:
         <field name="Severity">high</field>
         <description>HIGH CVE $(VulnerabilityID) in $(Package) ($(InstalledVersion)) on $(ImageName) — $(Cluster)</description>
         <group>grype_vuln,soc2_fail</group>
-        <tsc>CC7.1</tsc>
-        <nist_800_53>SI-2,RA-5</nist_800_53>
-        <pci_dss>6.2,11.2.1</pci_dss>
       </rule>
 
       <!-- Burst aggregation: 3+ critical/high CVEs on same cluster within 1h
@@ -234,9 +192,6 @@ data:
         <same_field>Cluster</same_field>
         <description>CVE BURST: 3+ critical/high CVEs detected on $(Cluster) within 1h — review evidence locker</description>
         <group>grype_vuln,soc2_fail,soc2_critical,cve_burst</group>
-        <tsc>CC7.1,CC7.2,CC7.3</tsc>
-        <nist_800_53>SI-2,RA-5,IR-4</nist_800_53>
-        <pci_dss>6.2,11.2.1,12.10.4</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -286,9 +241,6 @@ data:
         <field name="priority">Error</field>
         <description>Falco ERROR: $(rule) — $(output)</description>
         <group>falco_runtime,soc2_fail</group>
-        <tsc>CC6.6,CC7.1</tsc>
-        <nist_800_53>SI-3,SI-4</nist_800_53>
-        <pci_dss>11.4,11.5</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -298,9 +250,6 @@ data:
         <field name="priority">Critical</field>
         <description>CRITICAL Falco: $(rule) — $(output)</description>
         <group>falco_runtime,soc2_fail,soc2_critical</group>
-        <tsc>CC6.6,CC7.1,CC7.2</tsc>
-        <nist_800_53>SI-3,SI-4,IR-4</nist_800_53>
-        <pci_dss>11.4,11.5,12.10.4</pci_dss>
       </rule>
 
       <!-- Falco ALERT (highest) priority -->
@@ -309,9 +258,6 @@ data:
         <field name="priority">Alert</field>
         <description>ALERT Falco: $(rule) — $(output)</description>
         <group>falco_runtime,soc2_fail,soc2_critical</group>
-        <tsc>CC6.6,CC7.1,CC7.2</tsc>
-        <nist_800_53>SI-3,SI-4,IR-4</nist_800_53>
-        <pci_dss>11.4,11.5,12.10.4</pci_dss>
       </rule>
 
       <!-- Container escape detected -->
@@ -323,9 +269,6 @@ data:
         <mitre>
           <id>T1611</id>
         </mitre>
-        <tsc>CC6.6,CC7.1,CC7.2</tsc>
-        <nist_800_53>SI-3,SI-4,SC-39</nist_800_53>
-        <pci_dss>11.4,11.5</pci_dss>
       </rule>
 
       <!-- Crypto mining detection -->
@@ -337,9 +280,6 @@ data:
         <mitre>
           <id>T1496</id>
         </mitre>
-        <tsc>CC6.6,CC7.1</tsc>
-        <nist_800_53>SI-3,SI-4</nist_800_53>
-        <pci_dss>11.4,11.5</pci_dss>
       </rule>
 
       <!-- Reverse shell detection -->
@@ -352,9 +292,6 @@ data:
           <id>T1059</id>
           <id>T1071</id>
         </mitre>
-        <tsc>CC6.6,CC7.1,CC7.2</tsc>
-        <nist_800_53>SI-3,SI-4,SC-7</nist_800_53>
-        <pci_dss>11.4,11.5</pci_dss>
       </rule>
 
     </group>
@@ -382,11 +319,6 @@ data:
         <mitre>
           <id>T1552</id>
         </mitre>
-        <tsc>CC6.1,CC6.7</tsc>
-        <nist_800_53>IA-5,SC-28,AC-6</nist_800_53>
-        <pci_dss>3.4,8.2.1</pci_dss>
-        <gdpr>II_5.1.f,IV_32</gdpr>
-        <hipaa>164.312.a.2.iv</hipaa>
         <options>alert_by_email</options>
       </rule>
 
@@ -418,13 +350,10 @@ data:
            Burst rule 100750 fires on 5+ scored fails per cluster per hour. -->
       <rule id="100701" level="7">
         <if_sid>100700</if_sid>
-        <field name="Status">FAIL</field>
+        <match>"Status":"FAIL"</match>
         <field name="Scored">true</field>
         <description>CIS Benchmark FAIL (scored): [$(TestNumber)] $(TestDesc) — $(Cluster)</description>
         <group>kubebench_cis,soc2_fail,cis_fail</group>
-        <tsc>CC7.1</tsc>
-        <nist_800_53>CM-6,CM-7,CA-7</nist_800_53>
-        <pci_dss>2.2,2.2.4</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -434,16 +363,13 @@ data:
         <same_field>Cluster</same_field>
         <description>CIS BURST: 5+ scored CIS benchmark failures on $(Cluster) within 1h — review compliance report</description>
         <group>kubebench_cis,soc2_fail,soc2_critical,cis_burst</group>
-        <tsc>CC7.1,CC7.2</tsc>
-        <nist_800_53>CM-6,CM-7,CA-7,IR-4</nist_800_53>
-        <pci_dss>2.2,12.10.4</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
       <!-- FAIL finding — not scored -->
       <rule id="100702" level="8">
         <if_sid>100700</if_sid>
-        <field name="Status">FAIL</field>
+        <match>"Status":"FAIL"</match>
         <field name="Scored">false</field>
         <description>CIS Benchmark FAIL (unscored): [$(TestNumber)] $(TestDesc) — $(Cluster)</description>
         <group>kubebench_cis,cis_fail</group>
@@ -452,7 +378,7 @@ data:
       <!-- WARN finding -->
       <rule id="100703" level="6">
         <if_sid>100700</if_sid>
-        <field name="Status">WARN</field>
+        <match>"Status":"WARN"</match>
         <description>CIS Benchmark WARN: [$(TestNumber)] $(TestDesc) — $(Cluster)</description>
         <group>kubebench_cis,cis_warn</group>
       </rule>
@@ -479,9 +405,6 @@ data:
         <field name="Severity">critical</field>
         <description>CRITICAL KubeScape: [$(ControlID)] $(ControlName) in $(Framework) — $(Cluster)</description>
         <group>kubescape_attack,soc2_fail,soc2_critical</group>
-        <tsc>CC6.6,CC7.1,CC7.2</tsc>
-        <nist_800_53>SI-4,CM-6,RA-5</nist_800_53>
-        <pci_dss>11.4,2.2</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -491,9 +414,6 @@ data:
         <field name="Severity">high</field>
         <description>HIGH KubeScape: [$(ControlID)] $(ControlName) in $(Framework) — $(Cluster)</description>
         <group>kubescape_attack,soc2_fail</group>
-        <tsc>CC6.6,CC7.1</tsc>
-        <nist_800_53>SI-4,CM-6,RA-5</nist_800_53>
-        <pci_dss>11.4,2.2</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -503,9 +423,6 @@ data:
         <same_field>Cluster</same_field>
         <description>KUBESCAPE BURST: 3+ critical findings on $(Cluster) within 1h</description>
         <group>kubescape_attack,soc2_fail,soc2_critical,kubescape_burst</group>
-        <tsc>CC6.6,CC7.1,CC7.2</tsc>
-        <nist_800_53>SI-4,CM-6,IR-4</nist_800_53>
-        <pci_dss>11.4,12.10.4</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -527,9 +444,6 @@ data:
         <mitre>
           <id>T1190</id>
         </mitre>
-        <tsc>CC6.6,CC7.1,CC7.2</tsc>
-        <nist_800_53>SI-4,RA-5,IR-4</nist_800_53>
-        <pci_dss>11.4,12.10.4</pci_dss>
       </rule>
 
     </group>
@@ -551,10 +465,6 @@ data:
           <id>T1204</id>
           <id>T1059</id>
         </mitre>
-        <tsc>CC6.6,CC7.1,CC7.2</tsc>
-        <nist_800_53>SI-3,SI-4,IR-4</nist_800_53>
-        <pci_dss>5.1,5.2,11.4</pci_dss>
-        <hipaa>164.308.a.5.ii.B</hipaa>
         <options>alert_by_email</options>
       </rule>
 
@@ -588,9 +498,6 @@ data:
           <id>T1190</id>
           <id>T1611</id>
         </mitre>
-        <tsc>CC7.2,CC7.3</tsc>
-        <nist_800_53>IR-4,SI-4,RA-5</nist_800_53>
-        <pci_dss>12.10.4,11.4</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -598,7 +505,6 @@ data:
            Critical CVE found and a container escape attempt detected
            in the same timeframe → high-confidence attack chain. -->
       <rule id="109001" level="15" frequency="2" timeframe="1800">
-        <if_matched_group>soc2_critical</if_matched_group>
         <if_matched_group>container_escape</if_matched_group>
         <description>CORRELATION: Container escape + critical finding on same cluster — active attack chain</description>
         <group>siem_correlation,soc2_critical,attack_chain</group>
@@ -606,9 +512,6 @@ data:
           <id>T1611</id>
           <id>T1068</id>
         </mitre>
-        <tsc>CC7.2,CC7.3</tsc>
-        <nist_800_53>IR-4,SI-4,SC-39</nist_800_53>
-        <pci_dss>12.10.4,11.4</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -624,10 +527,6 @@ data:
           <id>T1552</id>
           <id>T1078</id>
         </mitre>
-        <tsc>CC6.1,CC7.2,CC7.3</tsc>
-        <nist_800_53>IA-5,IR-4,AC-6</nist_800_53>
-        <pci_dss>3.4,8.2.1,12.10.4</pci_dss>
-        <gdpr>IV_32</gdpr>
         <options>alert_by_email</options>
       </rule>
 
@@ -636,16 +535,12 @@ data:
            escalation was detected within 30 minutes → tampering. -->
       <rule id="109003" level="14" frequency="2" timeframe="1800">
         <if_matched_group>fim_critical</if_matched_group>
-        <same_agent>yes</same_agent>
         <description>CORRELATION: Critical file modification + privilege escalation on same host — possible system tampering</description>
         <group>siem_correlation,soc2_critical,system_tampering</group>
         <mitre>
           <id>T1098</id>
           <id>T1548</id>
         </mitre>
-        <tsc>CC6.1,CC7.2,CC7.3</tsc>
-        <nist_800_53>SI-7,IR-4,AC-6</nist_800_53>
-        <pci_dss>10.2.5,11.5,12.10.4</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -660,9 +555,6 @@ data:
         <mitre>
           <id>T1190</id>
         </mitre>
-        <tsc>CC7.1,CC7.2</tsc>
-        <nist_800_53>CM-6,CM-7,RA-5,IR-4</nist_800_53>
-        <pci_dss>2.2,11.4,12.10.4</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -674,9 +566,6 @@ data:
         <same_field>Cluster</same_field>
         <description>CRITICAL CORRELATION: 3+ critical alerts across tools on $(Cluster) — potential coordinated attack</description>
         <group>siem_correlation,soc2_critical,coordinated_attack</group>
-        <tsc>CC7.2,CC7.3,CC7.4</tsc>
-        <nist_800_53>IR-4,IR-5,SI-4</nist_800_53>
-        <pci_dss>12.10.1,12.10.4,12.10.5</pci_dss>
         <options>alert_by_email</options>
       </rule>
 
@@ -693,9 +582,6 @@ data:
           <id>T1059</id>
           <id>T1071</id>
         </mitre>
-        <tsc>CC7.2,CC7.3,CC7.4</tsc>
-        <nist_800_53>IR-4,IR-5,SI-3,SI-4</nist_800_53>
-        <pci_dss>12.10.1,12.10.4,11.4</pci_dss>
         <options>alert_by_email</options>
       </rule>
 

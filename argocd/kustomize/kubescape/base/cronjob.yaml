@@ -56,16 +56,12 @@ spec:
           volumes:
             - name: tmp
               emptyDir: {}
-            - name: syslog-ca
-              secret:
-                secretName: wazuh-syslog-ca
-                optional: true
           containers:
             - name: kubescape
-              image: quay.io/kubescape/kubescape:v3.0.18@sha256:8cee5d84fe0ab887e0c624b2a830dd144542f07773eb5180998ccc6d8ac83831
+              image: python:3.12-slim@sha256:bf73779de6dbd030f3d189eeeb246286965832761ace318c1518300f76c0840d
               resources:
                 requests:
-                  cpu: "500m"
+                  cpu: "250m"
                   memory: "512Mi"
                 limits:
                   cpu: "2"
@@ -81,12 +77,11 @@ spec:
               volumeMounts:
                 - name: tmp
                   mountPath: /tmp
-                - name: syslog-ca
-                  mountPath: /run/secrets/syslog-ca
-                  readOnly: true
               env:
                 - name: HOME
                   value: /tmp
+                - name: KUBESCAPE_VERSION
+                  value: "3.0.18"
                 - name: EVIDENCE_BUCKET
                   valueFrom:
                     secretKeyRef:
@@ -103,13 +98,23 @@ spec:
                       name: kubescape-config
                       key: wazuh-syslog-host
                       optional: true
-                - name: WAZUH_SYSLOG_CA_PATH
-                  value: /run/secrets/syslog-ca/ca.crt
+                - name: GCP_PROJECT_ID
+                  valueFrom:
+                    configMapKeyRef:
+                      name: kubescape-config
+                      key: gcp-project-id
+                      optional: true
               command:
                 - /bin/sh
                 - -c
                 - |
                   set -e
+
+                  # Install kubescape binary from GitHub releases
+                  KUBESCAPE_URL="https://github.com/kubescape/kubescape/releases/download/v${KUBESCAPE_VERSION}/kubescape-ubuntu-latest"
+                  python3 -c "import urllib.request; urllib.request.urlretrieve('${KUBESCAPE_URL}', '/tmp/kubescape')"
+                  chmod +x /tmp/kubescape
+                  export PATH="/tmp:$HOME/.local/bin:$PATH"
 
                   CLUSTER="${CLUSTER_NAME}"
                   OUTPUT_DIR="/tmp/kubescape-output"
@@ -123,7 +128,7 @@ spec:
                     --format json \
                     --output "${OUTPUT_DIR}/mitre-results.json" \
                     --severity-threshold high \
-                    --logger silent \
+                    --logger error \
                     2>"${OUTPUT_DIR}/mitre-stderr.log"; then
                     echo "ERROR: KubeScape MITRE scan failed. stderr:"
                     cat "${OUTPUT_DIR}/mitre-stderr.log"
@@ -135,7 +140,7 @@ spec:
                     --format json \
                     --output "${OUTPUT_DIR}/nsa-results.json" \
                     --severity-threshold high \
-                    --logger silent \
+                    --logger error \
                     2>"${OUTPUT_DIR}/nsa-stderr.log"; then
                     echo "ERROR: KubeScape NSA scan failed. stderr:"
                     cat "${OUTPUT_DIR}/nsa-stderr.log"
@@ -146,7 +151,7 @@ spec:
                   if ! kubescape scan framework allcontrols \
                     --format json \
                     --output "${OUTPUT_DIR}/allcontrols-results.json" \
-                    --logger silent \
+                    --logger error \
                     2>"${OUTPUT_DIR}/allcontrols-stderr.log"; then
                     echo "ERROR: KubeScape AllControls scan failed. stderr:"
                     cat "${OUTPUT_DIR}/allcontrols-stderr.log"
@@ -244,13 +249,25 @@ spec:
                   print(f'KubeScape scan: {len(unique_findings)} findings '
                         f'(C:{sev["critical"]} H:{sev["high"]} M:{sev["medium"]} L:{sev["low"]})')
 
+                  # ── Resolve GCP project for storage client ────────────────
+                  gcp_project = os.environ.get('GCP_PROJECT_ID', '')
+                  if not gcp_project:
+                      try:
+                          import urllib.request as _ur
+                          _req = _ur.Request(
+                              'http://metadata.google.internal/computeMetadata/v1/project/project-id',
+                              headers={'Metadata-Flavor': 'Google'})
+                          gcp_project = _ur.urlopen(_req, timeout=5).read().decode().strip()
+                      except Exception:
+                          pass
+
                   # ── Upload to GCS ──────────────────────────────────────────
                   try:
                       from google.cloud import storage as gcs
                       bucket_name = os.environ['EVIDENCE_BUCKET']
                       date_path = time.strftime('%Y/%m/%d')
                       prefix = f'kubescape/{date_path}/{cluster}'
-                      gclient = gcs.Client()
+                      gclient = gcs.Client(project=gcp_project) if gcp_project else gcs.Client()
                       bucket = gclient.bucket(bucket_name)
                       for f_path in glob.glob(os.path.join(output_dir, '*.json')):
                           if os.path.isfile(f_path):
@@ -269,19 +286,9 @@ spec:
 
                   fwd_count = 0
                   try:
-                      import ssl as _ssl
-                      ctx = _ssl.create_default_context()
-                      ca_path = os.environ.get('WAZUH_SYSLOG_CA_PATH', '')
-                      if ca_path and os.path.isfile(ca_path):
-                          ctx.load_verify_locations(ca_path)
-                      else:
-                          print('WARNING: WAZUH_SYSLOG_CA_PATH not set or missing, TLS verification disabled')
-                          ctx.check_hostname = False
-                          ctx.verify_mode = _ssl.CERT_NONE
-                      raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                      raw_sock.settimeout(10)
-                      sock = ctx.wrap_socket(raw_sock, server_hostname=syslog_host)
-                      sock.connect((syslog_host, 1516))
+                      sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                      sock.settimeout(10)
+                      sock.connect((syslog_host, 514))
                       for f in unique_findings:
                           if f['Severity'] in ('critical', 'high'):
                               ts = time.strftime('%b %d %H:%M:%S')
@@ -291,7 +298,7 @@ spec:
                               sock.sendall(msg.encode())
                               fwd_count += 1
                       sock.close()
-                      print(f'Forwarded {fwd_count} findings to Wazuh at {syslog_host}:1516 (TLS)')
+                      print(f'Forwarded {fwd_count} findings to Wazuh at {syslog_host}:514')
                   except Exception as e:
                       print(f'WARNING: Syslog forwarding failed: {e}')
                   PYEOF

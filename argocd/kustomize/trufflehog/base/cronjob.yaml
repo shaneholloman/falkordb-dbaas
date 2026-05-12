@@ -48,16 +48,12 @@ spec:
           volumes:
             - name: tmp
               emptyDir: {}
-            - name: syslog-ca
-              secret:
-                secretName: wazuh-syslog-ca
-                optional: true
           containers:
             - name: trufflehog
-              image: python:3.12-slim@sha256:4386a385d81dba9f72ed72a6fe4237755d7f5440c84b417650f38336bbc43117
+              image: python:3.12-slim@sha256:bf73779de6dbd030f3d189eeeb246286965832761ace318c1518300f76c0840d
               resources:
                 requests:
-                  cpu: "500m"
+                  cpu: "250m"
                   memory: "1Gi"
                 limits:
                   cpu: "2"
@@ -73,9 +69,6 @@ spec:
               volumeMounts:
                 - name: tmp
                   mountPath: /tmp
-                - name: syslog-ca
-                  mountPath: /run/secrets/syslog-ca
-                  readOnly: true
               env:
                 - name: HOME
                   value: /tmp
@@ -97,18 +90,29 @@ spec:
                       name: trufflehog-config
                       key: wazuh-syslog-host
                       optional: true
-                - name: WAZUH_SYSLOG_CA_PATH
-                  value: /run/secrets/syslog-ca/ca.crt
+                - name: GCP_PROJECT_ID
+                  valueFrom:
+                    configMapKeyRef:
+                      name: trufflehog-config
+                      key: gcp-project-id
+                      optional: true
               command:
                 - /bin/sh
                 - -c
                 - |
                   set -e
 
+                  # Install trufflehog binary from GitHub releases
+                  THOG_VERSION="${TRUFFLEHOG_VERSION}"
+                  THOG_URL="https://github.com/trufflesecurity/trufflehog/releases/download/v${THOG_VERSION}/trufflehog_${THOG_VERSION}_linux_amd64.tar.gz"
+                  python3 -c "import urllib.request; urllib.request.urlretrieve('${THOG_URL}', '/tmp/trufflehog.tar.gz')"
+                  tar xzf /tmp/trufflehog.tar.gz -C /tmp trufflehog
+                  chmod +x /tmp/trufflehog
+
                   pip install --quiet --no-cache-dir --user \
                     google-cloud-storage kubernetes
 
-                  export PATH="$HOME/.local/bin:$PATH"
+                  export PATH="/tmp:$HOME/.local/bin:$PATH"
                   python3 <<'PYEOF'
                   import os, sys, json, subprocess, socket, time, glob
 
@@ -116,18 +120,8 @@ spec:
                   output_dir = '/tmp/trufflehog-output'
                   os.makedirs(output_dir, exist_ok=True)
 
-                  # ── Install trufflehog binary ──────────────────────────────
-                  version = os.environ.get('TRUFFLEHOG_VERSION', '3.88.0')
-                  print(f'Installing trufflehog v{version}...')
-                  subprocess.check_call([
-                      sys.executable, '-m', 'pip', 'install', '--quiet',
-                      '--no-cache-dir', '--user', f'trufflehog=={version}'
-                  ])
-                  thog_bin = os.path.expanduser('~/.local/bin/trufflehog')
-                  if not os.path.exists(thog_bin):
-                      # Try finding it via pip show
-                      import shutil
-                      thog_bin = shutil.which('trufflehog') or '/tmp/.local/bin/trufflehog'
+                  # ── trufflehog binary already installed to /tmp ─────────────
+                  thog_bin = '/tmp/trufflehog'
                   print(f'trufflehog binary: {thog_bin}')
 
                   # ── Discover running container images ──────────────────────
@@ -214,13 +208,24 @@ spec:
                         f'(verified:{verified} unverified:{unverified}), '
                         f'{len(scan_errors)} errors')
 
+                  # ── Resolve GCP project for storage client ────────────────
+                  gcp_project = os.environ.get('GCP_PROJECT_ID', '')
+                  if not gcp_project:
+                      try:
+                          _req = urllib.request.Request(
+                              'http://metadata.google.internal/computeMetadata/v1/project/project-id',
+                              headers={'Metadata-Flavor': 'Google'})
+                          gcp_project = urllib.request.urlopen(_req, timeout=5).read().decode().strip()
+                      except Exception:
+                          pass
+
                   # ── Upload to GCS evidence locker ──────────────────────────
                   try:
                       from google.cloud import storage as gcs
                       bucket_name = os.environ['EVIDENCE_BUCKET']
                       date_path = time.strftime('%Y/%m/%d')
                       prefix = f'trufflehog/{date_path}/{cluster}'
-                      gclient = gcs.Client()
+                      gclient = gcs.Client(project=gcp_project) if gcp_project else gcs.Client()
                       bucket = gclient.bucket(bucket_name)
                       for f_path in glob.glob(os.path.join(output_dir, '*.json')):
                           if os.path.isfile(f_path):
@@ -239,19 +244,9 @@ spec:
 
                   fwd_count = 0
                   try:
-                      import ssl as _ssl
-                      ctx = _ssl.create_default_context()
-                      ca_path = os.environ.get('WAZUH_SYSLOG_CA_PATH', '')
-                      if ca_path and os.path.isfile(ca_path):
-                          ctx.load_verify_locations(ca_path)
-                      else:
-                          print('WARNING: WAZUH_SYSLOG_CA_PATH not set or missing, TLS verification disabled')
-                          ctx.check_hostname = False
-                          ctx.verify_mode = _ssl.CERT_NONE
-                      raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                      raw_sock.settimeout(10)
-                      sock = ctx.wrap_socket(raw_sock, server_hostname=syslog_host)
-                      sock.connect((syslog_host, 1516))
+                      sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                      sock.settimeout(10)
+                      sock.connect((syslog_host, 514))
                       for f in all_findings:
                           # Build a Wazuh-friendly JSON payload
                           payload = {
@@ -277,7 +272,7 @@ spec:
                           sock.sendall(msg.encode())
                           fwd_count += 1
                       sock.close()
-                      print(f'Forwarded {fwd_count} findings to Wazuh at {syslog_host}:1516 (TLS)')
+                      print(f'Forwarded {fwd_count} findings to Wazuh at {syslog_host}:514')
                   except Exception as e:
                       print(f'WARNING: Syslog forwarding failed: {e}')
                   PYEOF

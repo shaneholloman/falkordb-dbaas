@@ -150,13 +150,54 @@ echo ""
 # ── clean & init ──────────────────────────────────────────────────────
 cd "$STACK_DIR"
 
-echo "Cleaning cached state..."
-rm -rf .terraform .terragrunt-cache
+# Determine the backend bucket this invocation will target. If existing
+# cached state already points at the same bucket, skip the wipe so we
+# avoid an unnecessary backend re-init / provider re-download.
+case "$STACK" in
+  aws-org|aws-app-plane|aws-bootstrap)
+    DESIRED_BUCKET="$(grep -E '^[[:space:]]*bucket[[:space:]]*=' backend.tf 2>/dev/null \
+      | head -1 \
+      | sed -E 's/.*=[ \t]*"([^"]+)".*/\1/')"
+    ;;
+  *)
+    if [ -n "${TF_STATE_BUCKET:-}" ]; then
+      DESIRED_BUCKET="$TF_STATE_BUCKET"
+    else
+      case "$TF_ENVIRONMENT" in
+        prod|production) DESIRED_BUCKET="falkordb-prod-state-c49b" ;;
+        *)               DESIRED_BUCKET="falkordb-dev-state-4620" ;;
+      esac
+    fi
+    ;;
+esac
+
+SKIP_CLEAN=false
+if [ -n "$DESIRED_BUCKET" ]; then
+  CACHED_STATES="$(find . \( -path ./.terraform/terraform.tfstate \
+                          -o -path './.terragrunt-cache/*/.terraform/terraform.tfstate' \) \
+                       2>/dev/null)"
+  if [ -n "$CACHED_STATES" ]; then
+    SKIP_CLEAN=true
+    for f in $CACHED_STATES; do
+      if ! grep -q "\"bucket\": \"$DESIRED_BUCKET\"" "$f"; then
+        SKIP_CLEAN=false
+        break
+      fi
+    done
+  fi
+fi
+
+if [ "$SKIP_CLEAN" = true ]; then
+  echo "Cached state already targets bucket '$DESIRED_BUCKET' — reusing cache."
+else
+  echo "Cleaning cached state..."
+  rm -rf .terraform .terragrunt-cache
+fi
 echo ""
 
 echo "Initialising..."
 if [ "$TOOL" = "terragrunt" ]; then
-  terragrunt init
+  terragrunt init -upgrade
 else
   tofu init
 fi

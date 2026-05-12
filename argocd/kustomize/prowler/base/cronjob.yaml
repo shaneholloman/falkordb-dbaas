@@ -48,16 +48,12 @@ spec:
           volumes:
             - name: prowler-tmp
               emptyDir: {}
-            - name: syslog-ca
-              secret:
-                secretName: wazuh-syslog-ca
-                optional: true
           containers:
             - name: prowler
               image: toniblyx/prowler:4.6.1@sha256:04bbabd0a66bc0e9d68b3065524ad36df8c2886aab9bbbfef2f80464b026d2b1
               resources:
                 requests:
-                  cpu: "500m"
+                  cpu: "250m"
                   memory: "512Mi"
                 limits:
                   cpu: "1"
@@ -73,9 +69,6 @@ spec:
               volumeMounts:
                 - name: prowler-tmp
                   mountPath: /tmp
-                - name: syslog-ca
-                  mountPath: /run/secrets/syslog-ca
-                  readOnly: true
               env:
                 - name: EVIDENCE_BUCKET
                   valueFrom:
@@ -109,8 +102,6 @@ spec:
                       name: prowler-config
                       key: wazuh-syslog-host
                       optional: true
-                - name: WAZUH_SYSLOG_CA_PATH
-                  value: /run/secrets/syslog-ca/ca.crt
               command:
                 - /bin/sh
                 - -c
@@ -140,19 +131,29 @@ spec:
 
                   # Upload results to the central GCS evidence locker.
                   # google-cloud-storage is not bundled in the Prowler image.
-                  pip install --quiet --user google-cloud-storage
+                  pip install --quiet --no-cache-dir --target /tmp/pip-packages google-cloud-storage
+                  export PYTHONPATH="/tmp/pip-packages:${PYTHONPATH:-}"
 
                   export DATE_PATH OUTPUT_DIR
                   python3 <<'PYEOF'
-                  import os, glob
+                  import os, glob, urllib.request
                   from google.cloud import storage
+                  gcp_project = os.environ.get('GCP_PROJECT_ID', '')
+                  if not gcp_project:
+                      try:
+                          _req = urllib.request.Request(
+                              'http://metadata.google.internal/computeMetadata/v1/project/project-id',
+                              headers={'Metadata-Flavor': 'Google'})
+                          gcp_project = urllib.request.urlopen(_req, timeout=5).read().decode().strip()
+                      except Exception:
+                          pass
                   bucket_name = os.environ['EVIDENCE_BUCKET']
                   cloud = os.environ['CLOUD_PROVIDER']
                   cluster = os.environ['CLUSTER_NAME']
                   date_path = os.environ['DATE_PATH']
                   output_dir = os.environ['OUTPUT_DIR']
                   prefix = f'prowler/{date_path}/{cloud}-{cluster}'
-                  client = storage.Client()
+                  client = storage.Client(project=gcp_project) if gcp_project else storage.Client()
                   bucket = client.bucket(bucket_name)
                   for f in glob.glob(os.path.join(output_dir, '**', '*'), recursive=True):
                       if os.path.isfile(f):
@@ -175,10 +176,9 @@ spec:
                   # CheckTitle, Severity, StatusExtended).
                   python3 <<'SYSLOG_EOF'
                   import os, glob, json, socket, time
-                  import ssl as _ssl
 
                   syslog_host = os.environ.get('WAZUH_SYSLOG_HOST', '')
-                  syslog_port = 1516  # TLS syslog (stunnel)
+                  syslog_port = 514  # Plain TCP syslog
                   if not syslog_host:
                       print('WAZUH_SYSLOG_HOST not set, skipping syslog forwarding')
                       exit(0)
@@ -217,17 +217,8 @@ spec:
 
                   fail_count = 0
                   try:
-                      ctx = _ssl.create_default_context()
-                      ca_path = os.environ.get('WAZUH_SYSLOG_CA_PATH', '')
-                      if ca_path and os.path.isfile(ca_path):
-                          ctx.load_verify_locations(ca_path)
-                      else:
-                          print('WARNING: WAZUH_SYSLOG_CA_PATH not set or missing, TLS verification disabled')
-                          ctx.check_hostname = False
-                          ctx.verify_mode = _ssl.CERT_NONE
-                      raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                      raw_sock.settimeout(10)
-                      sock = ctx.wrap_socket(raw_sock, server_hostname=syslog_host)
+                      sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                      sock.settimeout(10)
                       sock.connect((syslog_host, syslog_port))
                       for finding in findings:
                           if not isinstance(finding, dict):

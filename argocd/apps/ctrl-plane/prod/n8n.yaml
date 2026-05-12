@@ -17,6 +17,8 @@ spec:
           type: postgresdb
         main:
           count: 1
+          pdb:
+            enabled: false
           persistence:
             enabled: true
             accessMode: ReadWriteOnce

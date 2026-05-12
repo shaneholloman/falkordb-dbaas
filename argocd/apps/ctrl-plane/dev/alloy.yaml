@@ -419,7 +419,7 @@ spec:
             controller:
               type: statefulset
               nodeSelector:
-                node_pool: observability-resources
+                node_pool: observability
       destination:
         server: "{{.server}}"
         namespace: observability

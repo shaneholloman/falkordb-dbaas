@@ -67,6 +67,15 @@ configs:
       g, devops@falkordb.com, role:admin
     scopes: "[groups, email]"
 
+repoServer:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
 dex:
   volumeMounts:
     - mountPath: /tmp/oidc
@@ -85,6 +94,17 @@ controller:
       value: "1"
   extraArgs:
     - --sharding-method=round-robin
+    - --status-processors=50
+    - --operation-processors=25
+    - --self-heal-timeout-seconds=5
+    - --kubectl-parallelism-limit=20
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
   metrics:
     enabled: true
   serviceAccount:
