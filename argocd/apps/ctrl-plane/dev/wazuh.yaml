@@ -264,12 +264,6 @@ spec:
             extraSpec:
               # Raise the Wazuh API rate limit so all agents can register
               # concurrently without hitting 429 "Too Many Requests".
-              container:
-                env:
-                  - name: WAZUH_ENVIRONMENT
-                    value: "DEV"
-                  - name: WAZUH_DASHBOARD_URL
-                    value: "https://wazuh.security.dev.internal.falkordb.cloud"
               pod:
                 initContainers:
                   - name: init-cluster-key
