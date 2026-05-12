@@ -18,7 +18,7 @@ data:
     OSSEC_CONF=/var/ossec/etc/ossec.conf
     if [ -f "$KEY_FILE" ] && [ -f "$OSSEC_CONF" ]; then
       CLUSTER_KEY=$(cat "$KEY_FILE")
-      sed -i "s|<key>placeholder-replaced-at-runtime</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
+      sed -i "s|<key>[a-zA-Z0-9_-]\{1,\}</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
       echo "Cluster key injected into ossec.conf"
     else
       echo "WARNING: cluster key file or ossec.conf not found" >&2

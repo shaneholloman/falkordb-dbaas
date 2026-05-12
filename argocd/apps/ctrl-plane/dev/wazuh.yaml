@@ -49,9 +49,15 @@ spec:
             existingSecret: "wazuh-manager-authd"
           # Custom SOC 2 rules (full rules in wazuh-custom-rules ConfigMap,
           # mounted to ruleset/rules/ to avoid conflicting with chart's config volume)
-          localRules: ""
+          localRules: |
+            <group name="local,">
+              <rule id="100001" level="0">
+                <description>Placeholder local rule</description>
+              </rule>
+            </group>
           # Custom decoders (full decoders in wazuh-custom-decoders ConfigMap)
-          localDecoders: ""
+          localDecoders: |
+            <!-- local decoders placeholder -->
           # Pre-create agent groups so the register_agent.py script can assign
           # agents immediately without a 404 "group does not exist" error.
           agentGroupConf:
@@ -269,7 +275,8 @@ spec:
                         OSSEC_CONF=/mnt/master/wazuh/var/ossec/etc/ossec.conf
                         CLUSTER_KEY=$(cat /run/secrets/cluster-key/key)
                         if [ -f "$OSSEC_CONF" ]; then
-                          sed -i "s|<key>placeholder-replaced-at-runtime</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
+                          # Replace placeholder OR any existing 32-char hex key
+                          sed -i "s|<key>[a-zA-Z0-9_-]\{1,\}</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
                         fi
                         # Also configure API rate limits
                         API_YAML=/mnt/master/wazuh/var/ossec/api/configuration/api.yaml
