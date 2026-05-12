@@ -334,13 +334,24 @@ spec:
                   print(f'CIS Benchmark: PASS={summary["total_pass"]} FAIL={summary["total_fail"]} '
                         f'WARN={summary["total_warn"]} INFO={summary["total_info"]}')
 
+                  # ── Resolve GCP project for storage client ────────────────
+                  gcp_project = os.environ.get('GCP_PROJECT_ID', '')
+                  if not gcp_project:
+                      try:
+                          _req = urllib.request.Request(
+                              'http://metadata.google.internal/computeMetadata/v1/project/project-id',
+                              headers={'Metadata-Flavor': 'Google'})
+                          gcp_project = urllib.request.urlopen(_req, timeout=5).read().decode().strip()
+                      except Exception:
+                          pass
+
                   # ── Upload to GCS ──────────────────────────────────────────
                   try:
                       from google.cloud import storage as gcs
                       bucket_name = os.environ['EVIDENCE_BUCKET']
                       date_path = time.strftime('%Y/%m/%d')
                       prefix = f'kube-bench/{date_path}/{cluster}'
-                      gclient = gcs.Client()
+                      gclient = gcs.Client(project=gcp_project) if gcp_project else gcs.Client()
                       bucket = gclient.bucket(bucket_name)
                       for f_path in glob.glob(os.path.join(output_dir, '*.json')):
                           if os.path.isfile(f_path):

@@ -145,15 +145,24 @@ spec:
 
                   export DATE_PATH OUTPUT_DIR
                   python3 <<'PYEOF'
-                  import os, glob
+                  import os, glob, urllib.request
                   from google.cloud import storage
+                  gcp_project = os.environ.get('GCP_PROJECT_ID', '')
+                  if not gcp_project:
+                      try:
+                          _req = urllib.request.Request(
+                              'http://metadata.google.internal/computeMetadata/v1/project/project-id',
+                              headers={'Metadata-Flavor': 'Google'})
+                          gcp_project = urllib.request.urlopen(_req, timeout=5).read().decode().strip()
+                      except Exception:
+                          pass
                   bucket_name = os.environ['EVIDENCE_BUCKET']
                   cloud = os.environ['CLOUD_PROVIDER']
                   cluster = os.environ['CLUSTER_NAME']
                   date_path = os.environ['DATE_PATH']
                   output_dir = os.environ['OUTPUT_DIR']
                   prefix = f'prowler/{date_path}/{cloud}-{cluster}'
-                  client = storage.Client()
+                  client = storage.Client(project=gcp_project) if gcp_project else storage.Client()
                   bucket = client.bucket(bucket_name)
                   for f in glob.glob(os.path.join(output_dir, '**', '*'), recursive=True):
                       if os.path.isfile(f):
