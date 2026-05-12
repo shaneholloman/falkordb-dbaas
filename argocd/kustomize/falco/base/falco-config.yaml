@@ -45,14 +45,19 @@ data:
     http_output:
       enabled: false
 
-    # gRPC output — disabled
-    grpc:
-      enabled: false
-
     # Buffered outputs for performance
     buffered_outputs: true
     outputs_queue:
       capacity: 256
+
+    # Container plugin (required since Falco 0.42+)
+    plugins:
+      - name: container
+        library_path: libcontainer.so
+        init_config: ""
+
+    load_plugins:
+      - container
 
     # Container engines — CRI socket paths for K8s metadata
     container_engines:
@@ -60,10 +65,6 @@ data:
         sockets:
           - /run/containerd/containerd.sock
           - /run/crio/crio.sock
-
-    # Rate limiting: max alerts per second
-    output_rate: 100
-    output_max_burst: 200
 
     # Log level
     log_level: info
