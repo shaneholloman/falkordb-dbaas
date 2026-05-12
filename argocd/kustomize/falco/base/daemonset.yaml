@@ -74,6 +74,13 @@ spec:
         - name: sys-kernel
           hostPath:
             path: /sys/kernel
+        # Tracefs for modern_ebpf on COS kernels
+        - name: sys-kernel-tracing
+          hostPath:
+            path: /sys/kernel/tracing
+        - name: sys-kernel-debug-tracing
+          hostPath:
+            path: /sys/kernel/debug/tracing
         # Containerd socket for CRI metadata
         - name: containerd-sock
           hostPath:
@@ -124,6 +131,12 @@ spec:
               mountPath: /dev/shm
             - name: sys-kernel
               mountPath: /sys/kernel
+              readOnly: true
+            - name: sys-kernel-tracing
+              mountPath: /sys/kernel/tracing
+              readOnly: true
+            - name: sys-kernel-debug-tracing
+              mountPath: /sys/kernel/debug/tracing
               readOnly: true
             - name: containerd-sock
               mountPath: /run/containerd/containerd.sock

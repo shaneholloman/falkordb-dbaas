@@ -62,9 +62,8 @@ data:
           - /run/crio/crio.sock
 
     # Rate limiting: max alerts per second
-    outputs:
-      rate: 100
-      max_burst: 200
+    output_rate: 100
+    output_max_burst: 200
 
     # Log level
     log_level: info
