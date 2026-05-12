@@ -317,6 +317,30 @@ spec:
               </active-response>
             # Inject Google Chat webhook URL from sealed secret
             extraSpec:
+              # The wazuh image uses s6 to supervise filebeat. The default
+              # finish script kills the entire container when filebeat exits
+              # (even on code 0, e.g. close_inactive timeout on alerts.json).
+              # Replace it with a script that simply restarts filebeat via s6.
+              container:
+                lifecycle:
+                  postStart:
+                    exec:
+                      command:
+                        - /bin/sh
+                        - -c
+                        - |
+                          (
+                            # Wait for s6 to create the finish script
+                            for i in $(seq 1 30); do
+                              [ -f /var/run/s6/services/filebeat/finish ] && break
+                              sleep 1
+                            done
+                            # Replace the finish script: restart filebeat instead of killing container
+                            cat > /var/run/s6/services/filebeat/finish <<'FINISH'
+                          #!/usr/bin/env sh
+                          echo >&2 "Filebeat exited. code=${1} — restarting via s6"
+                          FINISH
+                          ) &
               # Raise the Wazuh API rate limit so all agents can register
               # concurrently without hitting 429 "Too Many Requests".
               pod:
@@ -429,6 +453,24 @@ spec:
                 mountPath: /run/secrets/cluster-key
                 readOnly: true
             extraSpec:
+              container:
+                lifecycle:
+                  postStart:
+                    exec:
+                      command:
+                        - /bin/sh
+                        - -c
+                        - |
+                          (
+                            for i in $(seq 1 30); do
+                              [ -f /var/run/s6/services/filebeat/finish ] && break
+                              sleep 1
+                            done
+                            cat > /var/run/s6/services/filebeat/finish <<'FINISH'
+                          #!/usr/bin/env sh
+                          echo >&2 "Filebeat exited. code=${1} — restarting via s6"
+                          FINISH
+                          ) &
               pod:
                 initContainers:
                   - name: init-cluster-key
