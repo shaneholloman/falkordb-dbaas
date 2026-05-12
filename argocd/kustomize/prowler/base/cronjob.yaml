@@ -48,6 +48,8 @@ spec:
           volumes:
             - name: prowler-tmp
               emptyDir: {}
+            - name: prowler-home
+              emptyDir: {}
             - name: syslog-ca
               secret:
                 secretName: wazuh-syslog-ca
@@ -73,6 +75,8 @@ spec:
               volumeMounts:
                 - name: prowler-tmp
                   mountPath: /tmp
+                - name: prowler-home
+                  mountPath: /home/prowler
                 - name: syslog-ca
                   mountPath: /run/secrets/syslog-ca
                   readOnly: true
