@@ -223,12 +223,12 @@ def mask_in_actions(value: str) -> None:
 
 
 def gcs_object_exists(client: storage.Client, bucket: str, object_name: str) -> bool:
-    """Check if a GCS object exists without downloading it."""
-    try:
-        return client.bucket(bucket).blob(object_name).exists(client)
-    except Exception as e:
-        print(f"  ⚠️  Error checking GCS object {object_name}: {e}", file=sys.stderr)
-        return False
+    """Check if a GCS object exists without downloading it.
+
+    Raises on auth/permission/network errors so callers can distinguish
+    'object not found' from 'check failed'.
+    """
+    return client.bucket(bucket).blob(object_name).exists(client)
 
 
 def detect_aof_enabled(namespace: str, pod: str, container: str) -> bool:
@@ -236,10 +236,16 @@ def detect_aof_enabled(namespace: str, pod: str, container: str) -> bool:
     
     Falls back to pod-name heuristic if query fails (e.g., Redis down post-OOM).
     """
-    cmd = ["sh", "-c", "export REDISCLI_AUTH=$(cat /run/secrets/adminpassword) && redis-cli --no-auth-warning CONFIG GET appendonly | grep -i yes"]
+    cmd = ["sh", "-c", "export REDISCLI_AUTH=$(cat /run/secrets/adminpassword) && redis-cli --no-auth-warning CONFIG GET appendonly"]
     output = kubectl_exec_output(namespace, pod, container, cmd)
-    if output and "yes" in output.lower():
-        return True
+    if output is not None:
+        # CONFIG GET returns two lines: the key name then the value.
+        # Parse the value rather than relying on grep so that 'no' is
+        # correctly detected instead of falling through to the heuristic.
+        lines = output.strip().splitlines()
+        for i, line in enumerate(lines):
+            if line.strip().lower() == "appendonly" and i + 1 < len(lines):
+                return lines[i + 1].strip().lower() == "yes"
     # Fallback to pod naming convention if query fails
     return pod not in ("node-f-0",)
 
