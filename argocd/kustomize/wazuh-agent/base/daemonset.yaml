@@ -151,6 +151,9 @@ spec:
               mountPath: /var/ossec/etc/rootCA.pem
               subPath: ca.crt
               readOnly: true
+            - name: entrypoint-scripts
+              mountPath: /entrypoint-scripts
+              readOnly: true
           lifecycle:
             postStart:
               exec:
@@ -181,6 +184,8 @@ spec:
 
                     for i in $(seq 1 30); do
                       if grep -q "Connected to the server" /var/ossec/logs/ossec.log 2>/dev/null; then
+                        # Save keys to persistent storage for next restart
+                        cp /var/ossec/etc/client.keys /var/ossec/data/client.keys 2>/dev/null
                         start_missing
                         exit 0
                       fi
@@ -240,3 +245,7 @@ spec:
           secret:
             secretName: wazuh-manager-ca
             optional: true
+        - name: entrypoint-scripts
+          configMap:
+            name: wazuh-agent-entrypoint-scripts
+            defaultMode: 0755
