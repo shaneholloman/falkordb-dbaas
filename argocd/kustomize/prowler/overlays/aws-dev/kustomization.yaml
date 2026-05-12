@@ -17,3 +17,7 @@ generatorOptions:
 patches:
   - path: aws-credentials-patch.yaml
   - path: remove-nodeselector-patch.yaml
+  - target:
+      kind: CronJob
+      name: prowler-soc2-scan
+    path: remove-resources-patch.yaml

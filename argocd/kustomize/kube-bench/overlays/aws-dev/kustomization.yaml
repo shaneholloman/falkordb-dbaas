@@ -15,3 +15,7 @@ generatorOptions:
 patches:
   - path: aws-credentials-patch.yaml
   - path: remove-nodeselector-patch.yaml
+  - target:
+      kind: CronJob
+      name: kube-bench-cis-scan
+    path: remove-resources-patch.yaml

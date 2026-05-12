@@ -1,4 +1,5 @@
 # Schedule scan pods on the security-infra node pool in AWS app-plane clusters.
+# Resources removed — t3.small nodes can't accommodate base requests.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -27,3 +28,4 @@ spec:
             - key: CriticalAddonsOnly
               operator: Exists
               effect: NoSchedule
+
