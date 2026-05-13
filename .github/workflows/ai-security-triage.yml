@@ -22,13 +22,8 @@ on:
         options:
           - prod
           - dev
-      vmauth_url:
-        description: 'Override VMAuth URL (optional)'
-        required: false
-        type: string
-        default: ''
-      wazuh_api_url:
-        description: 'Override Wazuh API URL (optional)'
+      wazuh_indexer_url:
+        description: 'Override Wazuh Indexer URL (optional)'
         required: false
         type: string
         default: ''
@@ -79,44 +74,29 @@ jobs:
         id: urls
         env:
           ENVIRONMENT: ${{ inputs.environment || 'prod' }}
-          VMAUTH_OVERRIDE: ${{ inputs.vmauth_url }}
-          WAZUH_OVERRIDE: ${{ inputs.wazuh_api_url }}
-          VMAUTH_URL_DEV: ${{ vars.VMAUTH_URL_DEV }}
-          VMAUTH_URL_PROD: ${{ vars.VMAUTH_URL_PROD }}
-          WAZUH_API_URL_DEV: ${{ vars.WAZUH_API_URL_DEV }}
-          WAZUH_API_URL_PROD: ${{ vars.WAZUH_API_URL_PROD }}
+          WAZUH_INDEXER_OVERRIDE: ${{ inputs.wazuh_indexer_url }}
+          WAZUH_INDEXER_URL_DEV: ${{ vars.WAZUH_INDEXER_URL_DEV }}
+          WAZUH_INDEXER_URL_PROD: ${{ vars.WAZUH_INDEXER_URL_PROD }}
         run: |
-          if [ -n "$VMAUTH_OVERRIDE" ]; then
-            VMAUTH_URL="$VMAUTH_OVERRIDE"
+          if [ -n "$WAZUH_INDEXER_OVERRIDE" ]; then
+            WAZUH_INDEXER_URL="$WAZUH_INDEXER_OVERRIDE"
           elif [ "$ENVIRONMENT" = "dev" ]; then
-            VMAUTH_URL="$VMAUTH_URL_DEV"
+            WAZUH_INDEXER_URL="$WAZUH_INDEXER_URL_DEV"
           else
-            VMAUTH_URL="$VMAUTH_URL_PROD"
+            WAZUH_INDEXER_URL="$WAZUH_INDEXER_URL_PROD"
           fi
-          if [ -n "$WAZUH_OVERRIDE" ]; then
-            WAZUH_API_URL="$WAZUH_OVERRIDE"
-          elif [ "$ENVIRONMENT" = "dev" ]; then
-            WAZUH_API_URL="$WAZUH_API_URL_DEV"
-          else
-            WAZUH_API_URL="$WAZUH_API_URL_PROD"
-          fi
-          echo "VMAUTH_URL=$VMAUTH_URL" >> "$GITHUB_ENV"
-          echo "WAZUH_API_URL=$WAZUH_API_URL" >> "$GITHUB_ENV"
+          echo "WAZUH_INDEXER_URL=$WAZUH_INDEXER_URL" >> "$GITHUB_ENV"
 
       - name: Set environment-scoped credentials
         env:
           ENVIRONMENT: ${{ inputs.environment || 'prod' }}
-          VMAUTH_PASS_DEV: ${{ secrets.VMAUTH_PASSWORD_DEV }}
-          VMAUTH_PASS_PROD: ${{ secrets.VMAUTH_PASSWORD_PROD }}
-          WAZUH_PASS_DEV: ${{ secrets.WAZUH_API_PASSWORD_DEV }}
-          WAZUH_PASS_PROD: ${{ secrets.WAZUH_API_PASSWORD_PROD }}
+          WAZUH_INDEXER_PASS_DEV: ${{ secrets.WAZUH_INDEXER_PASSWORD_DEV }}
+          WAZUH_INDEXER_PASS_PROD: ${{ secrets.WAZUH_INDEXER_PASSWORD_PROD }}
         run: |
           if [ "$ENVIRONMENT" = "dev" ]; then
-            echo "VMAUTH_PASSWORD=$VMAUTH_PASS_DEV" >> "$GITHUB_ENV"
-            echo "WAZUH_API_PASSWORD=$WAZUH_PASS_DEV" >> "$GITHUB_ENV"
+            echo "WAZUH_INDEXER_PASSWORD=$WAZUH_INDEXER_PASS_DEV" >> "$GITHUB_ENV"
           else
-            echo "VMAUTH_PASSWORD=$VMAUTH_PASS_PROD" >> "$GITHUB_ENV"
-            echo "WAZUH_API_PASSWORD=$WAZUH_PASS_PROD" >> "$GITHUB_ENV"
+            echo "WAZUH_INDEXER_PASSWORD=$WAZUH_INDEXER_PASS_PROD" >> "$GITHUB_ENV"
           fi
 
       - name: Run AI security triage
@@ -125,12 +105,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
           PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
           ISSUE_REPO: ${{ env.ISSUE_REPO }}
-          VMAUTH_URL: ${{ env.VMAUTH_URL }}
-          VMAUTH_USERNAME: ${{ vars.VMAUTH_USERNAME }}
-          VMAUTH_PASSWORD: ${{ env.VMAUTH_PASSWORD }}
-          WAZUH_API_URL: ${{ env.WAZUH_API_URL }}
-          WAZUH_API_USERNAME: ${{ vars.WAZUH_API_USERNAME }}
-          WAZUH_API_PASSWORD: ${{ env.WAZUH_API_PASSWORD }}
+          WAZUH_INDEXER_URL: ${{ env.WAZUH_INDEXER_URL }}
+          WAZUH_INDEXER_USERNAME: ${{ vars.WAZUH_INDEXER_USERNAME }}
+          WAZUH_INDEXER_PASSWORD: ${{ env.WAZUH_INDEXER_PASSWORD }}
+          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL_PRODUCTION_CHAT }}
         run: |
           cd scripts
           python ai_security_triage.py \
