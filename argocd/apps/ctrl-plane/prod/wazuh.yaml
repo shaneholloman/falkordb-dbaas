@@ -178,7 +178,6 @@ spec:
               - name: wazuh-accepted-cves
                 mountPath: /var/ossec/etc/lists/accepted-cves
                 subPath: accepted-cves
-                readOnly: true
               # Alert exceptions file for Google Chat integration
               - name: alert-exceptions
                 mountPath: /var/ossec/etc/alert-exceptions.json
