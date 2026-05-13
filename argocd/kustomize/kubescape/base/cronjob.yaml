@@ -124,10 +124,14 @@ spec:
                   SCAN_FAILURES=0
 
                   echo "Running KubeScape MITRE ATT&CK scan..."
+                  # NOTE: do not pass --severity-threshold here. That flag is a CI gate
+                  # that forces kubescape to exit non-zero ("compliance result exceeds
+                  # severity threshold") when high+ findings exist, which then causes
+                  # this script to discard the (already-written) JSON output and report
+                  # the scan as failed. We filter severity client-side before forwarding.
                   if ! kubescape scan framework mitre \
                     --format json \
                     --output "${OUTPUT_DIR}/mitre-results.json" \
-                    --severity-threshold high \
                     --logger error \
                     2>"${OUTPUT_DIR}/mitre-stderr.log"; then
                     echo "ERROR: KubeScape MITRE scan failed. stderr:"
@@ -139,7 +143,6 @@ spec:
                   if ! kubescape scan framework nsa \
                     --format json \
                     --output "${OUTPUT_DIR}/nsa-results.json" \
-                    --severity-threshold high \
                     --logger error \
                     2>"${OUTPUT_DIR}/nsa-stderr.log"; then
                     echo "ERROR: KubeScape NSA scan failed. stderr:"
