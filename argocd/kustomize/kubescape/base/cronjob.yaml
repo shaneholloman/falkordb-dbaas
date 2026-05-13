@@ -188,14 +188,25 @@ spec:
                       except (json.JSONDecodeError, IOError):
                           continue
 
-                      # KubeScape JSON has results[].controls[]
+                      # KubeScape JSON: per-resource control results live in
+                      # results[].controls[] (only controlID/name/status/rules),
+                      # while severity (scoreFactor) lives in
+                      # summaryDetails.controls[<controlID>].scoreFactor.
+                      # Build a controlID -> scoreFactor map first.
+                      sd_controls = (data.get('summaryDetails') or {}).get('controls') or {}
+                      score_factor_by_id = {}
+                      for cid, meta in sd_controls.items():
+                          if isinstance(meta, dict):
+                              score_factor_by_id[cid] = meta.get('scoreFactor', 0) or 0
+
                       for result in data.get('results', []):
                           resource_id = result.get('resourceID', '')
                           for ctrl in result.get('controls', []):
                               status = ctrl.get('status', {})
                               if status.get('status', '') == 'passed':
                                   continue
-                              severity = ctrl.get('scoreFactor', 0)
+                              cid = ctrl.get('controlID', '')
+                              severity = score_factor_by_id.get(cid, 0)
                               sev_label = 'low'
                               if severity >= 9:
                                   sev_label = 'critical'
@@ -208,7 +219,7 @@ spec:
                                   'Scanner': 'kubescape',
                                   'Cluster': cluster,
                                   'Framework': framework,
-                                  'ControlID': ctrl.get('controlID', ''),
+                                  'ControlID': cid,
                                   'ControlName': ctrl.get('name', ''),
                                   'Severity': sev_label,
                                   'ScoreFactor': severity,
