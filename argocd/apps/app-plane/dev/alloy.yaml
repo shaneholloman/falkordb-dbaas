@@ -490,6 +490,43 @@ spec:
                     job_name = "ldap-auth"
                   }
 
+                  discovery.kubernetes "kyverno_metrics" {
+                    role = "service"
+
+                    namespaces {
+                      names = ["kyverno"]
+                    }
+                  }
+
+                  discovery.relabel "kyverno_metrics" {
+                    targets = discovery.kubernetes.kyverno_metrics.targets
+
+                    rule {
+                      source_labels = ["__meta_kubernetes_service_port_name"]
+                      action        = "keep"
+                      regex         = "metrics-port"
+                    }
+
+                    rule {
+                      source_labels = ["__meta_kubernetes_service_name"]
+                      target_label  = "service"
+                    }
+
+                    rule {
+                      source_labels = ["__meta_kubernetes_namespace"]
+                      target_label  = "namespace"
+                    }
+                  }
+
+                  prometheus.scrape "kyverno" {
+                    targets         = discovery.relabel.kyverno_metrics.output
+                    metrics_path    = "/metrics"
+                    scrape_interval = "30s"
+                    forward_to      = [prometheus.relabel.drop_unwanted_metrics.receiver]
+
+                    job_name = "kyverno"
+                  }
+
                   prometheus.relabel "kube_state_metrics" {
                     forward_to = [prometheus.relabel.drop_unused_labels.receiver]
 
