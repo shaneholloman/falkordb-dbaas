@@ -114,6 +114,9 @@ spec:
                   ksm.scrape "metrics" {
                     targets    = ksm.kubernetes.targets.output
                     forward_to = [prometheus.relabel.kube_state_metrics.receiver]
+                    // Extend the alloy-module default keep_metrics to also allow
+                    // kube_cronjob_* and kyverno_* (needed by SOC2 / Security dashboards).
+                    keep_metrics = "(up|kube_(cronjob.*|daemonset.*|deployment_(metadata_generation|spec_replicas|status_(observed_generation|replicas_(available|updated)))|horizontalpodautoscaler_(spec_(max|min)_replicas|status_(current|desired)_replicas)|job.*|namespace_status_phase|node.*|persistentvolumeclaim_resource_requests_storage_bytes|pod_(container_(info|resource_(limits|requests)|status_(last_terminated_reason|restart_total|waiting_reason))|info|owner|start_time|status_(phase|reason))|replicaset.*|resourcequota|statefulset.*))"
                   }
 
                   prometheus.scrape "cadvisor" {
