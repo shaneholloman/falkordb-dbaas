@@ -320,16 +320,48 @@ spec:
                               time.sleep(2 ** attempt)
                       if last_err is not None:
                           raise last_err
+
+                      # Aggregate by (Framework, ControlID) so each control
+                      # fires one Wazuh alert per scan instead of one alert
+                      # per affected resource. KubeScape findings are
+                      # control-level (e.g. "C-0048 HostPath mount") and
+                      # repeat for every pod/workload that fails the check,
+                      # which flooded Wazuh with ~100 identical 100810
+                      # alerts per scan. Keep ResourceCount + a small sample
+                      # of resource IDs for triage context.
+                      aggregated = {}
                       for f in unique_findings:
-                          if f['Severity'] in ('critical', 'high'):
-                              ts = time.strftime('%b %d %H:%M:%S')
-                              msg = '<134>{} {} kubescape: {}\n'.format(
-                                  ts, cluster, json.dumps(f, separators=(',', ':'))
-                              )
-                              sock.sendall(msg.encode())
-                              fwd_count += 1
+                          if f['Severity'] not in ('critical', 'high'):
+                              continue
+                          key = (f['Framework'], f['ControlID'])
+                          agg = aggregated.get(key)
+                          if agg is None:
+                              agg = {
+                                  'Scanner': 'kubescape',
+                                  'Cluster': cluster,
+                                  'Framework': f['Framework'],
+                                  'ControlID': f['ControlID'],
+                                  'ControlName': f['ControlName'],
+                                  'Severity': f['Severity'],
+                                  'ScoreFactor': f['ScoreFactor'],
+                                  'Status': f['Status'],
+                                  'ResourceCount': 0,
+                                  'SampleResources': [],
+                              }
+                              aggregated[key] = agg
+                          agg['ResourceCount'] += 1
+                          if len(agg['SampleResources']) < 5 and f['ResourceID']:
+                              agg['SampleResources'].append(f['ResourceID'])
+
+                      for agg in aggregated.values():
+                          ts = time.strftime('%b %d %H:%M:%S')
+                          msg = '<134>{} {} kubescape: {}\n'.format(
+                              ts, cluster, json.dumps(agg, separators=(',', ':'))
+                          )
+                          sock.sendall(msg.encode())
+                          fwd_count += 1
                       sock.close()
-                      print(f'Forwarded {fwd_count} findings to Wazuh at {syslog_host}:514')
+                      print(f'Forwarded {fwd_count} aggregated controls to Wazuh at {syslog_host}:514')
                   except Exception as e:
                       print(f'WARNING: Syslog forwarding failed: {e}')
                   PYEOF

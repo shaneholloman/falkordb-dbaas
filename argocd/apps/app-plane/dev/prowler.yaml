@@ -25,6 +25,18 @@ spec:
         repoURL: https://github.com/FalkorDB/falkordb-dbaas.git
         targetRevision: dev
         path: 'argocd/kustomize/prowler/overlays/{{ .values.cloud }}-dev'
+        kustomize:
+          # Inject the real per-cluster identifier (e.g. c-hcjx5tis6bc) into
+          # the prowler-config ConfigMap so Wazuh alerts carry the unique
+          # cluster name instead of the shared overlay default.
+          patches:
+            - target:
+                kind: ConfigMap
+                name: prowler-config
+              patch: |-
+                - op: replace
+                  path: /data/cluster-name
+                  value: '{{ regexFind "h?c-[A-Za-z0-9]+" .name }}'
       destination:
         server: "{{.server}}"
         namespace: security

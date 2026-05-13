@@ -22,6 +22,15 @@ spec:
         repoURL: https://github.com/FalkorDB/falkordb-dbaas.git
         targetRevision: dev
         path: 'argocd/kustomize/kube-bench/overlays/{{ .values.cloud }}-dev'
+        kustomize:
+          patches:
+            - target:
+                kind: ConfigMap
+                name: kube-bench-config
+              patch: |-
+                - op: replace
+                  path: /data/cluster-name
+                  value: '{{ regexFind "h?c-[A-Za-z0-9]+" .name }}'
       destination:
         server: "{{.server}}"
         namespace: security
