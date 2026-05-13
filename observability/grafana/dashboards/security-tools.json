@@ -75,7 +75,7 @@
       },
       "targets": [
         {
-          "expr": "time() - max(kube_cronjob_status_last_successful_time{cronjob=\"grype-vulnerability-scan\"})",
+          "expr": "time() - max(kube_cronjob_status_last_successful_time{cronjob=\"grype-cve-scan\"})",
           "legendFormat": "Grype"
         }
       ]
@@ -215,7 +215,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (owner_name) (increase(kube_job_status_failed{owner_name=~\"grype-vulnerability-scan.*|trufflehog-secret-scan.*|kube-bench-cis-scan.*|kubescape-scan.*|prowler-soc2-scan.*\"}[7d]))",
+          "expr": "sum by (owner_name) (increase(kube_job_status_failed{owner_name=~\"grype-cve-scan.*|trufflehog-secret-scan.*|kube-bench-cis-scan.*|kubescape-scan.*|prowler-soc2-scan.*\"}[7d]))",
           "legendFormat": "{{ owner_name }}"
         }
       ]
@@ -245,7 +245,7 @@
       },
       "targets": [
         {
-          "expr": "max by (job_name) (kube_job_status_completion_time{job_name=~\"grype-vulnerability-scan.*|trufflehog-secret-scan.*|kube-bench-cis-scan.*|kubescape-scan.*\"} - kube_job_status_start_time{job_name=~\"grype-vulnerability-scan.*|trufflehog-secret-scan.*|kube-bench-cis-scan.*|kubescape-scan.*\"})",
+          "expr": "max by (job_name) (kube_job_status_completion_time{job_name=~\"grype-cve-scan.*|trufflehog-secret-scan.*|kube-bench-cis-scan.*|kubescape-scan.*\"} - kube_job_status_start_time{job_name=~\"grype-cve-scan.*|trufflehog-secret-scan.*|kube-bench-cis-scan.*|kubescape-scan.*\"})",
           "legendFormat": "{{ job_name }}"
         }
       ]
@@ -491,7 +491,7 @@
       ],
       "targets": [
         {
-          "expr": "(time() - max(kube_cronjob_status_last_successful_time{cronjob=\"grype-vulnerability-scan\"}) > 172800) or vector(0)",
+          "expr": "(time() - max(kube_cronjob_status_last_successful_time{cronjob=\"grype-cve-scan\"}) > 172800) or vector(0)",
           "legendFormat": "Grype (CVE)",
           "refId": "A",
           "instant": true
