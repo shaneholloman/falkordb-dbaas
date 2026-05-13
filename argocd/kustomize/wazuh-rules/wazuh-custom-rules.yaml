@@ -339,12 +339,23 @@ data:
         <options>alert_by_email</options>
       </rule>
 
-      <!-- Unverified secret found — MEDIUM priority -->
+      <!-- Unverified secret found — MEDIUM priority.
+           NOT tagged `secret_leak` to prevent feeding correlation rule
+           109002 (TruffleHog + auth failure → credential exposure). Most
+           "unverified" findings here are TruffleHog generic-pattern
+           detectors (URI, GCP, Atera, BingSubscriptionKey, ...) matching
+           random byte sequences inside upstream container images
+           (nginx-ingress, prowler, endpoint-monitor, etc.). TruffleHog
+           actively tried to verify these credentials against their
+           providers and they don't authenticate — they are not real
+           secrets, just regex matches in binary blobs. Use group
+           `secret_leak_unverified` so noise dashboards can still see them
+           but they don't escalate to soc2_critical via 109002→109005. -->
       <rule id="100602" level="8">
         <if_sid>100600</if_sid>
         <field name="Verified">false</field>
-        <description>Possible secret leak: $(DetectorName) in $(ImageName) — $(Cluster)</description>
-        <group>trufflehog_secrets,secret_leak</group>
+        <description>Possible secret leak (unverified): $(DetectorName) in $(ImageName) — $(Cluster)</description>
+        <group>trufflehog_secrets,secret_leak_unverified</group>
       </rule>
 
     </group>
