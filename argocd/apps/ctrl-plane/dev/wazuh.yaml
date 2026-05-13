@@ -509,3 +509,8 @@ spec:
       name: dashboard-ingress-tls
       jsonPointers:
         - /data
+    - group: ""
+      kind: Secret
+      name: wazuh-cluster-key
+      jsonPointers:
+        - /data
