@@ -111,10 +111,14 @@ data:
         spawned_process and container
         and proc.name in (mount, umount, umount2)
         and not proc.pname in (dockerd, containerd, kubelet)
+        and not (proc.cmdline contains "/var/lib/kubelet/plugins/kubernetes.io/csi/")
+        and not (proc.cmdline contains "kubelet-detect-safe-umount")
+        and not (k8s.ns.name = "kube-system" and k8s.pod.name startswith "pdcsi-")
+        and not (k8s.ns.name = "kube-system" and k8s.pod.name startswith "csi-")
       output: >
         Suspicious mount operation in container
         (user=%user.name container=%container.name image=%container.image.repository
-         command=%proc.cmdline pod=%k8s.pod.name)
+         command=%proc.cmdline pod=%k8s.pod.name ns=%k8s.ns.name)
       priority: WARNING
       tags: [container, escape, soc2]
 

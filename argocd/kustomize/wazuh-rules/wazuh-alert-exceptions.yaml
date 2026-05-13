@@ -40,6 +40,20 @@ data:
           "field": "data.ResourceId",
           "pattern": "devops@falkordb.cloud",
           "is_regex": false
+        },
+        {
+          "comment": "GKE PD CSI driver mounting PVs — normal kubelet operation, not container escape",
+          "rule_id": "100510",
+          "field": "data.output",
+          "pattern": "/var/lib/kubelet/plugins/kubernetes.io/csi/",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubelet umount safety self-test — normal GKE operation, not container escape",
+          "rule_id": "100510",
+          "field": "data.output",
+          "pattern": "kubelet-detect-safe-umount",
+          "is_regex": false
         }
       ]
     }

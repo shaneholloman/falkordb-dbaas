@@ -329,6 +329,8 @@ data:
 
     # ── Compose message ──────────────────────────────────────
     cluster_display = data.get("Cluster") or data.get("ClusterName") or ""
+    agent_name = agent.get("name", "")
+    agent_ip = agent.get("ip", "")
 
     text = (
         f"{icon} *Wazuh Alert — Level {level}* | `{env_name}`\n"
@@ -336,6 +338,11 @@ data:
     )
     if cluster_display:
         text += f"*Cluster:* {cluster_display}\n"
+    if agent_name:
+        agent_info = f"*Agent:* {agent_name}"
+        if agent_ip and agent_ip != "any":
+            agent_info += f" ({agent_ip})"
+        text += agent_info + "\n"
     text += f"*Groups:* {', '.join(rule.get('groups', []))}\n"
 
     if detail_lines:

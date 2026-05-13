@@ -186,12 +186,17 @@ data:
       </rule>
 
       <!-- Burst aggregation: 3+ critical/high CVEs on same cluster within 1h
-           → single actionable alert. This is what gets pushed to Google Chat. -->
+           → single actionable alert. This is what gets pushed to Google Chat.
+           NOTE: tagged soc2_fail but NOT soc2_critical — burst rules are
+           meta-aggregates of primitive findings; including them in the
+           soc2_critical group would re-feed 109005 (cross-tool coordinated
+           attack correlation) and create false positives whenever multiple
+           scanners burst on the same cluster window. -->
       <rule id="100450" level="13" frequency="3" timeframe="3600">
         <if_matched_sid>100401</if_matched_sid>
         <same_field>Cluster</same_field>
         <description>CVE BURST: 3+ critical/high CVEs detected on $(Cluster) within 1h — review evidence locker</description>
-        <group>grype_vuln,soc2_fail,soc2_critical,cve_burst</group>
+        <group>grype_vuln,soc2_fail,cve_burst</group>
         <options>alert_by_email</options>
       </rule>
 
@@ -369,12 +374,13 @@ data:
         <options>alert_by_email</options>
       </rule>
 
-      <!-- Burst: 5+ scored CIS failures on same cluster within 1h -->
+      <!-- Burst: 5+ scored CIS failures on same cluster within 1h.
+           NOT tagged soc2_critical (see 100450 note) to prevent feeding 109005. -->
       <rule id="100750" level="13" frequency="5" timeframe="3600">
         <if_matched_sid>100701</if_matched_sid>
         <same_field>Cluster</same_field>
         <description>CIS BURST: 5+ scored CIS benchmark failures on $(Cluster) within 1h — review compliance report</description>
-        <group>kubebench_cis,soc2_fail,soc2_critical,cis_burst</group>
+        <group>kubebench_cis,soc2_fail,cis_burst</group>
         <options>alert_by_email</options>
       </rule>
 
@@ -429,12 +435,13 @@ data:
         <options>alert_by_email</options>
       </rule>
 
-      <!-- Burst: 3+ critical KubeScape findings on same cluster within 1h -->
+      <!-- Burst: 3+ critical KubeScape findings on same cluster within 1h.
+           NOT tagged soc2_critical (see 100450 note) to prevent feeding 109005. -->
       <rule id="100850" level="13" frequency="3" timeframe="3600">
         <if_matched_sid>100801</if_matched_sid>
         <same_field>Cluster</same_field>
         <description>KUBESCAPE BURST: 3+ critical findings on $(Cluster) within 1h</description>
-        <group>kubescape_attack,soc2_fail,soc2_critical,kubescape_burst</group>
+        <group>kubescape_attack,soc2_fail,kubescape_burst</group>
         <options>alert_by_email</options>
       </rule>
 
@@ -518,7 +525,8 @@ data:
            in the same timeframe → high-confidence attack chain. -->
       <rule id="109001" level="15" frequency="2" timeframe="1800">
         <if_matched_group>container_escape</if_matched_group>
-        <description>CORRELATION: Container escape + critical finding on same cluster — active attack chain</description>
+        <same_source_ip />
+        <description>CORRELATION: Container escape + critical finding on same agent — active attack chain</description>
         <group>siem_correlation,soc2_critical,attack_chain</group>
         <mitre>
           <id>T1611</id>
@@ -572,7 +580,9 @@ data:
 
       <!-- ── Multi-tool critical alert storm ────────────────────
            3+ critical alerts from different tools within 1 hour
-           on the same cluster → coordinated attack or major incident. -->
+           on the same cluster → coordinated attack or major incident.
+           Burst-aggregate rules (100450/100750/100850) are intentionally
+           NOT in soc2_critical so they don't re-feed this correlation. -->
       <rule id="109005" level="15" frequency="3" timeframe="3600">
         <if_matched_group>soc2_critical</if_matched_group>
         <same_field>Cluster</same_field>
