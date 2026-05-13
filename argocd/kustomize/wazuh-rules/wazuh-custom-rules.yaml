@@ -469,7 +469,7 @@ data:
         <if_sid>100800</if_sid>
         <field name="Framework">mitre</field>
         <field name="Severity">critical|high</field>
-        <description>MITRE ATT&amp;CK: [$(ControlID)] $(ControlName) — $(Cluster)</description>
+        <description>MITRE ATT&amp;CK: [$(ControlID)] $(ControlName) — $(Cluster) ($(ResourceCount) resources)</description>
         <group>kubescape_attack,soc2_fail,mitre_attack</group>
         <mitre>
           <id>T1190</id>

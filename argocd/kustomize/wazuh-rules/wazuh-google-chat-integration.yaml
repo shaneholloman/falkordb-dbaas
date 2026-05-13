@@ -299,12 +299,30 @@ data:
         ctrl_name = data.get("ControlName", "")
         framework = data.get("Framework", "")
         severity = data.get("Severity", "")
+        resource_count = data.get("ResourceCount", "")
+        sample_resources = data.get("SampleResources") or []
         if ctrl_id:
             detail_lines.append(f"*Control:* [{ctrl_id}] {ctrl_name}")
         if framework:
             detail_lines.append(f"*Framework:* {framework}")
         if severity:
             detail_lines.append(f"*Severity:* {severity}")
+        if resource_count:
+            detail_lines.append(f"*Affected resources:* {resource_count}")
+        if sample_resources:
+            if isinstance(sample_resources, list):
+                shown = sample_resources[:5]
+                detail_lines.append("*Sample resources:*")
+                for r in shown:
+                    detail_lines.append(f"  • {r}")
+            else:
+                # Wazuh's JSON_Decoder cannot decode JSON arrays, so the
+                # scanner sends SampleResources as a comma-separated string.
+                items = [s.strip() for s in str(sample_resources).split(",") if s.strip()]
+                if items:
+                    detail_lines.append("*Sample resources:*")
+                    for r in items[:5]:
+                        detail_lines.append(f"  • {r}")
 
     elif scanner == "grype":
         vuln_id = data.get("VulnerabilityID", "")

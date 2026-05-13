@@ -328,7 +328,9 @@ spec:
                       # repeat for every pod/workload that fails the check,
                       # which flooded Wazuh with ~100 identical 100810
                       # alerts per scan. Keep ResourceCount + a small sample
-                      # of resource IDs for triage context.
+                      # of resource IDs (as comma-separated string so
+                      # Wazuh's JSON_Decoder, which skips JSON arrays,
+                      # still surfaces it under data.SampleResources).
                       aggregated = {}
                       for f in unique_findings:
                           if f['Severity'] not in ('critical', 'high'):
@@ -346,14 +348,18 @@ spec:
                                   'ScoreFactor': f['ScoreFactor'],
                                   'Status': f['Status'],
                                   'ResourceCount': 0,
-                                  'SampleResources': [],
+                                  '_samples': [],
                               }
                               aggregated[key] = agg
                           agg['ResourceCount'] += 1
-                          if len(agg['SampleResources']) < 5 and f['ResourceID']:
-                              agg['SampleResources'].append(f['ResourceID'])
+                          if len(agg['_samples']) < 5 and f['ResourceID']:
+                              agg['_samples'].append(f['ResourceID'])
 
                       for agg in aggregated.values():
+                          # Flatten sample list to a single string so Wazuh's
+                          # JSON_Decoder surfaces it under data.SampleResources.
+                          samples = agg.pop('_samples', [])
+                          agg['SampleResources'] = ', '.join(samples)
                           ts = time.strftime('%b %d %H:%M:%S')
                           msg = '<134>{} {} kubescape: {}\n'.format(
                               ts, cluster, json.dumps(agg, separators=(',', ':'))
