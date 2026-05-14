@@ -21,16 +21,16 @@
   "panels": [
     {
       "type": "row",
-      "title": "Posture (current window)",
+      "title": "Posture (rolling 24h window)",
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "collapsed": false
     },
     {
-      "title": "Open Critical SOC2 Findings",
-      "description": "Critical SOC2 findings raised by Wazuh (rule.groups:soc2_critical) in the window.",
+      "title": "Unique Critical Findings (24h)",
+      "description": "Distinct critical findings (TruffleHog verified secrets by unique source file) in the rolling 24h window. This feeds the posture score at -1 pt each.",
       "type": "stat",
       "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 },
-      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
       "fieldConfig": {
         "defaults": {
           "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 } ] },
@@ -38,70 +38,68 @@
           "color": { "mode": "thresholds" }
         }
       },
-      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
       "targets": [
         {
           "refId": "A",
-          "query": "rule.groups:soc2_critical",
-          "alias": "critical",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "auto", "min_doc_count": "0" } } ],
-          "timeField": "@timestamp"
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2_critical_24h_unique_findings_value",
+          "legendFormat": "critical",
+          "instant": true
         }
       ]
     },
     {
-      "title": "Open High SOC2 Findings",
-      "description": "High-severity SOC2 control failures (rule.groups:soc2_fail AND data.Severity in {high,High}).",
+      "title": "Unique High Findings (24h)",
+      "description": "Distinct high-severity control failures (by ControlID) in the rolling 24h window. Feeds the posture score at -0.5 pt each.",
       "type": "stat",
       "gridPos": { "h": 5, "w": 4, "x": 4, "y": 1 },
-      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
       "fieldConfig": {
         "defaults": {
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "orange", "value": 50 }, { "color": "red", "value": 200 } ] },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "orange", "value": 10 }, { "color": "red", "value": 20 } ] },
           "unit": "short",
           "color": { "mode": "thresholds" }
         }
       },
-      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
       "targets": [
         {
           "refId": "A",
-          "query": "rule.groups:soc2_fail AND data.Severity:(high OR High)",
-          "alias": "high",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "auto", "min_doc_count": "0" } } ],
-          "timeField": "@timestamp"
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2_high_24h_unique_findings_value",
+          "legendFormat": "high",
+          "instant": true
         }
       ]
     },
     {
-      "title": "Total SOC2 Failures",
-      "description": "All SOC2 control failures in the window (rule.groups:soc2_fail). Spans Prowler, Kubescape, kube-bench, TruffleHog, FIM, Grype.",
+      "title": "Unique Medium Findings (24h)",
+      "description": "Distinct medium-severity control failures (by CheckTitle) in the rolling 24h window. Feeds the posture score at -0.1 pt each.",
       "type": "stat",
       "gridPos": { "h": 5, "w": 4, "x": 8, "y": 1 },
-      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
       "fieldConfig": {
         "defaults": {
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "orange", "value": 200 }, { "color": "red", "value": 1000 } ] },
-          "unit": "short"
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "orange", "value": 20 }, { "color": "red", "value": 50 } ] },
+          "unit": "short",
+          "color": { "mode": "thresholds" }
         }
       },
-      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
       "targets": [
         {
           "refId": "A",
-          "query": "rule.groups:soc2_fail",
-          "alias": "fail",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "auto", "min_doc_count": "0" } } ],
-          "timeField": "@timestamp"
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2_medium_24h_unique_findings_value",
+          "legendFormat": "medium",
+          "instant": true
         }
       ]
     },
     {
       "title": "SOC 2 Posture Score",
-      "description": "Weighted compliance score recorded as soc2:posture_score in VictoriaMetrics by the wazuh-metrics-exporter + vmalert recording rule. score = max(0, 100 - 10*critical - 1*high - 0.1*medium) over the last 24h. 100 = no open critical/high SOC2 findings.",
+      "description": "Weighted compliance score recorded as soc2:posture_score in VictoriaMetrics. score = clamp(100 - 1×critical_unique - 0.5×high_unique - 0.1×medium_unique, 0, 100) over the rolling 24h window. The stat panels to the left show the unique findings counts that drive this score.",
       "type": "gauge",
       "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
@@ -125,50 +123,48 @@
       ]
     },
     {
-      "title": "Verified Secret Leaks",
-      "description": "TruffleHog verified secret findings (rule.id:100601). Verified=true means the credential is currently usable.",
+      "title": "Prowler Failing Checks (24h)",
+      "description": "Distinct Prowler checks in FAIL state (by CheckTitle) in the rolling 24h window.",
       "type": "stat",
       "gridPos": { "h": 5, "w": 4, "x": 16, "y": 1 },
-      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
       "fieldConfig": {
         "defaults": {
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "orange", "value": 15 }, { "color": "red", "value": 30 } ] },
           "unit": "short", "color": { "mode": "thresholds" }
         }
       },
-      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
       "targets": [
         {
           "refId": "A",
-          "query": "rule.id:100601",
-          "alias": "verified",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "auto", "min_doc_count": "0" } } ],
-          "timeField": "@timestamp"
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "prowler_fail_24h_unique_findings_value",
+          "legendFormat": "prowler_fail",
+          "instant": true
         }
       ]
     },
     {
-      "title": "FIM / Secret events (CC6.1)",
-      "description": "File-integrity-monitoring and credential exposure events (rule.groups: syscheck OR secret_leak OR credential_exposure). Trust criterion CC6.1.",
+      "title": "Total Raw Alert Volume (24h)",
+      "description": "Total raw alert count across all SOC2 categories in the 24h window. This is the undeduped count — use the unique findings panels for actual distinct issues.",
       "type": "stat",
       "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 },
-      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
       "fieldConfig": {
         "defaults": {
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 10 }, { "color": "red", "value": 100 } ] },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "orange", "value": 2000 }, { "color": "red", "value": 5000 } ] },
           "unit": "short"
         }
       },
-      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
       "targets": [
         {
           "refId": "A",
-          "query": "rule.groups:(syscheck OR secret_leak OR credential_exposure)",
-          "alias": "fim",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "auto", "min_doc_count": "0" } } ],
-          "timeField": "@timestamp"
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2_fail_total_24h_hits",
+          "legendFormat": "total_raw",
+          "instant": true
         }
       ]
     },
