@@ -100,48 +100,35 @@
       ]
     },
     {
-      "title": "Prowler Pass Rate",
-      "description": "PASS / (PASS + FAIL) for Prowler SOC2 checks. Approximate proxy for cloud-control compliance %.",
-      "type": "gauge",
+      "title": "Prowler Outcomes (window)",
+      "description": "PASS / FAIL / WARN counts for Prowler SOC2 checks in the selected window. The split is the cloud-control compliance posture.",
+      "type": "stat",
       "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 },
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
       "fieldConfig": {
         "defaults": {
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 70 }, { "color": "yellow", "value": 90 }, { "color": "green", "value": 95 } ] },
-          "unit": "percent", "min": 0, "max": 100
-        }
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] },
+          "unit": "short",
+          "mappings": []
+        },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": "(?i)PASS" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byRegexp", "options": "(?i)FAIL" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byRegexp", "options": "(?i)WARN" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] }
+        ]
       },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^pass_rate$/", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value_and_name", "orientation": "vertical", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
-          "query": "rule.groups:prowler_compliance AND data.Status:PASS",
-          "alias": "pass",
+          "query": "rule.groups:prowler_compliance",
+          "alias": "{{term data.Status}}",
           "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [],
-          "timeField": "@timestamp",
-          "hide": true
-        },
-        {
-          "refId": "B",
-          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
-          "query": "rule.groups:prowler_compliance AND data.Status:FAIL",
-          "alias": "fail",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [],
-          "timeField": "@timestamp",
-          "hide": true
-        },
-        {
-          "refId": "C",
-          "datasource": { "type": "__expr__", "uid": "__expr__" },
-          "type": "math",
-          "expression": "($A / ($A + $B)) * 100"
+          "bucketAggs": [
+            { "type": "terms", "field": "data.Status", "id": "3", "settings": { "size": "5", "order": "desc", "orderBy": "_count" } }
+          ],
+          "timeField": "@timestamp"
         }
-      ],
-      "transformations": [
-        { "id": "renameByRegex", "options": { "regexp": ".*", "renamePattern": "pass_rate" } }
       ]
     },
     {
@@ -337,7 +324,7 @@
           "refId": "A",
           "query": "rule.groups:soc2_fail AND data.Severity:(critical OR Critical OR high OR High)",
           "alias": "",
-          "metrics": [ { "type": "logs", "id": "1", "settings": { "limit": "100" } } ],
+          "metrics": [ { "type": "raw_document", "id": "1", "settings": { "size": "100" } } ],
           "bucketAggs": [],
           "timeField": "@timestamp"
         }
@@ -413,13 +400,14 @@
           "targets": [ { "expr": "time() - max(kube_cronjob_status_last_successful_time{cronjob=\"trufflehog-secret-scan\"})", "refId": "A" } ]
         },
         {
-          "title": "Wazuh manager up",
+          "title": "Grype last run",
+          "description": "Time since last successful Grype vulnerability scan.",
           "type": "stat",
           "gridPos": { "h": 5, "w": 12, "x": 0, "y": 43 },
           "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
-          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }, "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ], "unit": "none" } },
-          "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
-          "targets": [ { "expr": "min(up{job=~\"wazuh-manager.*\"})", "refId": "A" } ]
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 86400 }, { "color": "red", "value": 172800 } ] }, "unit": "s" } },
+          "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+          "targets": [ { "expr": "time() - max(kube_cronjob_status_last_successful_time{cronjob=~\"grype-.*\"})", "refId": "A" } ]
         },
         {
           "title": "Wazuh agents reporting",
