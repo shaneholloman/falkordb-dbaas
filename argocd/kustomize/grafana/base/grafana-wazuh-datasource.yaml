@@ -22,7 +22,7 @@ spec:
     - name: grafana-opensearch-datasource
       version: 2.21.0
   valuesFrom:
-    - targetPath: user
+    - targetPath: basicAuthUser
       valueFrom:
         secretKeyRef:
           name: wazuh-indexer-cred
@@ -38,7 +38,7 @@ spec:
     access: proxy
     url: https://wazuh-indexer.security.svc.cluster.local:9200
     basicAuth: true
-    basicAuthUser: ${user}
+    basicAuthUser: "${INDEXER_USERNAME}"
     database: "wazuh-alerts-*"
     jsonData:
       flavor: opensearch
@@ -50,4 +50,4 @@ spec:
       logLevelField: "data.Severity"
       pplEnabled: true
     secureJsonData:
-      basicAuthPassword: ${secureJsonData.basicAuthPassword}
+      basicAuthPassword: "${INDEXER_PASSWORD}"
