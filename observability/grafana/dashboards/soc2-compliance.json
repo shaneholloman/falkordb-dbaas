@@ -100,35 +100,81 @@
       ]
     },
     {
-      "title": "Prowler Outcomes (window)",
-      "description": "PASS / FAIL / WARN counts for Prowler SOC2 checks in the selected window. The split is the cloud-control compliance posture.",
-      "type": "stat",
+      "title": "SOC 2 Posture Score",
+      "description": "Weighted compliance score: 100 - (10 × open critical) - (1 × open high) - (0.1 × open medium), floored at 0. 100 = no open critical/high SOC2 findings. Drops fast when criticals appear; nudged by mediums. Aggregated over the selected window.",
+      "type": "gauge",
       "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 },
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
       "fieldConfig": {
         "defaults": {
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] },
-          "unit": "short",
-          "mappings": []
-        },
-        "overrides": [
-          { "matcher": { "id": "byRegexp", "options": "(?i)PASS" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
-          { "matcher": { "id": "byRegexp", "options": "(?i)FAIL" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
-          { "matcher": { "id": "byRegexp", "options": "(?i)WARN" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] }
-        ]
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 50 }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 95 } ] },
+          "unit": "percent", "min": 0, "max": 100,
+          "decimals": 1
+        }
       },
-      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value_and_name", "orientation": "vertical", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true, "orientation": "auto" },
+      "pluginVersion": "10.4.0",
       "targets": [
         {
           "refId": "A",
-          "query": "rule.groups:prowler_compliance",
-          "alias": "{{term data.Status}}",
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+          "query": "rule.groups:soc2_critical",
+          "alias": "critical",
           "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [
-            { "type": "terms", "field": "data.Status", "id": "3", "settings": { "size": "5", "order": "desc", "orderBy": "_count" } }
-          ],
-          "timeField": "@timestamp"
+          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
+          "timeField": "@timestamp",
+          "hide": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+          "query": "rule.groups:soc2_fail AND data.Severity:(high OR High)",
+          "alias": "high",
+          "metrics": [ { "type": "count", "id": "1" } ],
+          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
+          "timeField": "@timestamp",
+          "hide": true
+        },
+        {
+          "refId": "M",
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+          "query": "rule.groups:soc2_fail AND data.Severity:(medium OR Medium)",
+          "alias": "medium",
+          "metrics": [ { "type": "count", "id": "1" } ],
+          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
+          "timeField": "@timestamp",
+          "hide": true
+        },
+        {
+          "refId": "Acrit",
+          "datasource": { "type": "__expr__", "uid": "__expr__" },
+          "type": "reduce",
+          "reducer": "sum",
+          "expression": "A"
+        },
+        {
+          "refId": "Bhigh",
+          "datasource": { "type": "__expr__", "uid": "__expr__" },
+          "type": "reduce",
+          "reducer": "sum",
+          "expression": "B"
+        },
+        {
+          "refId": "Cmed",
+          "datasource": { "type": "__expr__", "uid": "__expr__" },
+          "type": "reduce",
+          "reducer": "sum",
+          "expression": "M"
+        },
+        {
+          "refId": "Score",
+          "datasource": { "type": "__expr__", "uid": "__expr__" },
+          "type": "math",
+          "expression": "max(0, 100 - 10 * $Acrit - 1 * $Bhigh - 0.1 * $Cmed)"
         }
+      ],
+      "transformations": [
+        { "id": "filterByRefId", "options": { "include": "Score" } }
       ]
     },
     {
@@ -308,23 +354,55 @@
     },
     {
       "title": "Latest critical / high SOC2 findings",
-      "description": "Most recent critical or high findings (rule.groups:soc2_fail AND severity critical|high). Use this list to drive remediation.",
+      "description": "Most recent critical or high SOC2 findings (rule.groups:soc2_fail AND severity critical|high). Use this list to drive remediation. Click a row to see the raw Wazuh alert.",
       "type": "table",
       "gridPos": { "h": 11, "w": 24, "x": 0, "y": 26 },
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
       "fieldConfig": {
-        "defaults": { "custom": { "align": "auto", "filterable": true } },
+        "defaults": {
+          "custom": { "align": "auto", "filterable": true, "inspect": false },
+          "color": { "mode": "thresholds" }
+        },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Severity" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "color-background" } } ] }
+          {
+            "matcher": { "id": "byName", "options": "Severity" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } },
+              { "id": "mappings", "value": [
+                { "type": "value", "options": {
+                  "critical": { "color": "red", "index": 0 },
+                  "Critical": { "color": "red", "index": 1 },
+                  "high": { "color": "orange", "index": 2 },
+                  "High": { "color": "orange", "index": 3 },
+                  "medium": { "color": "yellow", "index": 4 },
+                  "Medium": { "color": "yellow", "index": 5 },
+                  "low": { "color": "blue", "index": 6 },
+                  "Low": { "color": "blue", "index": 7 }
+                } }
+              ] },
+              { "id": "custom.width", "value": 90 }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "Time" }, "properties": [ { "id": "custom.width", "value": 170 }, { "id": "unit", "value": "dateTimeAsIso" } ] },
+          { "matcher": { "id": "byName", "options": "Scanner" }, "properties": [ { "id": "custom.width", "value": 100 } ] },
+          { "matcher": { "id": "byName", "options": "Cluster" }, "properties": [ { "id": "custom.width", "value": 160 } ] },
+          { "matcher": { "id": "byName", "options": "Control" }, "properties": [ { "id": "custom.width", "value": 110 } ] },
+          { "matcher": { "id": "byName", "options": "Rule level" }, "properties": [ { "id": "custom.width", "value": 80 }, { "id": "custom.cellOptions", "value": { "type": "color-text" } } ] },
+          { "matcher": { "id": "byName", "options": "Title / Description" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "auto", "wrapText": true } } ] }
         ]
       },
-      "options": { "showHeader": true, "sortBy": [ { "displayName": "Time", "desc": true } ] },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": { "show": false, "reducer": ["sum"], "countRows": false, "fields": "" },
+        "sortBy": [ { "displayName": "Time", "desc": true } ]
+      },
       "targets": [
         {
           "refId": "A",
           "query": "rule.groups:soc2_fail AND data.Severity:(critical OR Critical OR high OR High)",
           "alias": "",
-          "metrics": [ { "type": "raw_document", "id": "1", "settings": { "size": "100" } } ],
+          "metrics": [ { "type": "raw_data", "id": "1", "settings": { "size": "100" } } ],
           "bucketAggs": [],
           "timeField": "@timestamp"
         }
@@ -333,7 +411,21 @@
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "_id": true, "_index": true, "_type": true, "_score": true, "highlight": true, "sort": true, "_source": true, "host": true, "manager.name": true, "id": true, "input.type": true, "decoder.name": true, "rule.mail": true, "rule.firedtimes": true, "predecoder.program_name": true, "rule.pci_dss": true, "rule.gdpr": true, "rule.hipaa": true, "rule.nist_800_53": true, "rule.tsc": true, "rule.mitre.id": true, "rule.mitre.tactic": true, "rule.mitre.technique": true },
+            "excludeByName": {
+              "_id": true, "_index": true, "_type": true, "_score": true, "highlight": true, "sort": true, "_source": true,
+              "host": true, "manager.name": true, "id": true, "input.type": true, "decoder.name": true,
+              "rule.mail": true, "rule.firedtimes": true, "predecoder.program_name": true,
+              "rule.pci_dss": true, "rule.gdpr": true, "rule.hipaa": true, "rule.nist_800_53": true, "rule.tsc": true,
+              "rule.mitre.id": true, "rule.mitre.tactic": true, "rule.mitre.technique": true,
+              "rule.groups": true, "rule.id": true,
+              "data.Provider": true, "data.Region": true, "data.ResourceId": true, "data.ServiceName": true,
+              "data.CheckID": true, "data.StatusExtended": true, "data.Status": true,
+              "data.ControlName": true, "data.ResourceCount": true, "data.SampleResources": true, "data.ScoreFactor": true, "data.Framework": true,
+              "data.TestNumber": true, "data.TestDesc": true, "data.Remediation": true, "data.Scored": true, "data.Section": true, "data.SectionDesc": true,
+              "data.SecretType": true, "data.DetectorName": true, "data.Verified": true, "data.SourceFile": true, "data.Redacted": true, "data.ImageName": true, "data.File": true,
+              "data.uri": true, "data.output": true, "data.Detector": true,
+              "agent.id": true, "agent.ip": true, "location": true, "full_log": true
+            },
             "indexByName": {
               "@timestamp": 0,
               "data.Severity": 1,
@@ -341,18 +433,26 @@
               "data.CheckTitle": 3,
               "data.ControlID": 4,
               "data.Cluster": 5,
-              "rule.description": 6
+              "agent.name": 6,
+              "rule.level": 7,
+              "rule.description": 8
             },
             "renameByName": {
               "@timestamp": "Time",
               "data.Severity": "Severity",
               "data.Scanner": "Scanner",
-              "data.CheckTitle": "Check / Control",
-              "data.ControlID": "Control ID",
+              "data.CheckTitle": "Check",
+              "data.ControlID": "Control",
               "data.Cluster": "Cluster",
-              "rule.description": "Description"
+              "agent.name": "Agent",
+              "rule.level": "Rule level",
+              "rule.description": "Title / Description"
             }
           }
+        },
+        {
+          "id": "merge",
+          "options": {}
         }
       ]
     },
