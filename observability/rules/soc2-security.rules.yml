@@ -286,14 +286,21 @@ spec:
     - name: soc2.posture
       interval: 1m
       rules:
+        # Uses cardinality-based metrics (unique findings, not raw alert volume).
+        # After a finding is remediated and the 24h window expires without a
+        # new scan emitting it, the cardinality drops and the score recovers.
+        #
+        # Current scale (May 2026): ~60 critical, ~10 high, ~18 medium.
+        # Weights: critical=-1pt, high=-0.5pt, medium=-0.1pt per unique finding.
+        # Target: score > 80 ≈ fewer than 20 distinct critical findings open.
         - record: soc2:posture_score
           expr: |
             clamp_min(
               clamp_max(
                 100
-                  - 10  * sum(soc2_critical_24h_hits)
-                  - 1   * sum(soc2_high_24h_hits)
-                  - 0.1 * sum(soc2_medium_24h_hits),
+                  - 1   * sum(soc2_critical_24h_unique_findings_value or vector(0))
+                  - 0.5 * sum(soc2_high_24h_unique_findings_value or vector(0))
+                  - 0.1 * sum(soc2_medium_24h_unique_findings_value or vector(0)),
                 100
               ),
               0
