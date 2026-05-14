@@ -1,0 +1,46 @@
+# prometheus-es-exporter configuration.
+#
+# Runs each named [query_*] section against the wazuh-indexer on the
+# configured interval. The numeric `hits.total.value` is exposed as
+# `<name>_hits` Prometheus gauges (e.g. `soc2_critical_24h_hits`).
+# These gauges are scraped by alloy and stored in VictoriaMetrics,
+# which powers the SOC 2 posture recording rule (`soc2:posture_score`)
+# and the Grafana gauge.
+#
+# Query window is 24h (a single posture snapshot, not a cumulative count).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-metrics-exporter-config
+  namespace: security
+  labels:
+    app: wazuh-metrics-exporter
+data:
+  exporter.cfg: |
+    [DEFAULT]
+    QueryIntervalSecs = 60
+    QueryTimeoutSecs = 30
+    QueryIndices = wazuh-alerts-*
+    QueryOnError = preserve
+    QueryOnMissing = zero
+
+    # Open SOC 2 control failures bucketed by severity (24h sliding window).
+    [query_soc2_critical_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_critical"}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}}}
+
+    [query_soc2_high_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"terms":{"data.Severity":["high","High"]}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}}}
+
+    [query_soc2_medium_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"terms":{"data.Severity":["medium","Medium"]}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}}}
+
+    [query_soc2_low_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"terms":{"data.Severity":["low","Low"]}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}}}
+
+    # Prowler FAIL alerts (cloud control failures) — 24h.
+    [query_prowler_fail_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"prowler_compliance"}},{"term":{"data.Status":"FAIL"}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}}}
+
+    # Total SOC 2 failure volume (any severity) — 24h.
+    [query_soc2_fail_total_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}}}

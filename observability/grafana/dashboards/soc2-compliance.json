@@ -101,10 +101,10 @@
     },
     {
       "title": "SOC 2 Posture Score",
-      "description": "Weighted compliance score: 100 - (10 × open critical) - (1 × open high) - (0.1 × open medium), floored at 0. 100 = no open critical/high SOC2 findings. Drops fast when criticals appear; nudged by mediums. Aggregated over the selected window.",
+      "description": "Weighted compliance score recorded as soc2:posture_score in VictoriaMetrics by the wazuh-metrics-exporter + vmalert recording rule. score = max(0, 100 - 10*critical - 1*high - 0.1*medium) over the last 24h. 100 = no open critical/high SOC2 findings.",
       "type": "gauge",
       "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 },
-      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
       "fieldConfig": {
         "defaults": {
           "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 50 }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 95 } ] },
@@ -117,64 +117,11 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
-          "query": "rule.groups:soc2_critical",
-          "alias": "critical",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
-          "timeField": "@timestamp",
-          "hide": true
-        },
-        {
-          "refId": "B",
-          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
-          "query": "rule.groups:soc2_fail AND data.Severity:(high OR High)",
-          "alias": "high",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
-          "timeField": "@timestamp",
-          "hide": true
-        },
-        {
-          "refId": "M",
-          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
-          "query": "rule.groups:soc2_fail AND data.Severity:(medium OR Medium)",
-          "alias": "medium",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
-          "timeField": "@timestamp",
-          "hide": true
-        },
-        {
-          "refId": "Acrit",
-          "datasource": { "type": "__expr__", "uid": "__expr__" },
-          "type": "reduce",
-          "reducer": "sum",
-          "expression": "A"
-        },
-        {
-          "refId": "Bhigh",
-          "datasource": { "type": "__expr__", "uid": "__expr__" },
-          "type": "reduce",
-          "reducer": "sum",
-          "expression": "B"
-        },
-        {
-          "refId": "Cmed",
-          "datasource": { "type": "__expr__", "uid": "__expr__" },
-          "type": "reduce",
-          "reducer": "sum",
-          "expression": "M"
-        },
-        {
-          "refId": "Score",
-          "datasource": { "type": "__expr__", "uid": "__expr__" },
-          "type": "math",
-          "expression": "max(0, 100 - 10 * $Acrit - 1 * $Bhigh - 0.1 * $Cmed)"
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2:posture_score",
+          "legendFormat": "score",
+          "instant": true
         }
-      ],
-      "transformations": [
-        { "id": "filterByRefId", "options": { "include": "Score" } }
       ]
     },
     {
@@ -233,10 +180,10 @@
     },
     {
       "title": "SOC 2 Posture Score over time",
-      "description": "Same weighted score as the top-row gauge, computed per time bucket. Visible drops correspond to scan runs that surfaced new critical/high findings. A rising line over time = posture improving.",
+      "description": "Recorded soc2:posture_score from VictoriaMetrics (vmalert recording rule fed by the wazuh-metrics-exporter). Drops correspond to new critical/high findings; recovery curves indicate remediation progress.",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 7 },
-      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
       "fieldConfig": {
         "defaults": {
           "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 15, "lineWidth": 2, "spanNulls": true },
@@ -247,46 +194,16 @@
           "color": { "mode": "thresholds" }
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Score" }, "properties": [ { "id": "custom.thresholdsStyle", "value": { "mode": "area" } } ] }
+          { "matcher": { "id": "byName", "options": "score" }, "properties": [ { "id": "custom.thresholdsStyle", "value": { "mode": "area" } } ] }
         ]
       },
       "options": { "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "min", "mean"] }, "tooltip": { "mode": "single" } },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
-          "query": "rule.groups:soc2_critical",
-          "alias": "critical",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
-          "timeField": "@timestamp",
-          "hide": true
-        },
-        {
-          "refId": "B",
-          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
-          "query": "rule.groups:soc2_fail AND data.Severity:(high OR High)",
-          "alias": "high",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
-          "timeField": "@timestamp",
-          "hide": true
-        },
-        {
-          "refId": "M",
-          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
-          "query": "rule.groups:soc2_fail AND data.Severity:(medium OR Medium)",
-          "alias": "medium",
-          "metrics": [ { "type": "count", "id": "1" } ],
-          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
-          "timeField": "@timestamp",
-          "hide": true
-        },
-        {
-          "refId": "Score",
-          "datasource": { "type": "__expr__", "uid": "__expr__" },
-          "type": "math",
-          "expression": "max(0, 100 - 10 * $A - 1 * $B - 0.1 * $M)"
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2:posture_score",
+          "legendFormat": "score"
         }
       ]
     },

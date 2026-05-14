@@ -267,6 +267,78 @@ spec:
             summary: "Compliance report CronJob is suspended"
             description: "The compliance report CronJob has been suspended."
 
+    # ─────────────────────────────────────────────────────────────────────
+    # SOC 2 posture score — weighted compliance percentage materialised as
+    # a recording rule so it has long-term retention in VictoriaMetrics and
+    # can be alerted on / graphed without re-running OpenSearch queries.
+    #
+    # Source metrics come from the prometheus-es-exporter (wazuh-metrics-
+    # exporter Deployment in the security namespace), which polls the
+    # wazuh-indexer every 60s and exposes:
+    #   soc2_critical_24h_hits  — open soc2_critical findings (24h window)
+    #   soc2_high_24h_hits      — open soc2_fail / severity=high (24h)
+    #   soc2_medium_24h_hits    — open soc2_fail / severity=medium (24h)
+    #
+    # Score = max(0, 100 - 10*critical - 1*high - 0.1*medium), clamped to
+    # 0..100. A green-field cluster yields 100; a single critical drops
+    # the score by 10 points.
+    # ─────────────────────────────────────────────────────────────────────
+    - name: soc2.posture
+      interval: 1m
+      rules:
+        - record: soc2:posture_score
+          expr: |
+            clamp_min(
+              clamp_max(
+                100
+                  - 10  * sum(soc2_critical_24h_hits)
+                  - 1   * sum(soc2_high_24h_hits)
+                  - 0.1 * sum(soc2_medium_24h_hits),
+                100
+              ),
+              0
+            )
+
+        - alert: SOC2PostureBelowTarget
+          expr: soc2:posture_score < 80
+          for: 30m
+          labels:
+            severity: warning
+            team: security
+          annotations:
+            summary: "SOC 2 posture score below 80% ({{ $value | printf \"%.1f\" }}%)"
+            description: |
+              The weighted SOC 2 posture score has dropped below the 80% target
+              for >30 minutes. Open critical/high findings are dragging the score
+              down. See the SOC 2 compliance dashboard for the breakdown.
+            view_dashboard: 'https://grafana.observability{{ if eq $labels.environment "dev" }}.dev{{ end }}.internal.falkordb.cloud/d/soc2-compliance'
+
+        - alert: SOC2PostureCritical
+          expr: soc2:posture_score < 50
+          for: 15m
+          labels:
+            severity: critical
+            team: security
+          annotations:
+            summary: "SOC 2 posture score below 50% ({{ $value | printf \"%.1f\" }}%)"
+            description: |
+              The weighted SOC 2 posture score has dropped below 50% for >15
+              minutes, indicating multiple unaddressed critical findings.
+            view_dashboard: 'https://grafana.observability{{ if eq $labels.environment "dev" }}.dev{{ end }}.internal.falkordb.cloud/d/soc2-compliance'
+
+        - alert: SOC2MetricsExporterDown
+          expr: |
+            up{job="wazuh-metrics-exporter"} == 0
+          for: 15m
+          labels:
+            severity: warning
+            team: security
+          annotations:
+            summary: "wazuh-metrics-exporter is down"
+            description: |
+              The prometheus-es-exporter that powers soc2:posture_score has been
+              unreachable for >15 minutes. The posture score will become stale.
+
     - name: soc2.falco
       interval: 1m
       rules:

@@ -1,0 +1,126 @@
+# prometheus-es-exporter — runs scheduled OpenSearch queries against the
+# wazuh-indexer and exposes the result counts as Prometheus gauges.
+#
+# These gauges feed the `soc2:posture_score` recording rule and the
+# Grafana SOC 2 dashboard's compliance gauge / time series. Maintaining
+# the score as a real Prometheus metric (rather than computing it at
+# dashboard view time) gives us long-term retention, alerting via
+# vmalert, and decoupling from the Wazuh indexer's data retention.
+#
+# Image: braedon/prometheus-es-exporter (community Python exporter).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-metrics-exporter
+  namespace: security
+  labels:
+    app: wazuh-metrics-exporter
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: wazuh-metrics-exporter
+  template:
+    metadata:
+      labels:
+        app: wazuh-metrics-exporter
+    spec:
+      serviceAccountName: wazuh-metrics-exporter
+      nodeSelector:
+        node_pool: security
+      tolerations:
+        - key: cloud.google.com/gke-spot
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+        - key: eks.amazonaws.com/capacityType
+          operator: Equal
+          value: SPOT
+          effect: NoSchedule
+        - key: kubernetes.azure.com/scalesetpriority
+          operator: Equal
+          value: spot
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: exporter
+          image: braedon/prometheus-es-exporter:0.14.0
+          imagePullPolicy: IfNotPresent
+          # CLI flags reference: https://github.com/braedon/prometheus-es-exporter
+          # The default collectors (cluster-health / nodes-stats / indices-*) are
+          # disabled to keep the metric surface focused on our query gauges and
+          # to avoid scraping the entire indexer schema on every poll.
+          # No --ca-certs is passed, so the client runs with verify_certs=False,
+          # which matches wazuh-indexer's self-signed certificate.
+          args:
+            - "--config-file=/etc/exporter/exporter.cfg"
+            - "--port=9206"
+            - "--es-cluster=https://wazuh-indexer.security.svc.cluster.local:9200"
+            - "--cluster-health-disable"
+            - "--nodes-stats-disable"
+            - "--indices-stats-disable"
+            - "--indices-aliases-disable"
+            - "--indices-mappings-disable"
+          env:
+            # auto_envvar_prefix='ES_EXPORTER' in the upstream click app.
+            - name: ES_EXPORTER_BASIC_USER
+              valueFrom:
+                secretKeyRef:
+                  name: wazuh-indexer-cred
+                  key: INDEXER_USERNAME
+            - name: ES_EXPORTER_BASIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: wazuh-indexer-cred
+                  key: INDEXER_PASSWORD
+          ports:
+            - name: metrics
+              containerPort: 9206
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /etc/exporter
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: wazuh-metrics-exporter-config
+        - name: tmp
+          emptyDir: {}
