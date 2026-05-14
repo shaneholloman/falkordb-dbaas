@@ -232,10 +232,69 @@
       "collapsed": false
     },
     {
+      "title": "SOC 2 Posture Score over time",
+      "description": "Same weighted score as the top-row gauge, computed per time bucket. Visible drops correspond to scan runs that surfaced new critical/high findings. A rising line over time = posture improving.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 7 },
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 15, "lineWidth": 2, "spanNulls": true },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 50 }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 95 } ] },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Score" }, "properties": [ { "id": "custom.thresholdsStyle", "value": { "mode": "area" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "min", "mean"] }, "tooltip": { "mode": "single" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+          "query": "rule.groups:soc2_critical",
+          "alias": "critical",
+          "metrics": [ { "type": "count", "id": "1" } ],
+          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
+          "timeField": "@timestamp",
+          "hide": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+          "query": "rule.groups:soc2_fail AND data.Severity:(high OR High)",
+          "alias": "high",
+          "metrics": [ { "type": "count", "id": "1" } ],
+          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
+          "timeField": "@timestamp",
+          "hide": true
+        },
+        {
+          "refId": "M",
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+          "query": "rule.groups:soc2_fail AND data.Severity:(medium OR Medium)",
+          "alias": "medium",
+          "metrics": [ { "type": "count", "id": "1" } ],
+          "bucketAggs": [ { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "$__interval", "min_doc_count": "0" } } ],
+          "timeField": "@timestamp",
+          "hide": true
+        },
+        {
+          "refId": "Score",
+          "datasource": { "type": "__expr__", "uid": "__expr__" },
+          "type": "math",
+          "expression": "max(0, 100 - 10 * $A - 1 * $B - 0.1 * $M)"
+        }
+      ]
+    },
+    {
       "title": "Prowler PASS vs FAIL over time",
       "description": "Time series of Prowler check outcomes. Rising green / shrinking red = improving cloud control compliance.",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 7 },
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
       "fieldConfig": {
         "defaults": {
@@ -267,7 +326,7 @@
       "title": "SOC2 failures by severity over time",
       "description": "All SOC2 control failures (rule.groups:soc2_fail) bucketed by data.Severity. Tracks whether the overall posture is improving.",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 7 },
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
       "fieldConfig": {
         "defaults": {
