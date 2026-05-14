@@ -1,0 +1,34 @@
+# Cloud Evidence Collector — production app-plane spoke clusters.
+# Collects AWS evidence and uploads to the central GCS evidence locker.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cloud-evidence
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            role: app-plane
+            cloud_provider: aws
+  template:
+    metadata:
+      name: '{{ regexFind "h?c-[A-Za-z0-9]+" .name }}-cloud-evidence'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/FalkorDB/falkordb-dbaas.git
+        targetRevision: main
+        path: argocd/kustomize/cloud-evidence/overlays/aws-prod
+      destination:
+        server: "{{.server}}"
+        namespace: security
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          prune: true
+          selfHeal: true
