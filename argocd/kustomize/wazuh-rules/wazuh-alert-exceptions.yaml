@@ -103,6 +103,25 @@ data:
           "field": "rule.description",
           "pattern": "Customer-Supplied Encryption Keys",
           "is_regex": false
+        },
+        {
+          "comment": "Falco container-escape via bind-mount on /var/lib/kubelet/plugins/kubernetes.io/csi/ — GKE PD CSI driver host mount, not container escape (container=<NA>, image=<NA>)",
+          "rule_id": "109001",
+          "field": "data.output",
+          "pattern": "/var/lib/kubelet/plugins/kubernetes.io/csi/",
+          "is_regex": false
+        },
+        {
+          "comment": "Trufflehog PrivateKey false positive — ssh2 npm test fixtures (publicly distributed RSA keys shipped with ssh2 library, e.g. inside n8n image); suppresses 100601 and any downstream correlations",
+          "field": "data.SourceFile",
+          "pattern": "ssh2/test/fixtures",
+          "is_regex": false
+        },
+        {
+          "comment": "Trufflehog stale/synthetic finding on bare 'backend:v1' image name — no such image is deployed (real images are us-central1-docker.pkg.dev/.../backend/<svc>:<ver>); likely a legacy test injection",
+          "field": "data.ImageName",
+          "pattern": "backend:v1",
+          "is_regex": false
         }
       ]
     }
