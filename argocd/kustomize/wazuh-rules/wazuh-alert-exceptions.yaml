@@ -54,6 +54,55 @@ data:
           "field": "data.output",
           "pattern": "kubelet-detect-safe-umount",
           "is_regex": false
+        },
+        {
+          "comment": "Kubelet kernel module unload via nsenter (container=<NA>, image=<NA>) — host-level kubelet operation, not a container escape",
+          "rule_id": "100510",
+          "field": "data.output",
+          "pattern": "nsenter -t 1 -p -m -- rmmod",
+          "is_regex": false
+        },
+        {
+          "comment": "Unverified trufflehog correlation — trufflehog could not validate the secret live, treat as informational only (false-positive prone, especially URI detector on container images)",
+          "rule_id": "109002",
+          "field": "data.Verified",
+          "pattern": "false",
+          "is_regex": false
+        },
+        {
+          "comment": "Prowler self-test alert from in-cluster LB probe — synthetic test, not a real compliance finding",
+          "rule_id": "100101",
+          "field": "rule.description",
+          "pattern": "App-plane LB Test",
+          "is_regex": false
+        },
+        {
+          "comment": "Prowler self-test alert from localhost probe — synthetic test, not a real compliance finding",
+          "rule_id": "100101",
+          "field": "rule.description",
+          "pattern": "Localhost Test",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubescape MITRE ATT&CK C-0015 (List Kubernetes secrets) — controllers and operators routinely list secrets; not actionable on its own",
+          "rule_id": "100810",
+          "field": "data.ControlID",
+          "pattern": "C-0015",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubescape MITRE ATT&CK C-0048 (HostPath mount) — required by node-level agents (Falco, Wazuh, Fluent-bit, kube-state-metrics) by design; not actionable on its own",
+          "rule_id": "100810",
+          "field": "data.ControlID",
+          "pattern": "C-0048",
+          "is_regex": false
+        },
+        {
+          "comment": "Prowler CSEK (Customer-Supplied Encryption Keys) check — we use Google-managed encryption keys by policy, CSEK not adopted; tracked as an accepted compliance gap",
+          "rule_id": "100103",
+          "field": "rule.description",
+          "pattern": "Customer-Supplied Encryption Keys",
+          "is_regex": false
         }
       ]
     }
