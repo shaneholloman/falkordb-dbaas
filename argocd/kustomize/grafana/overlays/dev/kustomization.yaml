@@ -3,3 +3,4 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - wazuh-indexer-cred-env-secret.yaml

@@ -5,6 +5,7 @@ resources:
   - grafana.yaml
   - grafana-managed-certificate.yaml
   - grafana-vm-datasource.yaml
+  - grafana-wazuh-datasource.yaml
   - grafana-testdata-datasource.yaml
   - customer-grafana.yaml
   - customer-grafana-ingresses.yaml

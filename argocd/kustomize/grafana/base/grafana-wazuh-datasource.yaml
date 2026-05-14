@@ -1,0 +1,53 @@
+---
+# Grafana datasource for the Wazuh indexer (OpenSearch).
+# Compliance posture data (Prowler/Kubescape/kube-bench/TruffleHog/Falco findings,
+# decoded by Wazuh rules into structured fields like data.Status, data.Severity,
+# data.CheckTitle, data.ControlID, data.Compliance.*) is queried directly from
+# the wazuh-alerts-* indices so the SOC 2 dashboard reflects real control
+# compliance over time, not just scanner liveness.
+#
+# Credentials are pulled from a SealedSecret (`wazuh-indexer-cred`) maintained
+# in each overlay (dev/prod) in the `observability` namespace.
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: wazuh-indexer
+  namespace: observability
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  allowCrossNamespaceImport: false
+  plugins:
+    - name: grafana-opensearch-datasource
+      version: 2.21.0
+  valuesFrom:
+    - targetPath: user
+      valueFrom:
+        secretKeyRef:
+          name: wazuh-indexer-cred
+          key: INDEXER_USERNAME
+    - targetPath: secureJsonData.basicAuthPassword
+      valueFrom:
+        secretKeyRef:
+          name: wazuh-indexer-cred
+          key: INDEXER_PASSWORD
+  datasource:
+    name: WazuhIndexer
+    type: grafana-opensearch-datasource
+    access: proxy
+    url: https://wazuh-indexer.security.svc.cluster.local:9200
+    basicAuth: true
+    basicAuthUser: ${user}
+    database: "wazuh-alerts-*"
+    jsonData:
+      flavor: opensearch
+      version: "2.13.0"
+      timeField: "@timestamp"
+      tlsSkipVerify: true
+      maxConcurrentShardRequests: 5
+      logMessageField: "full_log"
+      logLevelField: "data.Severity"
+      pplEnabled: true
+    secureJsonData:
+      basicAuthPassword: ${secureJsonData.basicAuthPassword}
