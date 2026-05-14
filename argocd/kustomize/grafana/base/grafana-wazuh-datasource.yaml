@@ -40,7 +40,14 @@ spec:
     basicAuth: true
     basicAuthUser: "${INDEXER_USERNAME}"
     jsonData:
-      database: "wazuh-alerts-*"
+      # Wazuh creates one index per day named wazuh-alerts-4.x-YYYY.MM.DD.
+      # The grafana-opensearch-datasource plugin's healthcheck (`Save & test`)
+      # does a literal `GET /{database}` and expects that exact key in the
+      # response — a wildcard like `wazuh-alerts-*` reports "Index not found".
+      # Use the interval pattern instead so the plugin expands to a concrete
+      # daily index and queries span only the time range needed.
+      database: "[wazuh-alerts-4.x-]YYYY.MM.DD"
+      interval: Daily
       flavor: opensearch
       version: "2.13.0"
       timeField: "@timestamp"
