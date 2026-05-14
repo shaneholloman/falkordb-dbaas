@@ -7,3 +7,9 @@ resources:
   - serviceaccount.yaml
   - cronjob.yaml
   - networkpolicy.yaml
+configMapGenerator:
+  - name: cloud-evidence-script
+    files:
+      - collect_cloud_evidence.py
+generatorOptions:
+  disableNameSuffixHash: true

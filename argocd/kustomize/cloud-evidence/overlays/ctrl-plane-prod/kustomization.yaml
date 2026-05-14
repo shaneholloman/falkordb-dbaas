@@ -10,10 +10,6 @@ configMapGenerator:
     literals:
       - cloud-provider=gcp
       - gcp-project-ids=ctrl-plane-prod-b1b92df2,app-plane-prod-b1b92df2
-  - name: cloud-evidence-script
-    behavior: create
-    files:
-      - collect_cloud_evidence.py=../../base/collect_cloud_evidence.py
 generatorOptions:
   disableNameSuffixHash: true
 patches:
