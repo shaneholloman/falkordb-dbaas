@@ -208,6 +208,7 @@
       "description": "Time series of Prowler check outcomes. Rising green / shrinking red = improving cloud control compliance.",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 7 },
+      "timeFrom": "7d",
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
       "fieldConfig": {
         "defaults": {
@@ -240,6 +241,7 @@
       "description": "All SOC2 control failures (rule.groups:soc2_fail) bucketed by data.Severity. Tracks whether the overall posture is improving.",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 7 },
+      "timeFrom": "7d",
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
       "fieldConfig": {
         "defaults": {
@@ -279,6 +281,7 @@
       "description": "Most frequent failing cloud controls in the window (data.CheckTitle).",
       "type": "bargauge",
       "gridPos": { "h": 9, "w": 12, "x": 0, "y": 16 },
+      "timeFrom": "7d",
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
       "fieldConfig": {
         "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 5 }, { "color": "red", "value": 20 } ] }, "unit": "short" }
@@ -302,6 +305,7 @@
       "description": "Share of SOC2 failures contributed by each scanner. Helps identify which control area drives most of the open findings.",
       "type": "piechart",
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 },
+      "timeFrom": "7d",
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
       "fieldConfig": { "defaults": { "unit": "short" } },
       "options": { "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] }, "pieType": "donut", "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" } },
@@ -329,6 +333,7 @@
       "description": "Most recent critical or high SOC2 findings (rule.groups:soc2_fail AND severity critical|high). Use this list to drive remediation. Click a row to see the raw Wazuh alert.",
       "type": "table",
       "gridPos": { "h": 11, "w": 24, "x": 0, "y": 26 },
+      "timeFrom": "7d",
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
       "fieldConfig": {
         "defaults": {
