@@ -39,8 +39,8 @@ spec:
     url: https://wazuh-indexer.security.svc.cluster.local:9200
     basicAuth: true
     basicAuthUser: "${INDEXER_USERNAME}"
-    database: "wazuh-alerts-*"
     jsonData:
+      database: "wazuh-alerts-*"
       flavor: opensearch
       version: "2.13.0"
       timeField: "@timestamp"
