@@ -18,7 +18,7 @@ Tools:
     list_open_security_issues — GitHub issues labelled `security`/`soc2`
 
 Required env vars:
-    WAZUH_INDEXER_URL         — e.g. https://wazuh.security.dev.internal.falkordb.cloud:9200
+    WAZUH_INDEXER_URL         — e.g. https://wazuh.security.dev.internal.falkordb.cloud:9443
     WAZUH_INDEXER_USERNAME    — OpenSearch user (e.g. admin / kibanaserver)
     WAZUH_INDEXER_PASSWORD
     GITHUB_TOKEN              — Copilot SDK auth (also used as fallback for repo API)
