@@ -145,6 +145,13 @@ resource "google_project_iam_member" "argocd_sa_k8s_dev" {
   member  = "serviceAccount:${var.argocd_sa_email}"
 }
 
+# Allow argocd-sa to act as the default compute SA when creating node pools
+resource "google_service_account_iam_member" "argocd_sa_compute_sa_user" {
+  service_account_id = "projects/${module.project.project_id}/serviceAccounts/${module.project.project_number}-compute@developer.gserviceaccount.com"
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${var.argocd_sa_email}"
+}
+
 # Dedicated SA for RDB bucket access (upload/download via rdb-uploader workflow)
 resource "google_service_account" "rdb_bucket_sa" {
   account_id   = "rdb-bucket-sa"
