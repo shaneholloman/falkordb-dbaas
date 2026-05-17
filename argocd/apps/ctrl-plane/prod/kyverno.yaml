@@ -44,13 +44,13 @@ spec:
             node_pool: security-infra
         config:
           webhooks:
-            - namespaceSelector:
-                matchExpressions:
-                  - key: kubernetes.io/metadata.name
-                    operator: NotIn
-                    values:
-                      - kube-system
-                      - kyverno
+            namespaceSelector:
+              matchExpressions:
+                - key: kubernetes.io/metadata.name
+                  operator: NotIn
+                  values:
+                    - kube-system
+                    - kyverno
   destination:
     server: https://kubernetes.default.svc
     namespace: kyverno
