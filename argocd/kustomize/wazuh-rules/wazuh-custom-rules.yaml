@@ -169,12 +169,15 @@ data:
         <options>alert_by_email</options>
       </rule>
 
-      <!-- Critical CVE — individually logged, not notified (see 100450 burst rule) -->
+      <!-- Critical CVE — individually logged, not notified (see 100450 burst rule).
+           NOT tagged soc2_critical: individual CVEs are high-volume during scans
+           and would overwhelm correlation rule 109005 (which expects rare
+           cross-tool events). The burst rule 100450 aggregates these. -->
       <rule id="100402" level="9">
         <if_sid>100401</if_sid>
         <field name="Severity">critical</field>
         <description>CRITICAL CVE $(VulnerabilityID) in $(Package) ($(InstalledVersion)) on $(ImageName) — $(Cluster)</description>
-        <group>grype_vuln,soc2_fail,soc2_critical</group>
+        <group>grype_vuln,soc2_fail</group>
       </rule>
 
       <!-- High CVE — individually logged, not notified -->
@@ -553,7 +556,7 @@ data:
         <if_matched_group>secret_leak</if_matched_group>
         <same_field>Cluster</same_field>
         <description>CORRELATION: Secret leak + auth/compliance failure on $(Cluster) — credential exposure risk</description>
-        <group>siem_correlation,soc2_critical,credential_exposure</group>
+        <group>siem_correlation,soc2_correlation,credential_exposure</group>
         <mitre>
           <id>T1552</id>
           <id>T1078</id>
@@ -593,12 +596,14 @@ data:
            3+ critical alerts from different tools within 1 hour
            on the same cluster → coordinated attack or major incident.
            Burst-aggregate rules (100450/100750/100850) are intentionally
-           NOT in soc2_critical so they don't re-feed this correlation. -->
+           NOT in soc2_critical so they don't re-feed this correlation.
+           NOTE: This rule is NOT tagged soc2_critical to prevent a
+           feedback loop where its own output re-triggers itself. -->
       <rule id="109005" level="15" frequency="3" timeframe="3600">
         <if_matched_group>soc2_critical</if_matched_group>
         <same_field>Cluster</same_field>
         <description>CRITICAL CORRELATION: 3+ critical alerts across tools on $(Cluster) — potential coordinated attack</description>
-        <group>siem_correlation,soc2_critical,coordinated_attack</group>
+        <group>siem_correlation,soc2_correlation,coordinated_attack</group>
         <options>alert_by_email</options>
       </rule>
 
