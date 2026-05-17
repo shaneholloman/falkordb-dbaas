@@ -562,13 +562,21 @@ async def read_oom_dumps(params: ReadOomDumpsParams) -> str:
             lambda m: m.group(0)[0] + "****@" + m.group(0).split("@")[1], content
         )
 
-        # Cap individual file output to prevent context overflow
+        # Cap individual file output to prevent context overflow.
+        # For oom_dump_90.log (appended), keep the TAIL since the most recent
+        # snapshot nearest to the OOM kill is at the end of the file.
         MAX_DUMP_BYTES = 80_000
         if len(content) > MAX_DUMP_BYTES:
-            content = content[:MAX_DUMP_BYTES]
-            output_parts.append(
-                f"### {label} (TRUNCATED to {MAX_DUMP_BYTES // 1000}KB)\n\n{content}\n"
-            )
+            if "90" in filename:
+                content = content[-MAX_DUMP_BYTES:]
+                output_parts.append(
+                    f"### {label} (last {MAX_DUMP_BYTES // 1000}KB — most recent snapshots)\n\n{content}\n"
+                )
+            else:
+                content = content[:MAX_DUMP_BYTES]
+                output_parts.append(
+                    f"### {label} (TRUNCATED to {MAX_DUMP_BYTES // 1000}KB)\n\n{content}\n"
+                )
         else:
             output_parts.append(f"### {label}\n\n{content}\n")
 
