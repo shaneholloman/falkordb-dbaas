@@ -56,6 +56,10 @@ spec:
           volumes:
             - name: tmp
               emptyDir: {}
+            - name: exceptions
+              configMap:
+                name: kubescape-exceptions
+                optional: true
           containers:
             - name: kubescape
               image: python:3.12-slim@sha256:bf73779de6dbd030f3d189eeeb246286965832761ace318c1518300f76c0840d
@@ -77,6 +81,9 @@ spec:
               volumeMounts:
                 - name: tmp
                   mountPath: /tmp
+                - name: exceptions
+                  mountPath: /etc/kubescape
+                  readOnly: true
               env:
                 - name: HOME
                   value: /tmp
@@ -123,6 +130,12 @@ spec:
                   # ── Run framework scans ────────────────────────────────────
                   SCAN_FAILURES=0
 
+                  # Exceptions file (mounted from ConfigMap, optional per overlay)
+                  EXCEPTIONS_FLAG=""
+                  if [ -f /etc/kubescape/exceptions.json ]; then
+                    EXCEPTIONS_FLAG="--exceptions /etc/kubescape/exceptions.json"
+                  fi
+
                   echo "Running KubeScape MITRE ATT&CK scan..."
                   # NOTE: do not pass --severity-threshold here. That flag is a CI gate
                   # that forces kubescape to exit non-zero ("compliance result exceeds
@@ -133,6 +146,7 @@ spec:
                     --format json \
                     --output "${OUTPUT_DIR}/mitre-results.json" \
                     --logger error \
+                    $EXCEPTIONS_FLAG \
                     2>"${OUTPUT_DIR}/mitre-stderr.log"; then
                     echo "ERROR: KubeScape MITRE scan failed. stderr:"
                     cat "${OUTPUT_DIR}/mitre-stderr.log"
@@ -144,6 +158,7 @@ spec:
                     --format json \
                     --output "${OUTPUT_DIR}/nsa-results.json" \
                     --logger error \
+                    $EXCEPTIONS_FLAG \
                     2>"${OUTPUT_DIR}/nsa-stderr.log"; then
                     echo "ERROR: KubeScape NSA scan failed. stderr:"
                     cat "${OUTPUT_DIR}/nsa-stderr.log"
@@ -155,6 +170,7 @@ spec:
                     --format json \
                     --output "${OUTPUT_DIR}/allcontrols-results.json" \
                     --logger error \
+                    $EXCEPTIONS_FLAG \
                     2>"${OUTPUT_DIR}/allcontrols-stderr.log"; then
                     echo "ERROR: KubeScape AllControls scan failed. stderr:"
                     cat "${OUTPUT_DIR}/allcontrols-stderr.log"

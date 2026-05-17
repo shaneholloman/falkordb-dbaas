@@ -114,3 +114,43 @@ data:
               Resources:
                 - "*"
               Reason: "Monitored via Wazuh audit rules instead of GCP metrics."
+
+            # ── GKE public pool: VMs with public IPs by design ────────────
+            compute_instance_public_ip:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "GKE public node pool requires public IPs. Access controlled via firewall rules."
+
+            # ── Audit logging: too costly for full coverage in dev ─────────
+            logging_cloudaudit_logging_enabled:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Full audit log coverage too costly for dev. Critical operations monitored via Wazuh."
+
+            # ── IAM: Workload Identity requires token-creator at project ──
+            iam_sa_user_or_token_creator_at_project_level:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Required for GKE Workload Identity. Scoped via WI bindings."
+
+            # ── IAM: separation of duties for Cloud Build SA ──────────────
+            iam_sa_separation_of_duties:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Single CI/CD SA by design in dev. Separate SAs in prod."
+
+            # ── IAM: admin privileges for infra provisioning SAs ──────────
+            iam_sa_no_admin_privileges:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Provisioning SAs (terraform, CI/CD) require admin roles in dev."

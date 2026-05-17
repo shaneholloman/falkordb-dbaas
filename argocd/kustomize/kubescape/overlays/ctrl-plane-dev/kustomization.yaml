@@ -4,6 +4,7 @@ namespace: security
 resources:
   - ../../base
   - secrets-env-secret.yaml
+  - exceptions-configmap.yaml
 configMapGenerator:
   - name: kubescape-config
     behavior: create
