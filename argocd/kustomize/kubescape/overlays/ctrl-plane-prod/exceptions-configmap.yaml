@@ -1,6 +1,6 @@
-# Kubescape exceptions — ctrl-plane-dev
+# Kubescape exceptions — ctrl-plane-prod
 # Suppress accepted-risk controls for infrastructure workloads
-# that inherently reference credentials in their configuration.
+# that inherently require elevated privileges.
 # Last reviewed: 2026-05-17
 apiVersion: v1
 kind: ConfigMap
