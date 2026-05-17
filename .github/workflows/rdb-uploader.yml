@@ -83,6 +83,9 @@ on:
       falkordb_version:
         description: 'FalkorDB version detected via MODULE LIST'
         value: ${{ jobs.upload-rdb.outputs.falkordb_version }}
+      oom_dump_urls:
+        description: 'Comma-separated GCS paths for OOM dump files (oom_dump_70/80/90.log)'
+        value: ${{ jobs.upload-rdb.outputs.oom_dump_urls }}
 
 env:
   ISSUE_REPO: 'FalkorDB/private'
@@ -95,6 +98,7 @@ jobs:
       rdb_url: ${{ steps.upload_gcs.outputs.rdb_url }}
       aof_url: ${{ steps.upload_gcs.outputs.aof_url }}
       falkordb_version: ${{ steps.upload_gcs.outputs.falkordb_version }}
+      oom_dump_urls: ${{ steps.upload_gcs.outputs.oom_dump_urls }}
     steps:
       # ------------------------------------------------------------------ #
       # 0. Check that the actor is an authorised user

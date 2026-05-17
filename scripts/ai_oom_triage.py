@@ -136,7 +136,29 @@ Use `fetch_logs` to get the last 30 minutes of logs. Look for:
 - Eviction warnings
 - AOF rewrite or BGSAVE activity (these cause memory spikes due to fork)
 
-### Step 7: Database Inspection (if RDB/AOF available)
+### Step 7: Pre-OOM Memory Snapshots (if available)
+Use `read_oom_dumps` to read the INFO ALL snapshots captured at cgroup memory thresholds. \
+These are captured automatically by our OOM automation:
+- **70% threshold** (oom_dump_70.log): Overwritten each time — contains latest INFO ALL snapshot
+- **80% threshold** (oom_dump_80.log): Overwritten each time — contains latest INFO ALL snapshot
+- **90% threshold** (oom_dump_90.log): Appended — may contain multiple snapshots over time. \
+At 90% the automation also sends SIGABRT to capture a core dump.
+
+**How to analyze:** Compare key fields across the 70% → 80% → 90% snapshots:
+- `used_memory` / `used_memory_rss` — how much did memory grow between thresholds?
+- `connected_clients` — did client count spike?
+- `instantaneous_ops_per_sec` — was command rate increasing?
+- `mem_fragmentation_ratio` — is fragmentation worsening?
+- `total_commands_processed` — how many commands ran between snapshots?
+- `used_memory_peak` — was this an all-time peak or recurring?
+- Graph-specific fields (if FalkorDB) — check graph count, node/edge counts
+
+This gives you a **progressive timeline** of the pod's state as it approached OOM, \
+which is far more valuable than a single post-mortem snapshot.
+
+If `read_oom_dumps` returns "No OOM dump files available", skip this step.
+
+### Step 8: Database Inspection (if RDB/AOF available)
 If RDB or AOF URLs are provided:
 - Use `run_falkordb_local` to start a local instance with the dump
 - Use `execute_query` to run:
@@ -174,7 +196,7 @@ but as the parent modifies pages during writes, CoW duplicates them. Peak RSS ca
 reach up to 2x used_memory during active writes + fork. This is the most common \
 hidden cause of OOMs when redis_memory_used_bytes shows plenty of headroom.
 
-### Step 8: Produce Diagnosis
+### Step 9: Produce Diagnosis
 After completing your analysis, output EXACTLY this structured report:
 
 ```
@@ -199,6 +221,17 @@ After completing your analysis, output EXACTLY this structured report:
 ### Log Analysis
 [Summary of any relevant findings from logs — errors, large queries, \
 slow operations, AOF/BGSAVE activity]
+
+### Pre-OOM Memory Snapshots
+If OOM dump files were available, summarize the progressive state:
+- **70% snapshot:** used_memory=[X MB], RSS=[X MB], clients=[X], ops/sec=[X]
+- **80% snapshot:** used_memory=[X MB], RSS=[X MB], clients=[X], ops/sec=[X]
+- **90% snapshot:** used_memory=[X MB], RSS=[X MB], clients=[X], ops/sec=[X]
+- **Key delta (70% → 90%):** [What changed — e.g. "memory grew 200MB, clients doubled, \
+fragmentation ratio increased from 1.2 to 1.8"]
+
+If no OOM dumps were available, state: "Pre-OOM snapshots unavailable (thresholds not reached \
+or dumps not captured)."
 
 ### Memory Breakdown
 If GRAPH.MEMORY USAGE was run, include a table showing where memory is allocated. \
@@ -596,6 +629,11 @@ A ContainerOOMKilled event has been detected. Please perform a full OOM triage.
     if args.aof_url:
         prompt += f"- AOF directory available: yes\n"
         prompt += f"  AOF URL: {args.aof_url}\n"
+    if args.oom_dump_urls:
+        dump_files = [u.strip().split("/")[-1] for u in args.oom_dump_urls.split(",") if u.strip()]
+        thresholds = [f.replace("oom_dump_", "").replace(".log", "%") for f in dump_files]
+        prompt += f"- OOM memory dumps available: {', '.join(thresholds)} thresholds\n"
+        prompt += f"  Use `read_oom_dumps` tool in Step 7 to read them.\n"
 
     prompt += f"""
 **Topology Note:** {topology_note}
@@ -889,10 +927,15 @@ def main():
     parser.add_argument("--falkordb-version", default="", help="FalkorDB version")
     parser.add_argument("--alert-timestamp", default="", help="ISO timestamp of the OOM event (fallback: now)")
     parser.add_argument("--topology", default="", choices=["", "standalone", "replicated", "cluster"], help="Instance topology: standalone, replicated, or cluster")
+    parser.add_argument("--oom-dump-urls", default="", help="Comma-separated GCS paths for OOM dump files (oom_dump_70/80/90.log)")
     args = parser.parse_args()
 
     # Pass vmauth-url to tools via env
     os.environ.setdefault("VMAUTH_URL", args.vmauth_url)
+
+    # Pass OOM dump URLs to tools via env
+    if args.oom_dump_urls:
+        os.environ["OOM_DUMP_URLS"] = args.oom_dump_urls
 
     # Configure SSL
     environment = os.environ.get("ENVIRONMENT", "prod").lower()

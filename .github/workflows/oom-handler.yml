@@ -238,4 +238,5 @@ jobs:
             --topology "$TOPOLOGY" \
             ${{ needs.upload-rdb.outputs.rdb_url != '' && format('--rdb-url "{0}"', needs.upload-rdb.outputs.rdb_url) || '' }} \
             ${{ needs.upload-rdb.outputs.aof_url != '' && format('--aof-url "{0}"', needs.upload-rdb.outputs.aof_url) || '' }} \
-            ${{ needs.upload-rdb.outputs.falkordb_version != '' && format('--falkordb-version "{0}"', needs.upload-rdb.outputs.falkordb_version) || '' }}
+            ${{ needs.upload-rdb.outputs.falkordb_version != '' && format('--falkordb-version "{0}"', needs.upload-rdb.outputs.falkordb_version) || '' }} \
+            ${{ needs.upload-rdb.outputs.oom_dump_urls != '' && format('--oom-dump-urls "{0}"', needs.upload-rdb.outputs.oom_dump_urls) || '' }}
