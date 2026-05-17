@@ -269,6 +269,28 @@ spec:
             description: "[cluster={{ $labels.cluster }}] FalkorDB instance in namespace {{ $labels.namespace }} is using more than 75% of its disk space (PVC: {{ $labels.persistentvolumeclaim }}). Current usage: {{ $value | printf \"%.1f\" }}%."
             runbook_url: "https://runbooks.falkordb.cloud/alerts/falkordb-low-disk-space-critical/"
             threshold: "{{ $value | printf \"%.1f\" }}"
+    - name: falkordb.rules.memory
+      rules:
+        - alert: FalkorDBMemoryFragmentationHigh
+          expr: redis_mem_fragmentation_ratio{container="service"} > 1.5
+          for: 10m
+          labels:
+            severity: warning
+            cluster: '{{ $labels.cluster }}'
+          annotations:
+            summary: "FalkorDB high memory fragmentation in namespace {{ $labels.namespace }}"
+            description: "[cluster={{ $labels.cluster }}] FalkorDB instance in namespace {{ $labels.namespace }} has a memory fragmentation ratio above 1.5 (current: {{ $value | printf \"%.2f\" }}). This indicates significant allocator overhead or fragmentation."
+
+        - alert: FalkorDBMemoryGrowthRapid
+          expr: deriv(redis_memory_used_bytes{container="service"}[1h]) > 50 * 1024 * 1024
+          for: 30m
+          labels:
+            severity: warning
+            cluster: '{{ $labels.cluster }}'
+          annotations:
+            summary: "FalkorDB rapid memory growth in namespace {{ $labels.namespace }}"
+            description: "[cluster={{ $labels.cluster }}] FalkorDB instance in namespace {{ $labels.namespace }} is growing memory at more than 50MB/hour (current rate: {{ $value | humanize }}B/s). Investigate potential memory leak or unexpected data growth."
+
     - name: falkordb.rules.standalone
       rules: []
 
