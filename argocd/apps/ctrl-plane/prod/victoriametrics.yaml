@@ -67,12 +67,13 @@ spec:
               resolve_timeout: 5m
             inhibit_rules:
               # When ContainerKilledBySIGABRT triggers (intentional OOM automation kill),
-              # suppress RedisCrashed/Loop (it's not a bug) and downstream alerts
+              # suppress RedisCrashed/Loop (it's not a bug) and downstream per-pod alerts.
+              # Scoped to the same pod to avoid hiding crashes on other pods in replicated/cluster deployments.
               - source_match:
                   alertname: ContainerKilledBySIGABRT
                 target_match_re:
                   alertname: (RedisCrashed|RedisCrashLoop|FalkorDBDown|FalkorDBDownLoop|SustainedErrorLogInK8s)
-                equal: ['namespace', 'cluster']
+                equal: ['namespace', 'cluster', 'pod']
               # When RedisCrashed triggers, suppress FalkorDBDown, FalkorDBMultiplePodsDown, FalkorDBDownLoop and SustainedErrorLogInK8s
               - source_match:
                   alertname: RedisCrashed

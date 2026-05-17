@@ -289,6 +289,16 @@ def main() -> None:
         creds = _load_credentials()
         client = storage.Client(credentials=creds)
 
+        # Check for OOM dump files first (best-effort, independent of RDB/AOF)
+        oom_dump_urls = []
+        for dump_file in ["oom_dump_70.log", "oom_dump_80.log", "oom_dump_90.log"]:
+            dump_object = f"{args.namespace}/{dump_file}"
+            if gcs_object_exists(client, args.bucket, dump_object):
+                oom_dump_urls.append(f"gs://{args.bucket}/{dump_object}")
+                print(f"  gs://{args.bucket}/{dump_object} — found in GCS.")
+        if oom_dump_urls:
+            write_github_output("oom_dump_urls", ",".join(oom_dump_urls))
+
         rdb_exists_gcs = gcs_object_exists(client, args.bucket, rdb_object)
         aof_exists_gcs = gcs_object_exists(client, args.bucket, aof_object) if aof_enabled else False
 
@@ -311,16 +321,6 @@ def main() -> None:
             else:
                 print(f"  {aof_gcs_path} — not found in GCS.")
 
-        # Check for OOM dump files in GCS (best-effort)
-        oom_dump_urls = []
-        for dump_file in ["oom_dump_70.log", "oom_dump_80.log", "oom_dump_90.log"]:
-            dump_object = f"{args.namespace}/{dump_file}"
-            if gcs_object_exists(client, args.bucket, dump_object):
-                oom_dump_urls.append(f"gs://{args.bucket}/{dump_object}")
-                print(f"  gs://{args.bucket}/{dump_object} — found in GCS.")
-        if oom_dump_urls:
-            write_github_output("oom_dump_urls", ",".join(oom_dump_urls))
-
     else:
         # ------------------------------------------------------------------
         # Upload: sign PUT URLs → pod curl-PUTs → output gs:// paths
@@ -330,7 +330,7 @@ def main() -> None:
             sys.exit(1)
 
         # Detect actual AOF mode from Redis config
-        print("\n[1/6] Detecting Redis persistence mode...")
+        print("\n[1/7] Detecting Redis persistence mode...")
         aof_enabled = detect_aof_enabled(args.namespace, args.pod, args.container)
         print(f"  AOF enabled: {aof_enabled}")
 
@@ -341,7 +341,7 @@ def main() -> None:
         aof_blob = client.bucket(args.bucket).blob(aof_object)
 
         # 1. Generate signed PUT URLs (1h)
-        print("\n[2/6] Generating signed PUT URLs (1h)...")
+        print("\n[2/7] Generating signed PUT URLs (1h)...")
         rdb_put_url = get_signed_url(rdb_blob, creds, 60, method="PUT")
         mask_in_actions(rdb_put_url)
         print("  RDB PUT URL generated.")
@@ -353,7 +353,7 @@ def main() -> None:
             print("  AOF PUT URL generated.")
 
         # 2. Verify files exist on the pod before uploading
-        print("\n[3/6] Checking files exist on pod...")
+        print("\n[3/7] Checking files exist on pod...")
         rdb_exists = kubectl_check_path(args.namespace, args.pod, args.container, "/data/dump.rdb")
         if rdb_exists:
             print("  /data/dump.rdb — found.")
@@ -371,7 +371,7 @@ def main() -> None:
         falkordb_version = detect_falkordb_version(args.namespace, args.pod, args.container)
 
         # 3. Pod uploads directly to GCS via curl
-        print("\n[4/6] Uploading from pod to GCS...")
+        print("\n[4/7] Uploading from pod to GCS...")
         if rdb_exists:
             print("  Uploading dump.rdb...")
             kubectl_exec(

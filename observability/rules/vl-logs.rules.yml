@@ -145,11 +145,13 @@ spec:
 
         - alert: ContainerKilledBySIGABRT
           # LogsQL: Detect intentional SIGABRT (signal 6) sent by our OOM handling automation.
-          # When cgroup memory reaches 90%, we send SIGABRT to get a core dump for analysis.
+          # When cgroup memory reaches 90%, we send SIGABRT via external kill to get a core dump.
           # This is NOT a Redis bug — suppress RedisCrashed/RedisCrashLoop via inhibit rules.
-          # The "crashed by signal: 6" line is emitted exactly once per SIGABRT kill.
+          # Matching "si_code: 0" (SI_USER) ensures we only catch externally-sent SIGABRT.
+          # Redis internal abort() (assertion failure) produces si_code: -6 (SI_TKILL) and
+          # will NOT match this alert, correctly falling through to RedisCrashed instead.
           expr: |
-            ~"crashed by signal: 6" and -pod:~"vmalert*" | 
+            ~"crashed by signal: 6, si_code: 0" and -pod:~"vmalert*" | 
             stats by (pod, namespace, cluster, environment) count() as crash_count    
           for: 0m
           keep_firing_for: 5m
@@ -167,10 +169,12 @@ spec:
             view_logs: 'https://grafana.observability{{ if eq $labels.environment "dev" }}.dev{{ end }}.internal.falkordb.cloud/explore?orgId=1&left=%7B%22datasource%22%3A%22VictoriaLogs%22%2C%22queries%22%3A%5B%7B%22expr%22%3A%22pod%3A%5C%22{{ $labels.pod }}%5C%22%20AND%20namespace%3A%5C%22{{ $labels.namespace }}%5C%22%20AND%20container%3A%5C%22service%5C%22%22%7D%5D%7D'
 
         - alert: ContainerKilledBySIGABRTLoop
-          # LogsQL: Detect repeated SIGABRT kills (2+ in 10 minutes) — indicates the pod is
-          # stuck in an OOM → SIGABRT → restart → OOM cycle and needs manual intervention.
+          # LogsQL: Detect repeated external SIGABRT kills (2+ in 10 minutes) — indicates the pod
+          # is stuck in an OOM → SIGABRT → restart → OOM cycle and needs manual intervention.
+          # Uses si_code: 0 (SI_USER) to only match externally-sent SIGABRT from OOM automation,
+          # not internal abort() from genuine Redis/FalkorDB assertion failures.
           expr: |
-            ~"crashed by signal: 6" and -pod:~"vmalert*" and _time:10m | 
+            ~"crashed by signal: 6, si_code: 0" and -pod:~"vmalert*" and _time:10m | 
             stats by (pod, namespace, cluster, environment) count() as crash_count | 
             filter crash_count :>= 2
           for: 1m
