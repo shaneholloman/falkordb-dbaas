@@ -154,7 +154,7 @@ spec:
           for: 0m
           keep_firing_for: 5m
           labels:
-            severity: critical
+            severity: warning
             cluster: "{{ $labels.cluster }}"
             environment: "{{ $labels.environment }}"
           annotations:
