@@ -23,7 +23,8 @@ Usage:
         --subscription-id "sub-123" \
         [--rdb-url gs://bucket/path/dump.rdb] \
         [--aof-url gs://bucket/path/appendonlydir.tar.gz] \
-        [--falkordb-version v4.18.0]
+        [--falkordb-version v4.18.0] \
+        [--oom-dump-urls gs://bucket/ns/oom_dump_70.log,gs://bucket/ns/oom_dump_90.log]
 """
 
 import os
@@ -630,7 +631,12 @@ A ContainerOOMKilled event has been detected. Please perform a full OOM triage.
         prompt += f"- AOF directory available: yes\n"
         prompt += f"  AOF URL: {args.aof_url}\n"
     if args.oom_dump_urls:
-        dump_files = [u.strip().split("/")[-1] for u in args.oom_dump_urls.split(",") if u.strip()]
+        from urllib.parse import urlparse
+        dump_files = [
+            os.path.basename(urlparse(u.strip()).path) if u.strip().startswith("https://")
+            else u.strip().split("/")[-1]
+            for u in args.oom_dump_urls.split(",") if u.strip()
+        ]
         thresholds = [f.replace("oom_dump_", "").replace(".log", "%") for f in dump_files]
         prompt += f"- OOM memory dumps available: {', '.join(thresholds)} thresholds\n"
         prompt += f"  Use `read_oom_dumps` tool in Step 7 to read them.\n"

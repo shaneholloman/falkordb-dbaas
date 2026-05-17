@@ -293,9 +293,13 @@ def main() -> None:
         oom_dump_urls = []
         for dump_file in ["oom_dump_70.log", "oom_dump_80.log", "oom_dump_90.log"]:
             dump_object = f"{args.namespace}/{dump_file}"
-            if gcs_object_exists(client, args.bucket, dump_object):
-                oom_dump_urls.append(f"gs://{args.bucket}/{dump_object}")
-                print(f"  gs://{args.bucket}/{dump_object} — found in GCS.")
+            try:
+                if gcs_object_exists(client, args.bucket, dump_object):
+                    oom_dump_urls.append(f"gs://{args.bucket}/{dump_object}")
+                    print(f"  gs://{args.bucket}/{dump_object} — found in GCS.")
+            except Exception as exc:
+                print(f"  ⚠️  Failed to check optional OOM dump gs://{args.bucket}/{dump_object}: {exc}",
+                      file=sys.stderr)
         if oom_dump_urls:
             write_github_output("oom_dump_urls", ",".join(oom_dump_urls))
 

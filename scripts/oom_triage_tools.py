@@ -536,8 +536,13 @@ async def read_oom_dumps(params: ReadOomDumpsParams) -> str:
     }
 
     for url in urls:
-        # Extract filename from GCS path
-        filename = url.rstrip("/").split("/")[-1]
+        # Extract filename from URL path, stripping query strings to avoid
+        # leaking signed-URL parameters in labels or local filesystem paths.
+        if url.startswith("https://"):
+            from urllib.parse import urlparse
+            filename = os.path.basename(urlparse(url).path)
+        else:
+            filename = url.rstrip("/").split("/")[-1]
         label = threshold_labels.get(filename, filename)
         dest = os.path.join(work_dir, filename)
 
@@ -567,7 +572,7 @@ async def read_oom_dumps(params: ReadOomDumpsParams) -> str:
         # snapshot nearest to the OOM kill is at the end of the file.
         MAX_DUMP_BYTES = 80_000
         if len(content) > MAX_DUMP_BYTES:
-            if "90" in filename:
+            if filename == "oom_dump_90.log":
                 content = content[-MAX_DUMP_BYTES:]
                 output_parts.append(
                     f"### {label} (last {MAX_DUMP_BYTES // 1000}KB — most recent snapshots)\n\n{content}\n"
