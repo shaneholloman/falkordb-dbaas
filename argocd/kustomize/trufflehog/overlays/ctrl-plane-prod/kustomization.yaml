@@ -10,6 +10,7 @@ configMapGenerator:
     literals:
       - cluster-name=ctrl-plane-prod
       - wazuh-syslog-host=wazuh.security.svc.cluster.local
+      - "excluded-image-prefixes=docker.io/n8nio/n8n:,docker.io/wazuh/wazuh-manager:,docker.io/wazuh/wazuh-dashboard:,docker.io/nginx/nginx-ingress:,docker.io/bitnamilegacy/kubectl:,ghcr.io/omnistrate/endpoint-monitor-agent:"
 generatorOptions:
   disableNameSuffixHash: true
 patches:

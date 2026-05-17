@@ -18,3 +18,4 @@ generatorOptions:
 patches:
   - path: wi-patch.yaml
   - path: remove-nodeselector-patch.yaml
+  - path: mutelist-patch.yaml

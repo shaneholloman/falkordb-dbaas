@@ -8,3 +8,4 @@ resources:
   - cronjob.yaml
   - rbac.yaml
   - networkpolicy.yaml
+  - mutelist.yaml

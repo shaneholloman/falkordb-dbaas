@@ -96,6 +96,12 @@ spec:
                       name: trufflehog-config
                       key: gcp-project-id
                       optional: true
+                - name: EXCLUDED_IMAGE_PREFIXES
+                  valueFrom:
+                    configMapKeyRef:
+                      name: trufflehog-config
+                      key: excluded-image-prefixes
+                      optional: true
               command:
                 - /bin/sh
                 - -c
@@ -129,6 +135,16 @@ spec:
                   config.load_incluster_config()
                   v1 = client.CoreV1Api()
 
+                  # Images excluded from scanning: third-party images with known
+                  # embedded credentials that are not our responsibility.
+                  # These are reviewed quarterly and documented in the SOC 2
+                  # risk acceptance register.
+                  # Loaded from EXCLUDED_IMAGE_PREFIXES env var (comma-separated).
+                  _raw_exclusions = os.environ.get('EXCLUDED_IMAGE_PREFIXES', '')
+                  EXCLUDED_IMAGE_PREFIXES = [
+                      p.strip() for p in _raw_exclusions.split(',') if p.strip()
+                  ]
+
                   images = set()
                   pods = v1.list_pod_for_all_namespaces(timeout_seconds=30)
                   for pod in pods.items:
@@ -139,7 +155,18 @@ spec:
                           if cs.image:
                               images.add(cs.image)
 
-                  print(f'Discovered {len(images)} unique container images')
+                  # Filter out excluded images
+                  excluded = set()
+                  for img in list(images):
+                      for prefix in EXCLUDED_IMAGE_PREFIXES:
+                          if img.startswith(prefix):
+                              excluded.add(img)
+                              images.discard(img)
+                              break
+
+                  print(f'Discovered {len(images) + len(excluded)} unique container images')
+                  if excluded:
+                      print(f'  Excluded {len(excluded)} accepted-risk images: {sorted(excluded)}')
 
                   # ── Scan each image for secrets ────────────────────────────
                   all_findings = []

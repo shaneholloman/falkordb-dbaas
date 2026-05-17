@@ -48,6 +48,9 @@ spec:
           volumes:
             - name: prowler-tmp
               emptyDir: {}
+            - name: mutelist
+              configMap:
+                name: prowler-mutelist
           containers:
             - name: prowler
               image: toniblyx/prowler:4.6.1@sha256:04bbabd0a66bc0e9d68b3065524ad36df8c2886aab9bbbfef2f80464b026d2b1
@@ -69,6 +72,9 @@ spec:
               volumeMounts:
                 - name: prowler-tmp
                   mountPath: /tmp
+                - name: mutelist
+                  mountPath: /etc/prowler
+                  readOnly: true
               env:
                 - name: EVIDENCE_BUCKET
                   valueFrom:
@@ -123,6 +129,7 @@ spec:
                     --compliance "$COMPLIANCE" \
                     --output-formats json-ocsf csv \
                     --output-directory "$OUTPUT_DIR" \
+                    --mutelist /etc/prowler/mutelist.yaml \
                     $EXTRA_ARGS \
                     --ignore-exit-code-3 \
                     --verbose

@@ -1,0 +1,20 @@
+# Prowler mutelist ConfigMap — base (empty).
+# Environment-specific exceptions are added via overlay patches.
+#
+# Format: Prowler 4.x mutelist YAML (--mutelist flag)
+# Ref: https://docs.prowler.com/projects/prowler-open-source/en/latest/tutorials/mutelist/
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prowler-mutelist
+  namespace: security
+  labels:
+    app: prowler
+    component: soc2-evidence
+data:
+  mutelist.yaml: |
+    # Prowler Mutelist — override in overlays per environment
+    Mutelist:
+      Accounts:
+        "*":
+          Checks: {}
