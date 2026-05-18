@@ -18,6 +18,8 @@ spec:
           enabled: false
         certificates:
           enabled: true
+        autoreload:
+          enabled: true
         agent:
           enabled: false
 
@@ -79,6 +81,8 @@ spec:
 
           master:
             enabled: true
+            annotations:
+              configmap.reloader.stakater.com/reload: "wazuh-custom-rules,wazuh-custom-decoders,wazuh-accepted-cves,wazuh-alert-exceptions,wazuh-filebeat-finish,wazuh-google-chat-integration,wazuh-cluster-key-injector"
             resources:
               requests:
                 cpu: "2"

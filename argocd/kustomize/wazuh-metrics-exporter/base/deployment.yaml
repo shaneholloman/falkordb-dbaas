@@ -26,6 +26,9 @@ spec:
     metadata:
       labels:
         app: wazuh-metrics-exporter
+      annotations:
+        configmap.reloader.stakater.com/reload: "wazuh-metrics-exporter-config"
+        secret.reloader.stakater.com/reload: "wazuh-indexer-cred"
     spec:
       serviceAccountName: wazuh-metrics-exporter
       nodeSelector:

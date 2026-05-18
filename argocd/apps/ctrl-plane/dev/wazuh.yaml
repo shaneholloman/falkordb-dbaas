@@ -31,6 +31,12 @@ spec:
         certificates:
           enabled: true
 
+        # Restart workloads when chart-rendered Wazuh config changes.
+        # External rules ConfigMaps are handled by Stakater Reloader annotations
+        # on the Wazuh master StatefulSet below.
+        autoreload:
+          enabled: true
+
         # Agents deployed separately via our DaemonSet
         agent:
           enabled: false
@@ -97,6 +103,8 @@ spec:
 
           master:
             enabled: true
+            annotations:
+              configmap.reloader.stakater.com/reload: "wazuh-custom-rules,wazuh-custom-decoders,wazuh-accepted-cves,wazuh-alert-exceptions,wazuh-filebeat-finish,wazuh-google-chat-integration,wazuh-cluster-key-injector"
             resources:
               requests:
                 cpu: "1"

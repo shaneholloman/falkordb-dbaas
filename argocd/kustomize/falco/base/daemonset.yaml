@@ -25,6 +25,8 @@ spec:
     metadata:
       labels:
         app: falco
+      annotations:
+        configmap.reloader.stakater.com/reload: "falco-config"
     spec:
       serviceAccountName: falco
       priorityClassName: security-monitoring

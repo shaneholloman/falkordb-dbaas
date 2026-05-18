@@ -13,6 +13,8 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: fluent-bit
+      annotations:
+        configmap.reloader.stakater.com/reload: "fluent-bit-config,fluent-bit-lua-scripts"
     spec:
       serviceAccountName: fluent-bit
       containers:
