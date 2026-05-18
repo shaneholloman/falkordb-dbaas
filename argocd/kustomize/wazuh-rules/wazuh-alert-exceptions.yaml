@@ -49,6 +49,13 @@ data:
           "is_regex": false
         },
         {
+          "comment": "GKE CSI driver unmounting pod PVC volume — normal kubelet volume lifecycle, not container escape",
+          "rule_id": "100510",
+          "field": "data.output",
+          "pattern": "/volumes/kubernetes.io~csi/",
+          "is_regex": false
+        },
+        {
           "comment": "Kubelet umount safety self-test — normal GKE operation, not container escape",
           "rule_id": "100510",
           "field": "data.output",
@@ -91,10 +98,31 @@ data:
           "is_regex": false
         },
         {
+          "comment": "Kubescape MITRE ATT&CK C-0012 (Credentials in configuration files) — noisy static heuristic; real secret exposure is handled by verified TruffleHog findings and weekly triage",
+          "rule_id": "100810",
+          "field": "data.ControlID",
+          "pattern": "C-0012",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubescape MITRE ATT&CK C-0045 (Writable hostPath mount) — required by GKE/node-level agents and tracked as accepted infrastructure risk",
+          "rule_id": "100810",
+          "field": "data.ControlID",
+          "pattern": "C-0045",
+          "is_regex": false
+        },
+        {
           "comment": "Kubescape MITRE ATT&CK C-0048 (HostPath mount) — required by node-level agents (Falco, Wazuh, Fluent-bit, kube-state-metrics) by design; not actionable on its own",
           "rule_id": "100810",
           "field": "data.ControlID",
           "pattern": "C-0048",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubescape MITRE ATT&CK C-0057 (Privileged container) — common for GKE system/node-level agents; tracked as accepted infrastructure risk unless paired with runtime evidence",
+          "rule_id": "100810",
+          "field": "data.ControlID",
+          "pattern": "C-0057",
           "is_regex": false
         },
         {
