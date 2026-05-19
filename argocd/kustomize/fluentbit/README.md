@@ -1,4 +1,4 @@
-# Fluent Bit multi-cloud node/system/event coverage
+# Fluent Bit multi-cloud node/system coverage
 
 This kustomize package now has provider-aware overlays:
 
@@ -21,8 +21,8 @@ All outputs are normalized through `victoria-logs-label-normalizer.lua` and incl
 - `pod`
 - `container`
 - `workload`
-- `log_type` (`workload|system|node|event|cni`)
-- `source` (for example `kubelet`, `containerd`, `node-problem-detector`, `kubernetes-event`)
+- `log_type` (`workload|system|node|cni`)
+- `source` (for example `kubelet`, `containerd`, `node-problem-detector`)
 
 ## Provider coverage notes
 
@@ -37,7 +37,6 @@ Adds:
   - kubelet, containerd, node-problem-detector, kubelet-monitor,
     kube-container-runtime-monitor, startup script logs
 - Network/CNI style logs where available
-- Kubernetes events (`kubernetes_events` input)
 
 ### EKS overlay
 
@@ -47,7 +46,6 @@ Adds:
 - kubelet/containerd/docker (where present)
 - `/var/log/dmesg`, `/var/log/messages|/var/log/syslog`
 - AWS VPC CNI paths (`/var/log/aws-routed-eni/`, `/var/log/amazon/`)
-- Kubernetes events
 
 ### AKS overlay
 
@@ -56,7 +54,6 @@ Adds:
 - `kube-system` container logs
 - kubelet/containerd (journald), `/var/log/syslog`, `/var/log/kern.log`
 - AKS/Azure CNI log paths where present
-- Kubernetes events
 
 ## Migration guidance (duplicate-control and parity checks)
 
@@ -71,7 +68,7 @@ Adds:
    - kubelet/container runtime logs
    - node-problem-detector logs (GKE where present)
    - CNI/network logs (provider dependent)
-   - Kubernetes events
+   - Kubernetes events (from existing Alloy `loki.source.kubernetes_events`)
 5. During migration, avoid duplicate ingestion by temporarily excluding overlapping streams if another node agent is also writing to Loki. Keep workload logs as source-of-truth from this DaemonSet.
 6. Validate dashboards/alerts and incident-response queries before disabling provider-managed agents.
 
@@ -94,4 +91,4 @@ If migration validation fails:
    - EKS: re-enable CloudWatch/node logging add-on path
    - AKS: re-enable Azure Monitor / Container Insights / diagnostic settings
 2. Revert Fluent Bit app path to previous manifest or remove temporary duplicate-control filters.
-3. Re-validate node/system/event coverage before another disablement attempt.
+3. Re-validate node/system coverage before another disablement attempt.

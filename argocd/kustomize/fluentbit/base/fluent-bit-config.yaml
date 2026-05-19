@@ -111,8 +111,8 @@ data:
         Name              tail
         Tag               kube.var.log.containers.*
         Path              /var/log/containers/*.log
-        # Exclude system namespaces handled by provider overlays to avoid duplicate ingestion.
-        Exclude_Path      /var/log/containers/*_kube-system_*.log,/var/log/containers/*_gke-system_*.log,/var/log/containers/*_gmp-system_*.log,/var/log/containers/*_istio-system_*.log,/var/log/containers/*_knative-serving_*.log,/var/log/containers/*_config-management-system_*.log,/var/log/containers/*_gke-managed-*_*.log
+        # Exclude kube-system logs to avoid duplication with provider overlays.
+        Exclude_Path      /var/log/containers/*_kube-system_*.log
         Parser            cri
         Mem_Buf_Limit     5MB
         DB                /var/log/flb_workload.db
@@ -142,17 +142,10 @@ data:
         Systemd_Filter    _SYSTEMD_UNIT=containerd.service
         Read_From_Tail    On
 
-    [INPUT]
-        Name              kubernetes_events
-        Tag               event.kubernetes
-        Kube_URL          https://kubernetes.default.svc:443
-        Kube_CA_File      /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-        Kube_Token_File   /var/run/secrets/kubernetes.io/serviceaccount/token
-
   provider-extra.conf: |
     # Provider-specific inputs and filters are injected by overlays (gke/eks/aks).
-    # If the base is deployed directly, only workload, node syslog, kubelet/containerd
-    # and kubernetes events inputs are enabled.
+    # If the base is deployed directly, only workload, node syslog and kubelet/containerd
+    # inputs are enabled.
 
   filters-common.conf: |
     [FILTER]
@@ -185,12 +178,6 @@ data:
         Match               kube.var.log.containers.*
         Add                 log_type workload
         Add                 source container
-
-    [FILTER]
-        Name                modify
-        Match               event.kubernetes
-        Add                 log_type event
-        Add                 source kubernetes-event
 
     [FILTER]
         Name                modify
@@ -234,15 +221,6 @@ data:
         Port          3100
         URI           /loki/api/v1/push
         Labels        cluster=$cluster,cloud_provider=$cloud_provider,region=$region,node=$node,node_pool=$node_pool,namespace=$namespace,pod=$pod,container=$container,workload=$workload,log_type=$log_type,source=$source
-        Retry_Limit   3
-
-    [OUTPUT]
-        Name          loki
-        Match         event.*
-        Host          alloy.observability.svc.cluster.local
-        Port          3100
-        URI           /loki/api/v1/push
-        Labels        cluster=$cluster,cloud_provider=$cloud_provider,region=$region,node=$node,namespace=$namespace,log_type=$log_type,source=$source,reason=$reason,type=$type,involved_object=$involved_object
         Retry_Limit   3
 
   parsers.conf: |
