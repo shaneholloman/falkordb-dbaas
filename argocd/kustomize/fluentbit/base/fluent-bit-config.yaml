@@ -53,9 +53,6 @@ data:
             record["workload"] = fallback(labels["app.kubernetes.io/name"], record["workload"])
             record["workload"] = fallback(labels["app"], record["workload"])
             record["workload"] = fallback(labels["k8s-app"], record["workload"])
-            record["node_pool"] = fallback(labels["cloud.google.com/gke-nodepool"], record["node_pool"])
-            record["node_pool"] = fallback(labels["eks.amazonaws.com/nodegroup"], record["node_pool"])
-            record["node_pool"] = fallback(labels["agentpool"], record["node_pool"])
         end
 
         local involved_object = record["involvedObject"]
