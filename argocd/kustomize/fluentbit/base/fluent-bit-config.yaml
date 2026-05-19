@@ -55,12 +55,12 @@ data:
             record["node"] = fallback(kubernetes["host"], record["node"])
         end
 
-        if labels ~= nil then
+        if labels ~= nil and (record["workload"] == nil or record["workload"] == "") then
             local workload_from_labels = fallback(
                 labels["app.kubernetes.io/name"],
                 fallback(labels["app"], labels["k8s-app"])
             )
-            record["workload"] = fallback(record["workload"], workload_from_labels)
+            record["workload"] = workload_from_labels
         end
 
         local involved_object = record["involvedObject"]
