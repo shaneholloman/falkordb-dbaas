@@ -71,16 +71,6 @@ data:
 
     [FILTER]
         Name                modify
-        Match               node.kubelet
-        Add                 source kubelet
-
-    [FILTER]
-        Name                modify
-        Match               node.containerd
-        Add                 source containerd
-
-    [FILTER]
-        Name                modify
         Match               node.docker
         Add                 source docker
 

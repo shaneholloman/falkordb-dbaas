@@ -9,6 +9,10 @@ data:
         if record["log"] then
             record["_msg"] = record["log"]
             record["log"] = nil
+        elseif record["MESSAGE"] then
+            record["_msg"] = record["MESSAGE"]
+        elseif record["message"] then
+            record["_msg"] = record["message"]
         end
         return 1, timestamp, record
     end
@@ -50,9 +54,13 @@ data:
         end
 
         if labels ~= nil then
-            record["workload"] = fallback(labels["app.kubernetes.io/name"], record["workload"])
-            record["workload"] = fallback(labels["app"], record["workload"])
-            record["workload"] = fallback(labels["k8s-app"], record["workload"])
+            record["workload"] = fallback(
+                record["workload"],
+                fallback(
+                    labels["app.kubernetes.io/name"],
+                    fallback(labels["app"], labels["k8s-app"])
+                )
+            )
         end
 
         local involved_object = record["involvedObject"]
