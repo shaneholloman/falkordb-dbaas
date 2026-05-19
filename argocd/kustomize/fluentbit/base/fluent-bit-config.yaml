@@ -43,6 +43,17 @@ data:
         return value
     end
 
+    function first_non_empty(...)
+        local values = { ... }
+        for i = 1, #values do
+            local value = values[i]
+            if value ~= nil and value ~= "" then
+                return value
+            end
+        end
+        return nil
+    end
+
     function map_log_labels(tag, timestamp, record)
         local kubernetes = record["kubernetes"]
         local labels = nil
@@ -56,11 +67,14 @@ data:
         end
 
         if labels ~= nil and (record["workload"] == nil or record["workload"] == "") then
-            local workload_from_labels = fallback(
+            local workload_from_labels = first_non_empty(
                 labels["app.kubernetes.io/name"],
-                fallback(labels["app"], labels["k8s-app"])
+                labels["app"],
+                labels["k8s-app"]
             )
-            record["workload"] = fallback(workload_from_labels, record["workload"])
+            if workload_from_labels ~= nil then
+                record["workload"] = workload_from_labels
+            end
         end
 
         local involved_object = record["involvedObject"]
