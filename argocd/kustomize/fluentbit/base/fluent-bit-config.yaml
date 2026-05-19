@@ -191,6 +191,21 @@ data:
         Add                 log_type node
 
     [FILTER]
+        Name                modify
+        Match               node.syslog
+        Add                 source syslog
+
+    [FILTER]
+        Name                modify
+        Match               node.kubelet
+        Add                 source kubelet
+
+    [FILTER]
+        Name                modify
+        Match               node.containerd
+        Add                 source containerd
+
+    [FILTER]
         Name                lua
         Match               *
         script              /fluent-bit/config/victoria-logs-label-normalizer.lua
