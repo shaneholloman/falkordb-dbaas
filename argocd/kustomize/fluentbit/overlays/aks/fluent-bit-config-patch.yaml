@@ -29,7 +29,7 @@ data:
     [INPUT]
         Name              tail
         Tag               cni.aks-network
-        Path              /var/log/azure-vnet.log,/var/log/azure-vnet-ipam.log,/var/log/azure-cni*.log,/var/log/azure/*.log
+        Path              /var/log/azure-vnet.log,/var/log/azure-vnet-ipam.log,/var/log/azure-cni*.log,/var/log/azure/cni/*.log
         Parser            syslog
         Mem_Buf_Limit     5MB
         DB                /var/log/flb_aks_network.db
@@ -76,6 +76,6 @@ data:
         Add                 log_type cni
         Add                 workload node
         Add                 namespace kube-system
-        Add                 pod host
-        Add                 container host
+        Add                 pod n/a
+        Add                 container n/a
         Add                 node_pool unknown

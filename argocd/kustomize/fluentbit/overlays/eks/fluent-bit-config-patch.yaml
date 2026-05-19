@@ -96,8 +96,8 @@ data:
         Add                 log_type cni
         Add                 workload node
         Add                 namespace kube-system
-        Add                 pod host
-        Add                 container host
+        Add                 pod n/a
+        Add                 container n/a
         Add                 node_pool unknown
 
     [FILTER]
@@ -107,6 +107,6 @@ data:
         Add                 log_type cni
         Add                 workload node
         Add                 namespace kube-system
-        Add                 pod host
-        Add                 container host
+        Add                 pod n/a
+        Add                 container n/a
         Add                 node_pool unknown

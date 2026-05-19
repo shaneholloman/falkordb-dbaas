@@ -8,10 +8,22 @@ data:
     [INPUT]
         Name              tail
         Tag               kube.system.var.log.containers.*
-        Path              /var/log/containers/*_kube-system_*.log,/var/log/containers/*_gke-system_*.log,/var/log/containers/*_gmp-system_*.log,/var/log/containers/*_istio-system_*.log,/var/log/containers/*_knative-serving_*.log,/var/log/containers/*_config-management-system_*.log,/var/log/containers/*_gke-managed-*_*.log
+        Path              /var/log/containers/*_kube-system_*.log,/var/log/containers/*_gke-system_*.log,/var/log/containers/*_gmp-system_*.log
         Parser            cri
         Mem_Buf_Limit     5MB
         DB                /var/log/flb_gke_system_containers.db
+        Skip_Long_Lines   On
+        Refresh_Interval  5
+        Rotate_Wait       30
+        Path_Key          source_path
+
+    [INPUT]
+        Name              tail
+        Tag               kube.system.var.log.containers.*
+        Path              /var/log/containers/*_istio-system_*.log,/var/log/containers/*_knative-serving_*.log,/var/log/containers/*_config-management-system_*.log,/var/log/containers/*_gke-managed-*_*.log
+        Parser            cri
+        Mem_Buf_Limit     5MB
+        DB                /var/log/flb_gke_optional_system_containers.db
         Skip_Long_Lines   On
         Refresh_Interval  5
         Rotate_Wait       30
@@ -109,6 +121,6 @@ data:
         Add                 log_type cni
         Add                 workload node
         Add                 namespace kube-system
-        Add                 pod host
-        Add                 container host
+        Add                 pod n/a
+        Add                 container n/a
         Add                 node_pool unknown

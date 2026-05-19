@@ -62,13 +62,20 @@ data:
         if involved_object ~= nil then
             record["involved_object"] = fallback(involved_object["kind"], record["involved_object"])
         end
+        local reason_value = fallback(record["reason"], record["reportingReason"])
+        local type_value = fallback(record["type"], record["event_type"])
+        record["involved_object"] = fallback(record["involved_object"], "unknown")
+        record["reason"] = fallback(reason_value, "unknown")
+        record["type"] = fallback(type_value, "unknown")
+        record["_msg"] = fallback(record["_msg"], record["message"])
 
         record["cluster"] = fallback(record["cluster"], os.getenv("CLUSTER_NAME"))
         record["cloud_provider"] = fallback(record["cloud_provider"], os.getenv("CLOUD_PROVIDER"))
         record["region"] = fallback(record["region"], os.getenv("CLOUD_REGION"))
         record["node"] = fallback(record["node"], os.getenv("HOST_NAME"))
         record["node_pool"] = fallback(record["node_pool"], os.getenv("NODE_POOL"))
-        record["namespace"] = fallback(record["namespace"], fallback(record["namespace_name"], "unknown"))
+        local namespace_name = fallback(record["namespace_name"], "unknown")
+        record["namespace"] = fallback(record["namespace"], namespace_name)
         record["pod"] = fallback(record["pod"], "unknown")
         record["container"] = fallback(record["container"], "unknown")
         record["workload"] = fallback(record["workload"], "unknown")
@@ -142,6 +149,8 @@ data:
 
   provider-extra.conf: |
     # Provider-specific inputs and filters are injected by overlays (gke/eks/aks).
+    # If the base is deployed directly, only workload, node syslog, kubelet/containerd
+    # and kubernetes events inputs are enabled.
 
   filters-common.conf: |
     [FILTER]
@@ -186,8 +195,8 @@ data:
         Match               node.*
         Add                 workload node
         Add                 namespace node-system
-        Add                 pod host
-        Add                 container host
+        Add                 pod n/a
+        Add                 container n/a
         Add                 node_pool unknown
         Add                 log_type node
 
@@ -231,7 +240,7 @@ data:
         Host          alloy.observability.svc.cluster.local
         Port          3100
         URI           /loki/api/v1/push
-        Labels        cluster=$cluster,cloud_provider=$cloud_provider,region=$region,node=$node,node_pool=$node_pool,namespace=$namespace,pod=$pod,container=$container,workload=$workload,log_type=$log_type,source=$source,reason=$reason,type=$type,involved_object=$involved_object
+        Labels        cluster=$cluster,cloud_provider=$cloud_provider,region=$region,node=$node,namespace=$namespace,log_type=$log_type,source=$source,reason=$reason,type=$type,involved_object=$involved_object
         Retry_Limit   3
 
   parsers.conf: |
