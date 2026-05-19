@@ -67,14 +67,11 @@ data:
         end
 
         if labels ~= nil and (record["workload"] == nil or record["workload"] == "") then
-            local workload_from_labels = first_non_empty(
+            record["workload"] = first_non_empty(
                 labels["app.kubernetes.io/name"],
                 labels["app"],
                 labels["k8s-app"]
             )
-            if workload_from_labels ~= nil then
-                record["workload"] = workload_from_labels
-            end
         end
 
         local involved_object = record["involvedObject"]
