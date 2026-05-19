@@ -62,10 +62,10 @@ data:
         local reason_value = fallback(record["reason"], record["reportingReason"])
         local type_value = fallback(record["type"], record["event_type"])
         local existing_involved_object = record["involved_object"]
-        local has_event_fields = involved_object ~= nil or reason_value ~= nil or type_value ~= nil or existing_involved_object ~= nil
-        if has_event_fields then
+        local should_populate_event_fields = involved_object ~= nil or reason_value ~= nil or type_value ~= nil or existing_involved_object ~= nil
+        if should_populate_event_fields then
             if involved_object ~= nil then
-                record["involved_object"] = fallback(involved_object["kind"], record["involved_object"])
+                record["involved_object"] = fallback(involved_object["kind"], existing_involved_object)
             end
             record["involved_object"] = fallback(record["involved_object"], "unknown")
             record["reason"] = fallback(reason_value, "unknown")
