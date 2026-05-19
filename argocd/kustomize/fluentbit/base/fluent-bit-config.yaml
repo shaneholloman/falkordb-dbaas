@@ -59,14 +59,17 @@ data:
         end
 
         local involved_object = record["involvedObject"]
-        if involved_object ~= nil then
-            record["involved_object"] = fallback(involved_object["kind"], record["involved_object"])
-        end
         local reason_value = fallback(record["reason"], record["reportingReason"])
         local type_value = fallback(record["type"], record["event_type"])
-        record["involved_object"] = fallback(record["involved_object"], "unknown")
-        record["reason"] = fallback(reason_value, "unknown")
-        record["type"] = fallback(type_value, "unknown")
+        local has_event_fields = involved_object ~= nil or reason_value ~= nil or type_value ~= nil or record["involved_object"] ~= nil
+        if has_event_fields then
+            if involved_object ~= nil then
+                record["involved_object"] = fallback(involved_object["kind"], record["involved_object"])
+            end
+            record["involved_object"] = fallback(record["involved_object"], "unknown")
+            record["reason"] = fallback(reason_value, "unknown")
+            record["type"] = fallback(type_value, "unknown")
+        end
         record["_msg"] = fallback(record["_msg"], record["message"])
 
         record["cluster"] = fallback(record["cluster"], os.getenv("CLUSTER_NAME"))
