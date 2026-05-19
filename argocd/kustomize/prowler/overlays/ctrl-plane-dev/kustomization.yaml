@@ -4,6 +4,11 @@ namespace: security
 resources:
   - ../../base
   - secrets-env-secret.yaml
+  - aws-credentials-env-secret.yaml
+  - azure-credentials-env-secret.yaml
+components:
+  - ../../components/aws
+  - ../../components/azure
 configMapGenerator:
   - name: prowler-config
     behavior: create
@@ -13,6 +18,8 @@ configMapGenerator:
       - compliance=cis_2.0_gcp
       - gcp-project-id=ctrl-plane-dev-f7a2434f
       - wazuh-syslog-host=wazuh.security.svc.cluster.local
+      - aws-target-name=app-plane-aws-dev
+      - azure-target-name=app-plane-azure-dev
 generatorOptions:
   disableNameSuffixHash: true
 patches:

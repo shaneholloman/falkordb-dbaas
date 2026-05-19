@@ -1,10 +1,48 @@
 # IAM role for Prowler to perform read-only SOC 2 compliance scanning
-# in the AWS app-plane account. Assumed by Prowler CronJobs running
-# in EKS spoke clusters via IRSA (IAM Roles for Service Accounts).
+# in the AWS app-plane account. Assumed cross-account from the ctrl-plane
+# GKE cluster where security CronJobs run.
+#
+# Trust model: A dedicated IAM user (prowler-operator) in the management
+# account holds long-lived credentials stored in a SealedSecret on GKE.
+# The CronJob uses boto3 sts:AssumeRole to get temporary creds for this role.
 #
 # Attached policies:
 #   - SecurityAudit (AWS managed) — read-only access to most AWS services
 #   - ViewOnlyAccess (AWS managed) — additional read access for console resources
+
+data "aws_caller_identity" "current" {}
+
+# IAM user in the management account — only permission is to assume the
+# prowler-soc2-scanner role in app-plane accounts.
+resource "aws_iam_user" "prowler_operator" {
+  name = "prowler-operator"
+  path = "/security/"
+  tags = {
+    Purpose     = "soc2-compliance-scanning"
+    ManagedBy   = "tofu"
+    Environment = var.environment
+  }
+}
+
+resource "aws_iam_user_policy" "prowler_operator_assume" {
+  name = "assume-prowler-scanner"
+  user = aws_iam_user.prowler_operator.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "sts:AssumeRole"
+        Resource = aws_iam_role.prowler_scanner.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_access_key" "prowler_operator" {
+  user = aws_iam_user.prowler_operator.name
+}
 
 resource "aws_iam_role" "prowler_scanner" {
   name = "prowler-soc2-scanner"
@@ -16,18 +54,9 @@ resource "aws_iam_role" "prowler_scanner" {
       {
         Effect = "Allow"
         Principal = {
-          Federated = "arn:aws:iam::${aws_organizations_account.account.id}:oidc-provider/${var.eks_oidc_issuer}"
+          AWS = aws_iam_user.prowler_operator.arn
         }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            "${var.eks_oidc_issuer}:sub" = [
-              "system:serviceaccount:security:prowler",
-              "system:serviceaccount:security:grype",
-            ]
-            "${var.eks_oidc_issuer}:aud" = "sts.amazonaws.com"
-          }
-        }
+        Action = "sts:AssumeRole"
       }
     ]
   })
@@ -93,5 +122,21 @@ resource "aws_iam_role_policy" "prowler_additional" {
 
 output "prowler_role_arn" {
   value       = aws_iam_role.prowler_scanner.arn
-  description = "ARN of the Prowler IAM role for IRSA binding"
+  description = "ARN of the Prowler IAM role to assume for scanning"
+}
+
+output "prowler_operator_user_name" {
+  value       = aws_iam_user.prowler_operator.name
+  description = "IAM user name for the prowler operator"
+}
+
+output "prowler_operator_access_key_id" {
+  value       = aws_iam_access_key.prowler_operator.id
+  description = "Access key ID for the prowler-operator IAM user"
+}
+
+output "prowler_operator_secret_access_key" {
+  value       = aws_iam_access_key.prowler_operator.secret
+  sensitive   = true
+  description = "Secret access key for the prowler-operator IAM user"
 }

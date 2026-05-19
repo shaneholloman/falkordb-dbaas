@@ -1,0 +1,172 @@
+# Prowler CronJob for scanning AWS app-plane accounts from ctrl-plane.
+# Uses sts:AssumeRole cross-account to the prowler-soc2-scanner role.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: prowler-soc2-scan-aws
+  namespace: security
+spec:
+  schedule: "0 2 * * *"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app: prowler
+            component: soc2-evidence
+            cloud: aws
+        spec:
+          serviceAccountName: prowler
+          restartPolicy: Never
+          nodeSelector:
+            node_pool: security
+          tolerations:
+            - key: cloud.google.com/gke-spot
+              operator: Equal
+              value: "true"
+              effect: NoSchedule
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: prowler-tmp
+              emptyDir: {}
+            - name: mutelist
+              configMap:
+                name: prowler-mutelist
+          containers:
+            - name: prowler
+              image: toniblyx/prowler:4.6.1@sha256:04bbabd0a66bc0e9d68b3065524ad36df8c2886aab9bbbfef2f80464b026d2b1
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "1"
+                  memory: "1Gi"
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: prowler-tmp
+                  mountPath: /tmp
+                - name: mutelist
+                  mountPath: /etc/prowler
+                  readOnly: true
+              env:
+                - name: EVIDENCE_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: prowler-infra
+                      key: evidence-bucket
+                - name: CLOUD_PROVIDER
+                  value: aws
+                - name: CLUSTER_NAME
+                  valueFrom:
+                    configMapKeyRef:
+                      name: prowler-config
+                      key: aws-target-name
+                - name: COMPLIANCE
+                  value: soc2_aws
+                - name: AWS_ROLE_ARN
+                  valueFrom:
+                    secretKeyRef:
+                      name: prowler-aws-credentials
+                      key: role-arn
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: prowler-aws-credentials
+                      key: access-key-id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: prowler-aws-credentials
+                      key: secret-access-key
+                - name: AWS_DEFAULT_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: prowler-aws-credentials
+                      key: region
+                - name: WAZUH_SYSLOG_HOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: prowler-config
+                      key: wazuh-syslog-host
+                      optional: true
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  DATE_PATH=$(date -u +%Y/%m/%d)
+                  OUTPUT_DIR="/tmp/prowler-output"
+                  mkdir -p "$OUTPUT_DIR"
+
+                  # Assume cross-account role
+                  pip install --quiet --no-cache-dir --target /tmp/pip-packages boto3 google-cloud-storage
+                  export PYTHONPATH="/tmp/pip-packages:${PYTHONPATH:-}"
+
+                  python3 <<'ASSUME_EOF'
+                  import boto3, os, json
+                  sts = boto3.client('sts')
+                  creds = sts.assume_role(
+                      RoleArn=os.environ['AWS_ROLE_ARN'],
+                      RoleSessionName='prowler-soc2-scan'
+                  )['Credentials']
+                  # Write credentials file for prowler
+                  with open('/tmp/aws-creds.env', 'w') as f:
+                      f.write(f"export AWS_ACCESS_KEY_ID={creds['AccessKeyId']}\n")
+                      f.write(f"export AWS_SECRET_ACCESS_KEY={creds['SecretAccessKey']}\n")
+                      f.write(f"export AWS_SESSION_TOKEN={creds['SessionToken']}\n")
+                  ASSUME_EOF
+
+                  source /tmp/aws-creds.env
+
+                  # Run Prowler compliance scan
+                  set +e
+                  prowler aws \
+                    --compliance "$COMPLIANCE" \
+                    --output-formats json-ocsf csv \
+                    --output-directory "$OUTPUT_DIR" \
+                    --mutelist /etc/prowler/mutelist.yaml \
+                    --ignore-exit-code-3 \
+                    --verbose
+                  PROWLER_EXIT=$?
+                  set -e
+
+                  # Upload results to the central GCS evidence locker
+                  export DATE_PATH OUTPUT_DIR
+                  export CLOUD_PROVIDER=aws
+                  python3 <<'PYEOF'
+                  import os, glob
+                  from google.cloud import storage
+                  bucket_name = os.environ['EVIDENCE_BUCKET']
+                  cloud = os.environ['CLOUD_PROVIDER']
+                  cluster = os.environ['CLUSTER_NAME']
+                  date_path = os.environ['DATE_PATH']
+                  output_dir = os.environ['OUTPUT_DIR']
+                  prefix = f'prowler/{date_path}/{cloud}-{cluster}'
+                  client = storage.Client()
+                  bucket = client.bucket(bucket_name)
+                  for f in glob.glob(os.path.join(output_dir, '**', '*'), recursive=True):
+                      if os.path.isfile(f):
+                          rel = os.path.relpath(f, output_dir)
+                          blob = bucket.blob(prefix + '/' + rel)
+                          blob.upload_from_filename(f)
+                          print(f'Uploaded {rel}')
+                  PYEOF
+
+                  echo "Prowler AWS scan complete."
+                  exit $PROWLER_EXIT
