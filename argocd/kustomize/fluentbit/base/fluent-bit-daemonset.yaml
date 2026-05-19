@@ -26,6 +26,14 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            - name: CLUSTER_NAME
+              value: unknown
+            - name: CLOUD_PROVIDER
+              value: unknown
+            - name: CLOUD_REGION
+              value: unknown
+            - name: NODE_POOL
+              value: unknown
           resources:
             limits:
               cpu: 500m
@@ -39,6 +47,12 @@ spec:
             - name: varlibdockercontainers
               mountPath: /var/lib/docker/containers
               readOnly: true
+            - name: varlogjournal
+              mountPath: /var/log/journal
+              readOnly: true
+            - name: runlogjournal
+              mountPath: /run/log/journal
+              readOnly: true
             - name: fluent-bit-config
               mountPath: /fluent-bit/etc/
             - name: fluent-bit-lua-scripts
@@ -47,6 +61,9 @@ spec:
             - name: fluent-bit-lua-scripts
               mountPath: /fluent-bit/config/victoria-logs-error-label.lua
               subPath: victoria-logs-error-label.lua
+            - name: fluent-bit-lua-scripts
+              mountPath: /fluent-bit/config/victoria-logs-label-normalizer.lua
+              subPath: victoria-logs-label-normalizer.lua
       # Mount the ConfigMap with the Fluent Bit configuration.
       volumes:
         - name: varlog
@@ -55,6 +72,14 @@ spec:
         - name: varlibdockercontainers
           hostPath:
             path: /var/lib/docker/containers
+        - name: varlogjournal
+          hostPath:
+            path: /var/log/journal
+            type: DirectoryOrCreate
+        - name: runlogjournal
+          hostPath:
+            path: /run/log/journal
+            type: DirectoryOrCreate
         - name: fluent-bit-config
           configMap:
             name: fluent-bit-config
