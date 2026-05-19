@@ -111,6 +111,7 @@ data:
         Name              tail
         Tag               kube.var.log.containers.*
         Path              /var/log/containers/*.log
+        # Exclude system namespaces handled by provider overlays to avoid duplicate ingestion.
         Exclude_Path      /var/log/containers/*_kube-system_*.log,/var/log/containers/*_gke-system_*.log,/var/log/containers/*_gmp-system_*.log,/var/log/containers/*_istio-system_*.log,/var/log/containers/*_knative-serving_*.log,/var/log/containers/*_config-management-system_*.log,/var/log/containers/*_gke-managed-*_*.log
         Parser            cri
         Mem_Buf_Limit     5MB
