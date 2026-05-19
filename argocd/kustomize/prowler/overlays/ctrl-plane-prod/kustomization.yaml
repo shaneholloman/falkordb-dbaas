@@ -4,7 +4,6 @@ namespace: security
 resources:
   - ../../base
   - secrets-env-secret.yaml
-  - aws-credentials-env-secret.yaml
   - azure-credentials-env-secret.yaml
 components:
   - ../../components/aws
@@ -19,6 +18,8 @@ configMapGenerator:
       - gcp-project-id=ctrl-plane-prod-b1b92df2
       - wazuh-syslog-host=wazuh.security.svc.cluster.local
       - aws-target-name=app-plane-aws-prod
+      - aws-role-arn=arn:aws:iam::119146126346:role/security/prowler-soc2-scanner
+      - aws-region=us-east-1
       - azure-target-name=app-plane-azure-prod
 generatorOptions:
   disableNameSuffixHash: true

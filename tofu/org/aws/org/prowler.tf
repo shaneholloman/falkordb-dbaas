@@ -1,10 +1,11 @@
 # IAM role for Prowler to perform read-only SOC 2 compliance scanning
-# in the AWS app-plane account. Assumed cross-account from the ctrl-plane
-# GKE cluster where security CronJobs run.
+# in the AWS org account. Assumed from the ctrl-plane GKE cluster using
+# GCP Workload Identity Federation (no long-lived AWS credentials).
 #
-# Trust model: A dedicated IAM user (prowler-operator) in the management
-# account holds long-lived credentials stored in a SealedSecret on GKE.
-# The CronJob uses boto3 sts:AssumeRole to get temporary creds for this role.
+# Trust model: The prowler-uploader GCP service account on the ctrl-plane
+# cluster obtains a Google ID token via GKE Workload Identity. AWS trusts
+# accounts.google.com as an OIDC provider and allows AssumeRoleWithWebIdentity
+# when the token's `sub` matches the GCP SA unique ID.
 #
 # Attached policies:
 #   - SecurityAudit (AWS managed) — read-only access to most AWS services
@@ -12,36 +13,11 @@
 
 data "aws_caller_identity" "current" {}
 
-# IAM user in the management account — only permission is to assume the
-# prowler-soc2-scanner role in app-plane accounts.
-resource "aws_iam_user" "prowler_operator" {
-  name = "prowler-operator"
-  path = "/security/"
-  tags = {
-    Purpose     = "soc2-compliance-scanning"
-    ManagedBy   = "tofu"
-    Environment = var.environment
-  }
-}
-
-resource "aws_iam_user_policy" "prowler_operator_assume" {
-  name = "assume-prowler-scanner"
-  user = aws_iam_user.prowler_operator.name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "sts:AssumeRole"
-        Resource = aws_iam_role.prowler_scanner.arn
-      }
-    ]
-  })
-}
-
-resource "aws_iam_access_key" "prowler_operator" {
-  user = aws_iam_user.prowler_operator.name
+# OIDC provider trusting Google — allows GCP service accounts to assume
+# AWS roles via AssumeRoleWithWebIdentity.
+resource "aws_iam_openid_connect_provider" "google" {
+  url            = "https://accounts.google.com"
+  client_id_list = ["102883644372444058074", "sts.amazonaws.com"]
 }
 
 resource "aws_iam_role" "prowler_scanner" {
@@ -54,9 +30,15 @@ resource "aws_iam_role" "prowler_scanner" {
       {
         Effect = "Allow"
         Principal = {
-          AWS = aws_iam_user.prowler_operator.arn
+          Federated = aws_iam_openid_connect_provider.google.arn
         }
-        Action = "sts:AssumeRole"
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "accounts.google.com:aud" = "sts.amazonaws.com"
+            "accounts.google.com:sub" = var.prowler_gcp_sa_id
+          }
+        }
       }
     ]
   })
@@ -123,20 +105,4 @@ resource "aws_iam_role_policy" "prowler_additional" {
 output "prowler_role_arn" {
   value       = aws_iam_role.prowler_scanner.arn
   description = "ARN of the Prowler IAM role to assume for scanning"
-}
-
-output "prowler_operator_user_name" {
-  value       = aws_iam_user.prowler_operator.name
-  description = "IAM user name for the prowler operator"
-}
-
-output "prowler_operator_access_key_id" {
-  value       = aws_iam_access_key.prowler_operator.id
-  description = "Access key ID for the prowler-operator IAM user"
-}
-
-output "prowler_operator_secret_access_key" {
-  value       = aws_iam_access_key.prowler_operator.secret
-  sensitive   = true
-  description = "Secret access key for the prowler-operator IAM user"
 }

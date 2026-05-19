@@ -21,3 +21,8 @@ variable "app_plane_account_email" {
   type        = string
   description = "Email of the application plane account"
 }
+
+variable "prowler_gcp_sa_id" {
+  type        = string
+  description = "Unique numeric ID of the prowler-uploader GCP service account (used as OIDC subject for AWS federation)"
+}

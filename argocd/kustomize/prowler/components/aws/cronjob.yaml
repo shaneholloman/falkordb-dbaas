@@ -81,24 +81,14 @@ spec:
                   value: soc2_aws
                 - name: AWS_ROLE_ARN
                   valueFrom:
-                    secretKeyRef:
-                      name: prowler-aws-credentials
-                      key: role-arn
-                - name: AWS_ACCESS_KEY_ID
-                  valueFrom:
-                    secretKeyRef:
-                      name: prowler-aws-credentials
-                      key: access-key-id
-                - name: AWS_SECRET_ACCESS_KEY
-                  valueFrom:
-                    secretKeyRef:
-                      name: prowler-aws-credentials
-                      key: secret-access-key
+                    configMapKeyRef:
+                      name: prowler-config
+                      key: aws-role-arn
                 - name: AWS_DEFAULT_REGION
                   valueFrom:
-                    secretKeyRef:
-                      name: prowler-aws-credentials
-                      key: region
+                    configMapKeyRef:
+                      name: prowler-config
+                      key: aws-region
                 - name: WAZUH_SYSLOG_HOST
                   valueFrom:
                     configMapKeyRef:
@@ -114,18 +104,24 @@ spec:
                   OUTPUT_DIR="/tmp/prowler-output"
                   mkdir -p "$OUTPUT_DIR"
 
-                  # Assume cross-account role
+                  # Obtain GCP ID token and assume AWS role via Web Identity Federation
                   pip install --quiet --no-cache-dir --target /tmp/pip-packages boto3 google-cloud-storage
                   export PYTHONPATH="/tmp/pip-packages:${PYTHONPATH:-}"
 
                   python3 <<'ASSUME_EOF'
-                  import boto3, os, json
-                  sts = boto3.client('sts')
-                  creds = sts.assume_role(
+                  import boto3, os, urllib.request
+                  # Fetch GCP ID token from metadata server (GKE Workload Identity)
+                  audience = "sts.amazonaws.com"
+                  url = f"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience={audience}&format=full"
+                  req = urllib.request.Request(url, headers={"Metadata-Flavor": "Google"})
+                  token = urllib.request.urlopen(req).read().decode()
+                  # Assume AWS role with the GCP identity token
+                  sts = boto3.client('sts', region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
+                  creds = sts.assume_role_with_web_identity(
                       RoleArn=os.environ['AWS_ROLE_ARN'],
-                      RoleSessionName='prowler-soc2-scan'
+                      RoleSessionName='prowler-soc2-scan',
+                      WebIdentityToken=token
                   )['Credentials']
-                  # Write credentials file for prowler
                   with open('/tmp/aws-creds.env', 'w') as f:
                       f.write(f"export AWS_ACCESS_KEY_ID={creds['AccessKeyId']}\n")
                       f.write(f"export AWS_SECRET_ACCESS_KEY={creds['SecretAccessKey']}\n")

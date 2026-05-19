@@ -20,9 +20,9 @@
 #   gcp-core        tofu/org/gcp/core            (terragrunt + var-file)
 #   gcp-workloads   tofu/org/gcp/workloads       (terragrunt + var-file)
 #   gcp-bootstrap   tofu/bootstrap/gcp           (terragrunt + var-file)
-#   aws-org         tofu/org/aws/org             (tofu + var-file)
-#   aws-app-plane   tofu/org/aws/app-plane       (tofu + var-file)
-#   aws-bootstrap   tofu/bootstrap/aws           (tofu + var-file)
+#   aws-org         tofu/org/aws/org             (terragrunt + var-file)
+#   aws-app-plane   tofu/org/aws/app-plane       (terragrunt + var-file)
+#   aws-bootstrap   tofu/bootstrap/aws           (terragrunt + var-file)
 
 set -e
 
@@ -62,9 +62,9 @@ case "$STACK" in
   gcp-core)       STACK_DIR="$ROOT_DIR/tofu/org/gcp/core"       ; TOOL=terragrunt ;;
   gcp-workloads)  STACK_DIR="$ROOT_DIR/tofu/org/gcp/workloads"  ; TOOL=terragrunt ;;
   gcp-bootstrap)  STACK_DIR="$ROOT_DIR/tofu/bootstrap/gcp"      ; TOOL=terragrunt ;;
-  aws-org)        STACK_DIR="$ROOT_DIR/tofu/org/aws/org"         ; TOOL=tofu ;;
-  aws-app-plane)  STACK_DIR="$ROOT_DIR/tofu/org/aws/app-plane"  ; TOOL=tofu ;;
-  aws-bootstrap)  STACK_DIR="$ROOT_DIR/tofu/bootstrap/aws"      ; TOOL=tofu ;;
+  aws-org)        STACK_DIR="$ROOT_DIR/tofu/org/aws/org"         ; TOOL=terragrunt ;;
+  aws-app-plane)  STACK_DIR="$ROOT_DIR/tofu/org/aws/app-plane"  ; TOOL=terragrunt ;;
+  aws-bootstrap)  STACK_DIR="$ROOT_DIR/tofu/bootstrap/aws"      ; TOOL=terragrunt ;;
   *) echo "Error: unknown stack '$STACK'" >&2; exit 1 ;;
 esac
 
@@ -153,23 +153,14 @@ cd "$STACK_DIR"
 # Determine the backend bucket this invocation will target. If existing
 # cached state already points at the same bucket, skip the wipe so we
 # avoid an unnecessary backend re-init / provider re-download.
-case "$STACK" in
-  aws-org|aws-app-plane|aws-bootstrap)
-    DESIRED_BUCKET="$(grep -E '^[[:space:]]*bucket[[:space:]]*=' backend.tf 2>/dev/null \
-      | head -1 \
-      | sed -E 's/.*=[ \t]*"([^"]+)".*/\1/')"
-    ;;
-  *)
-    if [ -n "${TF_STATE_BUCKET:-}" ]; then
-      DESIRED_BUCKET="$TF_STATE_BUCKET"
-    else
-      case "$TF_ENVIRONMENT" in
-        prod|production) DESIRED_BUCKET="falkordb-prod-state-c49b" ;;
-        *)               DESIRED_BUCKET="falkordb-dev-state-4620" ;;
-      esac
-    fi
-    ;;
-esac
+if [ -n "${TF_STATE_BUCKET:-}" ]; then
+  DESIRED_BUCKET="$TF_STATE_BUCKET"
+else
+  case "$TF_ENVIRONMENT" in
+    prod|production) DESIRED_BUCKET="falkordb-prod-state-c49b" ;;
+    *)               DESIRED_BUCKET="falkordb-dev-state-4620" ;;
+  esac
+fi
 
 SKIP_CLEAN=false
 if [ -n "$DESIRED_BUCKET" ]; then
@@ -239,12 +230,12 @@ case "$STACK" in
       tg_exec "$@"
     fi
     ;;
-  # AWS stacks use tofu directly (S3 backend, no terragrunt root)
+  # AWS stacks use terragrunt (GCS backend via backend_override.tf)
   aws-org|aws-app-plane|aws-bootstrap)
     if [ "$NEEDS_VARFILE" = true ]; then
-      exec tofu "$ACTION" -var-file="$TFVARS_FILE" "$@"
+      tg_exec -var-file="$TFVARS_FILE" "$@"
     else
-      exec tofu "$ACTION" "$@"
+      tg_exec "$@"
     fi
     ;;
 esac
