@@ -15,15 +15,22 @@ spec:
             kind: DaemonSet
             name: fluent-bit
           patch: |-
-            - op: replace
-              path: /spec/template/spec/containers/0/env/1/value
-              value: ctrl-plane-dev
-            - op: replace
-              path: /spec/template/spec/containers/0/env/2/value
-              value: gke
-            - op: replace
-              path: /spec/template/spec/containers/0/env/3/value
-              value: unknown
+            apiVersion: apps/v1
+            kind: DaemonSet
+            metadata:
+              name: fluent-bit
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: fluent-bit
+                      env:
+                        - name: CLUSTER_NAME
+                          value: ctrl-plane-dev
+                        - name: CLOUD_PROVIDER
+                          value: gcp
+                        - name: CLOUD_REGION
+                          value: unknown
   destination:
     server: https://kubernetes.default.svc
     namespace: fluent-bit

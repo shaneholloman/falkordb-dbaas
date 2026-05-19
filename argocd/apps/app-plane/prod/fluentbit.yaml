@@ -30,15 +30,22 @@ spec:
                 kind: DaemonSet
                 name: fluent-bit
               patch: |-
-                - op: replace
-                  path: /spec/template/spec/containers/0/env/1/value
-                  value: '{{ regexFind "h?c-[A-Za-z0-9]+" .name }}'
-                - op: replace
-                  path: /spec/template/spec/containers/0/env/2/value
-                  value: '{{ .values.cloudProvider }}'
-                - op: replace
-                  path: /spec/template/spec/containers/0/env/3/value
-                  value: '{{ .values.region }}'
+                apiVersion: apps/v1
+                kind: DaemonSet
+                metadata:
+                  name: fluent-bit
+                spec:
+                  template:
+                    spec:
+                      containers:
+                        - name: fluent-bit
+                          env:
+                            - name: CLUSTER_NAME
+                              value: '{{ regexFind "h?c-[A-Za-z0-9]+" .name }}'
+                            - name: CLOUD_PROVIDER
+                              value: '{{ .values.cloudProvider }}'
+                            - name: CLOUD_REGION
+                              value: '{{ .values.region }}'
       destination:
         server: "{{.server}}"
         namespace: fluent-bit
