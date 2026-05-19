@@ -60,7 +60,7 @@ data:
                 labels["app.kubernetes.io/name"],
                 fallback(labels["app"], labels["k8s-app"])
             )
-            record["workload"] = workload_from_labels
+            record["workload"] = fallback(workload_from_labels, record["workload"])
         end
 
         local involved_object = record["involvedObject"]
