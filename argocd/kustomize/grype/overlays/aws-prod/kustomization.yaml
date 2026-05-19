@@ -9,7 +9,7 @@ configMapGenerator:
     behavior: create
     literals:
       - cluster-name=app-plane-aws-prod
-      - wazuh-syslog-host=REPLACE_WITH_PROD_WAZUH_IP
+      - wazuh-syslog-host=136.114.5.250
 generatorOptions:
   disableNameSuffixHash: true
 patches:

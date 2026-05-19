@@ -6,4 +6,4 @@ metadata:
   name: prowler
   namespace: security
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::REPLACE_WITH_PROD_AWS_ACCOUNT_ID:role/security/prowler-soc2-scanner
+    eks.amazonaws.com/role-arn: arn:aws:iam::148761665810:role/security/prowler-soc2-scanner
