@@ -152,5 +152,90 @@ spec:
                           print(f'Uploaded {rel}')
                   PYEOF
 
-                  echo "Prowler Azure scan complete."
+                  echo "Prowler Azure scan complete. Results uploaded to GCS."
+
+                  # Forward FAIL findings to Wazuh Manager via TCP syslog
+                  python3 <<'SYSLOG_EOF'
+                  import os, glob, json, socket, time
+
+                  syslog_host = os.environ.get('WAZUH_SYSLOG_HOST', '')
+                  syslog_port = 514
+                  if not syslog_host:
+                      print('WAZUH_SYSLOG_HOST not set, skipping syslog forwarding')
+                      exit(0)
+
+                  output_dir = os.environ['OUTPUT_DIR']
+                  cluster = os.environ['CLUSTER_NAME']
+
+                  json_files = sorted(
+                      glob.glob(os.path.join(output_dir, '**', '*.ocsf.json'), recursive=True)
+                  )
+                  if not json_files:
+                      print('No OCSF JSON files found, skipping syslog')
+                      exit(0)
+
+                  findings = []
+                  for f in json_files:
+                      with open(f) as fh:
+                          data = json.load(fh)
+                      if isinstance(data, list):
+                          findings.extend(data)
+                      elif isinstance(data, dict):
+                          findings.append(data)
+
+                  fail_count = 0
+                  try:
+                      sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                      sock.settimeout(10)
+                      last_err = None
+                      for attempt in range(5):
+                          try:
+                              sock.connect((syslog_host, syslog_port))
+                              last_err = None
+                              break
+                          except (ConnectionRefusedError, OSError) as ce:
+                              last_err = ce
+                              try: sock.close()
+                              except Exception: pass
+                              sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                              sock.settimeout(10)
+                              time.sleep(2 ** attempt)
+                      if last_err is not None:
+                          raise last_err
+                      for finding in findings:
+                          if not isinstance(finding, dict):
+                              continue
+                          status_code = str(finding.get('status_code', ''))
+                          if status_code.upper() != 'FAIL':
+                              continue
+                          resources_0 = {}
+                          res = finding.get('resources')
+                          if isinstance(res, list) and res and isinstance(res[0], dict):
+                              resources_0 = res[0]
+                          sev = finding.get('severity', '')
+                          severity_str = sev if isinstance(sev, str) else (sev.get('name', '') if isinstance(sev, dict) else '')
+                          mapped = {
+                              'Scanner': 'prowler',
+                              'Status': 'FAIL',
+                              'Provider': (finding.get('cloud') or {}).get('provider', 'azure'),
+                              'CheckTitle': (finding.get('finding_info') or {}).get('title', ''),
+                              'CheckID': (finding.get('finding_info') or {}).get('uid', ''),
+                              'Severity': severity_str,
+                              'StatusExtended': str(finding.get('status_detail', finding.get('message', ''))),
+                              'ServiceName': (resources_0.get('group') or {}).get('name', '') or resources_0.get('type', ''),
+                              'ResourceId': resources_0.get('uid', ''),
+                              'Region': resources_0.get('region', ''),
+                              'Cluster': cluster,
+                          }
+                          ts = time.strftime('%b %d %H:%M:%S')
+                          msg = '<134>{} {} prowler: {}\n'.format(ts, cluster, json.dumps(mapped, separators=(',', ':')))
+                          sock.sendall(msg.encode())
+                          fail_count += 1
+                      sock.close()
+                      print(f'Forwarded {fail_count} FAIL findings to Wazuh at {syslog_host}:{syslog_port}')
+                  except Exception as e:
+                      print(f'WARNING: Syslog forwarding failed: {e}')
+                      print('Scan and GCS upload succeeded; syslog is best-effort.')
+                  SYSLOG_EOF
+
                   exit $PROWLER_EXIT
