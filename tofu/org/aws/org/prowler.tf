@@ -15,9 +15,12 @@ data "aws_caller_identity" "current" {}
 
 # OIDC provider trusting Google — allows GCP service accounts to assume
 # AWS roles via AssumeRoleWithWebIdentity.
+# NOTE: For Google tokens, AWS maps `accounts.google.com:aud` to the `azp`
+# claim (the GCP SA unique ID), not the token's `aud`. The client_id_list
+# must include the GCP SA unique ID for AWS to accept the token.
 resource "aws_iam_openid_connect_provider" "google" {
   url            = "https://accounts.google.com"
-  client_id_list = ["102883644372444058074", "sts.amazonaws.com"]
+  client_id_list = concat([var.prowler_gcp_sa_id], var.google_oidc_additional_audiences)
 }
 
 resource "aws_iam_role" "prowler_scanner" {
@@ -35,8 +38,9 @@ resource "aws_iam_role" "prowler_scanner" {
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringEquals = {
-            "accounts.google.com:aud" = "sts.amazonaws.com"
-            "accounts.google.com:sub" = var.prowler_gcp_sa_id
+            "accounts.google.com:aud"  = var.prowler_gcp_sa_id
+            "accounts.google.com:oaud" = "sts.amazonaws.com"
+            "accounts.google.com:sub"  = var.prowler_gcp_sa_id
           }
         }
       }
