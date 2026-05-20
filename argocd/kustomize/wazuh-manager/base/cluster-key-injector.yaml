@@ -30,3 +30,10 @@ data:
       sed -i 's|<after_registration_time>1h</after_registration_time>|<after_registration_time>0</after_registration_time>|g' "$OSSEC_CONF"
       echo "Auth force timers set to 0"
     fi
+    # Increase JSON decoder field limit — default 256 is too low for complex
+    # events (Prowler findings, Grype output, K8s audit logs with many fields).
+    INTERNAL_OPTS=/var/ossec/etc/local_internal_options.conf
+    if ! grep -q 'analysisd.decoder_order_size' "$INTERNAL_OPTS" 2>/dev/null; then
+      echo "analysisd.decoder_order_size=1024" >> "$INTERNAL_OPTS"
+      echo "JSON decoder field limit raised to 1024"
+    fi
