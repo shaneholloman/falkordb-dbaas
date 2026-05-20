@@ -208,7 +208,6 @@ data:
         Add                 namespace node-system
         Add                 pod n/a
         Add                 container n/a
-        Add                 node_pool unknown
         Add                 log_type node
 
     [FILTER]

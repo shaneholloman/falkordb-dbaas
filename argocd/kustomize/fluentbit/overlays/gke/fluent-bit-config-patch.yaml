@@ -12,6 +12,8 @@ data:
         # Exclude system namespaces handled by the GKE overlay to avoid duplicate ingestion.
         Exclude_Path      /var/log/containers/*_kube-system_*.log,/var/log/containers/*_gke-system_*.log,/var/log/containers/*_gmp-system_*.log,/var/log/containers/*_istio-system_*.log,/var/log/containers/*_knative-serving_*.log,/var/log/containers/*_config-management-system_*.log,/var/log/containers/*_gke-managed-*_*.log
         Parser            cri
+        Docker_Mode       On
+        Docker_Mode_Parser docker
         Mem_Buf_Limit     5MB
         DB                /var/log/flb_workload.db
         Skip_Long_Lines   On
@@ -149,4 +151,3 @@ data:
         Add                 namespace kube-system
         Add                 pod n/a
         Add                 container n/a
-        Add                 node_pool unknown

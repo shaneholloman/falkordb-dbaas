@@ -68,4 +68,3 @@ data:
         Add                 namespace kube-system
         Add                 pod n/a
         Add                 container n/a
-        Add                 node_pool unknown
