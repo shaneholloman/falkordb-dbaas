@@ -150,6 +150,14 @@ data:
           "field": "data.ImageName",
           "pattern": "backend:v1",
           "is_regex": false
+        },
+        {
+          "comment": "Rootcheck 'Process hidden from /proc' — false positive on cloud VMs (AWS EC2/GKE) where kernel threads and container-runtime processes are transient and appear hidden during rootcheck scan",
+          "rule_id": "521"
+        },
+        {
+          "comment": "Rootcheck 'Excessive number of hidden processes' — companion false positive to rule 521 on cloud VMs with many kernel threads",
+          "rule_id": "510"
         }
       ]
     }
