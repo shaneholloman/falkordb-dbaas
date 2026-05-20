@@ -6,7 +6,7 @@ metadata:
   name: prowler-soc2-scan-aws
   namespace: security
 spec:
-  schedule: "0 2 * * *"
+  schedule: "15 7 * * *"
   timeZone: "Etc/UTC"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1

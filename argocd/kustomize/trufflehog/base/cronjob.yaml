@@ -10,7 +10,7 @@ metadata:
   name: trufflehog-secret-scan
   namespace: security
 spec:
-  schedule: "0 5 * * *"
+  schedule: "0 8 * * *"
   timeZone: "Etc/UTC"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1

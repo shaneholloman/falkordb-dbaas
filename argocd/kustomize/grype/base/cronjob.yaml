@@ -10,7 +10,7 @@ metadata:
   name: grype-cve-scan
   namespace: security
 spec:
-  schedule: "0 4 * * *"
+  schedule: "45 7 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 1
