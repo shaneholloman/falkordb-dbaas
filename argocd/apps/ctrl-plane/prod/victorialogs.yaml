@@ -15,7 +15,7 @@ spec:
         server:
           retentionPeriod: 1y
           nodeSelector:
-            node_pool: observability-resources-large
+            node_pool: observability
           persistentVolume:
             enabled: true
             size: 750Gi

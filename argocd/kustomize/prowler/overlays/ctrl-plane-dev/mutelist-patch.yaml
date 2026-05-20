@@ -1,0 +1,156 @@
+# Prowler mutelist patch — dev-accepted checks excluded from compliance
+# scoring because they are cost-prohibitive or not applicable to dev.
+# Last reviewed: 2026-05-17
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prowler-mutelist
+  namespace: security
+data:
+  mutelist.yaml: |
+    # Prowler Mutelist — ctrl-plane-dev accepted-risk checks
+    # Last reviewed: 2026-05-17
+    Mutelist:
+      Accounts:
+        "*":
+          Checks:
+            # ── GCP hardening: not cost-effective for dev ──────────────────
+            compute_instance_confidential_computing_enabled:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Cost-prohibitive for dev environment. Enabled in prod."
+
+            compute_instance_disk_encrypted_with_csek:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Using GCP-managed CMEK. CSEK not required for dev."
+
+            compute_instance_block_project_ssh_keys_enabled:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "GKE nodes are not SSH-accessible. OS Login not applicable."
+
+            compute_network_subnet_flow_logs_enabled:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Cost vs value not justified for dev. Enabled in prod."
+
+            clouddns_zone_logging_enabled:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Low value for dev. Enabled in prod."
+
+            compute_instance_oslogin_enabled:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "GKE-only project, no VM SSH access needed."
+
+            # ── GCP audit log metric filters ──────────────────────────────
+            # Dev uses Wazuh+VictoriaMetrics for alerting instead of GCP metrics.
+            logging_metric_filter_and_alert_for_project_ownership:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Monitored via Wazuh audit rules instead of GCP metrics."
+
+            logging_metric_filter_and_alert_for_audit_config_changes:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Monitored via Wazuh audit rules instead of GCP metrics."
+
+            logging_metric_filter_and_alert_for_cloud_storage_iam_changes:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Monitored via Wazuh audit rules instead of GCP metrics."
+
+            logging_metric_filter_and_alert_for_custom_role_changes:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Monitored via Wazuh audit rules instead of GCP metrics."
+
+            logging_metric_filter_and_alert_for_sql_instance_config_changes:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Monitored via Wazuh audit rules instead of GCP metrics."
+
+            logging_metric_filter_and_alert_for_vpc_network_changes:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Monitored via Wazuh audit rules instead of GCP metrics."
+
+            logging_metric_filter_and_alert_for_vpc_network_firewall_rule_changes:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Monitored via Wazuh audit rules instead of GCP metrics."
+
+            logging_metric_filter_and_alert_for_vpc_network_route_changes:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Monitored via Wazuh audit rules instead of GCP metrics."
+
+            # ── GKE public pool: VMs with public IPs by design ────────────
+            compute_instance_public_ip:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "GKE public node pool requires public IPs. Access controlled via firewall rules."
+
+            # ── Audit logging: too costly for full coverage in dev ─────────
+            logging_cloudaudit_logging_enabled:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Full audit log coverage too costly for dev. Critical operations monitored via Wazuh."
+
+            # ── IAM: Workload Identity requires token-creator at project ──
+            iam_sa_user_or_token_creator_at_project_level:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Required for GKE Workload Identity. Scoped via WI bindings."
+
+            # ── IAM: separation of duties for Cloud Build SA ──────────────
+            iam_sa_separation_of_duties:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Single CI/CD SA by design in dev. Separate SAs in prod."
+
+            # ── IAM: admin privileges for infra provisioning SAs ──────────
+            iam_sa_no_admin_privileges:
+              Regions:
+                - "*"
+              Resources:
+                - "*"
+              Reason: "Provisioning SAs (terraform, CI/CD) require admin roles in dev."

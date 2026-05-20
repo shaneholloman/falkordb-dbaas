@@ -19,6 +19,8 @@ spec:
         app.kubernetes.io/component: api
     spec:
       serviceAccountName: customer-ldap-api
+      nodeSelector:
+        node_pool: backend
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001

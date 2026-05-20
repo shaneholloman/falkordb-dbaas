@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  name: cloud-evidence-kustomization
+namespace: security
+resources:
+  - serviceaccount.yaml
+  - cronjob.yaml
+  - networkpolicy.yaml
+configMapGenerator:
+  - name: cloud-evidence-script
+    files:
+      - collect_cloud_evidence.py
+generatorOptions:
+  disableNameSuffixHash: true

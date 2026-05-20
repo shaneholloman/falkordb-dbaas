@@ -9,6 +9,14 @@ locals {
 #   }
 # }
 
+provider "aws" {
+  alias  = "securityhub"
+  region = var.cloudtrail_region
+  assume_role {
+    role_arn = local.assume_role_arn
+  }
+}
+
 locals {
   regions = [
     "af-south-1",
@@ -52,8 +60,9 @@ module "global" {
   account_id      = var.app_plane_account_id
   assume_role_arn = local.assume_role_arn
 
-  google_client_ids          = var.google_client_ids
-  cluster_user_role_audience = var.cluster_user_role_audience
+  google_client_ids           = var.google_client_ids
+  cluster_user_role_audience  = var.cluster_user_role_audience
+  cluster_user_role_audiences = var.cluster_user_role_audiences
 
 }
 
@@ -311,4 +320,20 @@ module "region_us-west-2" {
   region          = "us-west-2"
   assume_role_arn = local.assume_role_arn
   role_arn        = module.global.cluster_user_role_arn
+}
+
+# ── CloudTrail + SecurityHub (app-plane account) ──────────────────────
+
+module "cloudtrail" {
+  source = "./modules/cloudtrail"
+
+  region          = var.cloudtrail_region
+  assume_role_arn = local.assume_role_arn
+  trail_name      = "cloudtrail"
+  s3_bucket_name  = var.cloudtrail_s3_bucket_name
+}
+
+resource "aws_securityhub_account" "securityhub" {
+  provider                 = aws.securityhub
+  enable_default_standards = false
 }

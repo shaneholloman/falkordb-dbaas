@@ -1,0 +1,37 @@
+# Accepted-CVE suppression list (Wazuh CDB list).
+#
+# This ConfigMap provides a Wazuh CDB list mounted at
+# /var/ossec/etc/lists/accepted-cves inside the Wazuh manager container.
+#
+# It is used by suppression rule 100404 to silence Grype CVE alerts for
+# vulnerabilities that have been formally risk-accepted (e.g. no upstream
+# patch available, mitigated at network boundary, false positive).
+#
+# Format: each line is `<KEY>:<value>` — Wazuh CDB list entries.
+#   KEY   = the CVE identifier (e.g. CVE-2024-1234), case-sensitive
+#   value = a short justification (free text; visible in dashboards)
+#
+# How to add an exception:
+#   1. Edit the `accepted-cves` data key below — append a new line per CVE.
+#   2. Open a PR; require a Security review (CODEOWNER) for each addition.
+#   3. After merge, ArgoCD reconciles; Wazuh manager picks up the list on
+#      its next ruleset reload (manual: `wazuh-control reload`, or restart).
+#
+# Format compatibility: Wazuh expects an ossec-list compiled binary file
+# at runtime (.cdb), but it auto-compiles flat key:value text files on
+# first load. We ship the plain text form so it stays human-reviewable
+# in git.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-accepted-cves
+  namespace: security
+  labels:
+    app: wazuh
+    component: lists
+data:
+  accepted-cves: |
+    # ── Risk-accepted CVEs (format: CVE-ID:justification) ──
+    # Add entries below. Example (commented out):
+    # CVE-2024-12345:Accepted — no upstream patch; mitigated by NetworkPolicy egress block (DBA-1234)
+    # CVE-2023-99999:False positive — package version mis-detected by Grype (DBA-5678)

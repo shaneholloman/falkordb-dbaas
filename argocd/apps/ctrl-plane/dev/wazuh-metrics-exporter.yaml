@@ -1,0 +1,24 @@
+# prometheus-es-exporter that runs SOC 2 control-failure queries against the
+# wazuh-indexer every minute and exposes the hit counts as Prometheus gauges.
+# These gauges feed the `soc2:posture_score` VMRule recording rule, which
+# powers the SOC 2 dashboard's compliance gauge and is alertable via vmalert.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: wazuh-metrics-exporter
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/FalkorDB/falkordb-dbaas.git
+    targetRevision: dev
+    path: argocd/kustomize/wazuh-metrics-exporter/overlays/ctrl-plane-dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: security
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      prune: true
+      selfHeal: true

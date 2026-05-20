@@ -1,0 +1,53 @@
+# prometheus-es-exporter configuration.
+#
+# Runs each named [query_*] section against the wazuh-indexer on the
+# configured interval.
+#
+# Each query uses a cardinality aggregation to count DISTINCT open findings
+# (not raw alert volume). This ensures the posture score recovers once a
+# finding is remediated — after the 24h sliding window expires without a
+# new scan emitting that finding, the cardinality drops by 1.
+#
+# Exposed metrics (per query):
+#   <name>_hits               — raw document count (informational)
+#   <name>_took_milliseconds  — ES query latency
+#   <name>_unique_findings_value — cardinality of the dedup field (used by recording rule)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-metrics-exporter-config
+  namespace: security
+  labels:
+    app: wazuh-metrics-exporter
+data:
+  exporter.cfg: |
+    [DEFAULT]
+    QueryIntervalSecs = 60
+    QueryTimeoutSecs = 30
+    QueryIndices = wazuh-alerts-*
+    QueryOnError = preserve
+    QueryOnMissing = zero
+
+    # Critical: TruffleHog verified secrets — dedup by SourceFile (unique leaked files)
+    [query_soc2_critical_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_critical"}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.SourceFile"}}}}
+
+    # High: Prowler/Kubescape high-severity controls — dedup by ControlID
+    [query_soc2_high_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"terms":{"data.Severity":["high","High"]}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.ControlID"}}}}
+
+    # Medium: dedup by CheckTitle (control check name)
+    [query_soc2_medium_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"terms":{"data.Severity":["medium","Medium"]}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.CheckTitle"}}}}
+
+    # Low: dedup by CheckTitle
+    [query_soc2_low_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"terms":{"data.Severity":["low","Low"]}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.CheckTitle"}}}}
+
+    # Prowler FAIL alerts — dedup by CheckTitle (unique failing checks)
+    [query_prowler_fail_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"prowler_compliance"}},{"term":{"data.Status":"FAIL"}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.CheckTitle"}}}}
+
+    # Total SOC 2 failure volume (any severity) — raw count for dashboards
+    [query_soc2_fail_total_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}}}

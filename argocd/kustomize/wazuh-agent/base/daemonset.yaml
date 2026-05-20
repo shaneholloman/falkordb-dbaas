@@ -1,0 +1,254 @@
+# Wazuh Agent DaemonSet — runs on every node to stream security events
+# (host logs, file integrity changes, vulnerability data) to the central
+# Wazuh Manager on the GCP control plane.
+#
+# Communication: outbound TCP/1514 (TLS) from agent → manager.
+# Enrollment: outbound TCP/1515 (authd) with registration password.
+# The enrollment credentials are stored in a Sealed Secret (wazuh-agent-key).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: wazuh-agent
+  namespace: security
+  labels:
+    app: wazuh-agent
+spec:
+  selector:
+    matchLabels:
+      app: wazuh-agent
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: wazuh-agent
+      annotations:
+        configmap.reloader.stakater.com/reload: "wazuh-agent-ossec-conf,wazuh-agent-entrypoint-scripts,wazuh-agent-config"
+        secret.reloader.stakater.com/reload: "wazuh-agent-key,wazuh-manager-ca"
+    spec:
+      serviceAccountName: wazuh-agent
+      priorityClassName: security-monitoring
+      hostPID: true
+      hostNetwork: true
+      # Required: hostNetwork uses host DNS by default, which can't resolve
+      # *.svc.cluster.local names. This policy falls back to cluster DNS.
+      dnsPolicy: ClusterFirstWithHostNet
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.kubernetes.io/instance-type
+                    operator: NotIn
+                    values:
+                      # GCP burstable / shared-core
+                      - e2-small
+                      - e2-medium
+                      # AWS burstable
+                      - t2.small
+                      - t2.medium
+                      - t3.small
+                      - t3a.small
+                      - t3.medium
+                      - t3a.medium
+                      # Azure burstable
+                      - Standard_B1s
+                      - Standard_B1ms
+                      - Standard_B2s
+                      - Standard_B2als_v2
+                      - Standard_B2as_v2
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+        - operator: Exists
+          effect: NoExecute
+      # Stagger agent registration to avoid authd rate limiting.
+      # Each pod sleeps 0-15s before starting the main container.
+      initContainers:
+        - name: stagger-start
+          image: public.ecr.aws/docker/library/busybox:1.36
+          command: ["sh", "-c", "DELAY=$((RANDOM % 16)); echo \"Sleeping ${DELAY}s to stagger registration\"; sleep $DELAY"]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "16Mi"
+            limits:
+              cpu: "10m"
+              memory: "16Mi"
+      containers:
+        - name: wazuh-agent
+          image: wazuh/wazuh-agent:4.14.4
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          securityContext:
+            privileged: false
+            capabilities:
+              add:
+                # Read host files (logs, /etc, /proc) for FIM and log collection
+                - DAC_READ_SEARCH
+                # Override DAC checks so the s6-init scripts (running as root)
+                # can write to /var/ossec/etc and other wazuh-group-owned dirs.
+                - DAC_OVERRIDE
+                # The wazuh-agent entrypoint setuid/setgid to the 'wazuh' user
+                # to drop privileges for the daemon processes.
+                - SETUID
+                - SETGID
+                # cont-init scripts chown/chmod /var/ossec contents on startup.
+                - CHOWN
+                - FOWNER
+                # Monitor processes on the host (ps, /proc inspection)
+                - SYS_PTRACE
+                # Needed for rootcheck and host audit
+                - AUDIT_READ
+              drop:
+                - ALL
+          env:
+            - name: WAZUH_MANAGER_SERVER
+              valueFrom:
+                secretKeyRef:
+                  name: wazuh-agent-key
+                  key: wazuh-manager
+            - name: WAZUH_REGISTRATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: wazuh-agent-key
+                  key: registration-password
+            - name: WAZUH_AGENT_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: WAZUH_AGENT_GROUPS
+              valueFrom:
+                configMapKeyRef:
+                  name: wazuh-agent-config
+                  key: agent-group
+          volumeMounts:
+            - name: var-log
+              mountPath: /var/log
+              readOnly: true
+            - name: etc
+              mountPath: /host/etc
+              readOnly: true
+            - name: var-ossec-data
+              mountPath: /var/ossec/data
+            - name: ossec-conf
+              mountPath: /wazuh-config-mount/etc/ossec.conf
+              subPath: ossec.conf
+              readOnly: true
+            - name: manager-ca
+              mountPath: /var/ossec/etc/rootCA.pem
+              subPath: ca.crt
+              readOnly: true
+            - name: entrypoint-scripts
+              mountPath: /entrypoint-scripts
+              readOnly: true
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    # Wait for agentd to connect (enrollment can take 30-90s on
+                    # first boot while DNS and the manager come up), then start
+                    # the remaining daemons that wazuh-control missed.
+                    #
+                    # We start the three missing daemons individually rather than
+                    # calling wazuh-control start, which hangs when agentd is
+                    # already running (duplicate PID detection).
+                    # Helper: check if a daemon is alive using /proc instead
+                    # of kill -0 (which fails for non-root PIDs under hostPID).
+                    alive() { [ -n "$1" ] && [ -d "/proc/$1" ]; }
+
+                    start_missing() {
+                      for d in wazuh-modulesd wazuh-logcollector wazuh-syscheckd; do
+                        pidfile=$(ls /var/ossec/var/run/${d}-*.pid 2>/dev/null | head -1)
+                        pid=$(cat "$pidfile" 2>/dev/null)
+                        if ! alive "$pid"; then
+                          /var/ossec/bin/${d} 2>/dev/null &
+                        fi
+                      done
+                    }
+
+                    for i in $(seq 1 30); do
+                      if grep -q "Connected to the server" /var/ossec/logs/ossec.log 2>/dev/null; then
+                        # Save keys to persistent storage for next restart
+                        cp /var/ossec/etc/client.keys /var/ossec/data/client.keys 2>/dev/null
+                        start_missing
+                        exit 0
+                      fi
+                      sleep 5
+                    done
+                    # Last-ditch: start missing daemons even if not connected
+                    start_missing
+                    exit 0
+          # Custom probes: wazuh-control status uses kill -0 which fails
+          # for the wazuh-user agentd process under hostPID. Use /proc
+          # checks instead.
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  for f in /var/ossec/var/run/wazuh-*.pid; do
+                    [ -f "$f" ] || exit 1
+                    [ -d "/proc/$(cat "$f")" ] || exit 1
+                  done
+                  [ "$(ls /var/ossec/var/run/wazuh-*.pid 2>/dev/null | wc -l)" -ge 5 ]
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  for f in /var/ossec/var/run/wazuh-*.pid; do
+                    [ -f "$f" ] || exit 1
+                    [ -d "/proc/$(cat "$f")" ] || exit 1
+                  done
+                  [ "$(ls /var/ossec/var/run/wazuh-*.pid 2>/dev/null | wc -l)" -ge 5 ]
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+      volumes:
+        - name: var-log
+          hostPath:
+            path: /var/log
+        - name: etc
+          hostPath:
+            path: /etc
+        - name: var-ossec-data
+          hostPath:
+            path: /var/lib/wazuh-agent
+            type: DirectoryOrCreate
+        - name: ossec-conf
+          configMap:
+            name: wazuh-agent-ossec-conf
+        - name: manager-ca
+          secret:
+            secretName: wazuh-manager-ca
+            optional: true
+        - name: entrypoint-scripts
+          configMap:
+            name: wazuh-agent-entrypoint-scripts
+            defaultMode: 0755

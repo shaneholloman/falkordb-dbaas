@@ -1,0 +1,160 @@
+# Falco DaemonSet — runtime threat detection via eBPF.
+#
+# Runs on every node, monitors syscalls for container escapes, suspicious
+# processes, network anomalies, and file system changes. Outputs JSON
+# alerts to /var/log/falco/alerts.json (read by wazuh-agent) and stdout
+# (kubectl logs).
+#
+# Uses modern_ebpf engine — no kernel module, no privileged container.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: falco
+  namespace: security
+  labels:
+    app: falco
+spec:
+  selector:
+    matchLabels:
+      app: falco
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: falco
+      annotations:
+        configmap.reloader.stakater.com/reload: "falco-config"
+    spec:
+      serviceAccountName: falco
+      priorityClassName: security-monitoring
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.kubernetes.io/instance-type
+                    operator: NotIn
+                    values:
+                      # GCP burstable / shared-core
+                      - e2-small
+                      - e2-medium
+                      # AWS burstable
+                      - t2.small
+                      - t2.medium
+                      - t3.small
+                      - t3a.small
+                      - t3.medium
+                      - t3a.medium
+                      # Azure burstable
+                      - Standard_B1s
+                      - Standard_B1ms
+                      - Standard_B2s
+                      - Standard_B2als_v2
+                      - Standard_B2as_v2
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+        - operator: Exists
+          effect: NoExecute
+      volumes:
+        - name: falco-config
+          configMap:
+            name: falco-config
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: dev-shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+        # Required for modern_ebpf tracepoint attachment
+        - name: sys-kernel
+          hostPath:
+            path: /sys/kernel
+        # Tracefs for modern_ebpf on COS kernels
+        - name: sys-kernel-tracing
+          hostPath:
+            path: /sys/kernel/tracing
+        - name: sys-kernel-debug-tracing
+          hostPath:
+            path: /sys/kernel/debug/tracing
+        # Containerd socket for CRI metadata
+        - name: containerd-sock
+          hostPath:
+            path: /run/containerd/containerd.sock
+        # Falco file_output directory (read by wazuh-agent localfile)
+        - name: var-log-falco
+          hostPath:
+            path: /var/log/falco
+            type: DirectoryOrCreate
+      containers:
+        - name: falco
+          image: falcosecurity/falco:0.43.1
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            # modern_ebpf on GKE COS requires privileged mode for
+            # eBPF tracepoint attachment and /sys/kernel access
+            privileged: true
+          env:
+            - name: HOST_ROOT
+              value: /host
+          args:
+            - /usr/bin/falco
+            - -c
+            - /etc/falco/falco.yaml
+          volumeMounts:
+            - name: falco-config
+              mountPath: /etc/falco/falco.yaml
+              subPath: falco.yaml
+            - name: falco-config
+              mountPath: /etc/falco/falco_rules.local.yaml
+              subPath: falco_rules.local.yaml
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: dev-shm
+              mountPath: /dev/shm
+            - name: sys-kernel
+              mountPath: /sys/kernel
+              readOnly: true
+            - name: sys-kernel-tracing
+              mountPath: /sys/kernel/tracing
+              readOnly: true
+            - name: sys-kernel-debug-tracing
+              mountPath: /sys/kernel/debug/tracing
+              readOnly: true
+            - name: containerd-sock
+              mountPath: /run/containerd/containerd.sock
+              readOnly: true
+            - name: var-log-falco
+              mountPath: /var/log/falco
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8765
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8765
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3

@@ -1,0 +1,116 @@
+name: AI Security Triage
+
+# Weekly Copilot-driven review of SOC 2 evidence + active security alerts.
+# Read-only: produces a GitHub issue with prioritized remediations.
+# A human reviews and applies the fixes — the agent never modifies anything.
+
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+
+on:
+  schedule:
+    # Mondays 08:00 UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to triage'
+        required: true
+        type: choice
+        options:
+          - prod
+          - dev
+      wazuh_indexer_url:
+        description: 'Override Wazuh Indexer URL (optional)'
+        required: false
+        type: string
+        default: ''
+
+env:
+  ISSUE_REPO: 'FalkorDB/falkordb-dbaas'
+
+jobs:
+  ai-security-triage:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'prod' }}
+    timeout-minutes: 30
+    steps:
+      - name: Check authorised actor (manual runs only)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          ACTOR: ${{ github.actor }}
+        run: |
+          ALLOWED_USERS=("swilly22" "MuhammadQadora" "dudizimber" "AviAvni" "barakb")
+          for user in "${ALLOWED_USERS[@]}"; do
+            if [[ "$ACTOR" == "$user" ]]; then
+              echo "Actor '$ACTOR' is authorised."
+              exit 0
+            fi
+          done
+          echo "Actor '$ACTOR' is not authorised."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Copilot CLI and Python deps
+        run: |
+          npm install -g @github/copilot
+          pip install github-copilot-sdk requests pydantic
+
+      - name: Resolve environment-scoped URLs
+        id: urls
+        env:
+          ENVIRONMENT: ${{ inputs.environment || 'prod' }}
+          WAZUH_INDEXER_OVERRIDE: ${{ inputs.wazuh_indexer_url }}
+          WAZUH_INDEXER_URL_DEV: ${{ vars.WAZUH_INDEXER_URL_DEV }}
+          WAZUH_INDEXER_URL_PROD: ${{ vars.WAZUH_INDEXER_URL_PROD }}
+        run: |
+          if [ -n "$WAZUH_INDEXER_OVERRIDE" ]; then
+            WAZUH_INDEXER_URL="$WAZUH_INDEXER_OVERRIDE"
+          elif [ "$ENVIRONMENT" = "dev" ]; then
+            WAZUH_INDEXER_URL="$WAZUH_INDEXER_URL_DEV"
+          else
+            WAZUH_INDEXER_URL="$WAZUH_INDEXER_URL_PROD"
+          fi
+          echo "WAZUH_INDEXER_URL=$WAZUH_INDEXER_URL" >> "$GITHUB_ENV"
+
+      - name: Set environment-scoped credentials
+        env:
+          ENVIRONMENT: ${{ inputs.environment || 'prod' }}
+          WAZUH_INDEXER_PASS_DEV: ${{ secrets.WAZUH_INDEXER_PASSWORD_DEV }}
+          WAZUH_INDEXER_PASS_PROD: ${{ secrets.WAZUH_INDEXER_PASSWORD_PROD }}
+        run: |
+          if [ "$ENVIRONMENT" = "dev" ]; then
+            echo "WAZUH_INDEXER_PASSWORD=$WAZUH_INDEXER_PASS_DEV" >> "$GITHUB_ENV"
+          else
+            echo "WAZUH_INDEXER_PASSWORD=$WAZUH_INDEXER_PASS_PROD" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run AI security triage
+        env:
+          ENVIRONMENT: ${{ inputs.environment || 'prod' }}
+          GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ISSUE_REPO: ${{ env.ISSUE_REPO }}
+          WAZUH_INDEXER_URL: ${{ env.WAZUH_INDEXER_URL }}
+          WAZUH_INDEXER_USERNAME: ${{ vars.WAZUH_INDEXER_USERNAME }}
+          WAZUH_INDEXER_PASSWORD: ${{ env.WAZUH_INDEXER_PASSWORD }}
+          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL_PRODUCTION_CHAT }}
+        run: |
+          cd scripts
+          python ai_security_triage.py \
+            --environment "$ENVIRONMENT" \
+            --issue-repo "$ISSUE_REPO"

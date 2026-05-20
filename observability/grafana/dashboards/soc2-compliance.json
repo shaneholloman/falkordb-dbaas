@@ -1,0 +1,533 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "SOC 2 control compliance posture over time. Pulls Prowler / Kubescape / kube-bench / TruffleHog / FIM findings from the Wazuh indexer (wazuh-alerts-*) and surfaces pass/fail rates, severity trends, top failing controls and recent critical findings.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Posture (rolling 24h window)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "title": "Unique Critical Findings (24h)",
+      "description": "Distinct critical findings (TruffleHog verified secrets by unique source file) in the rolling 24h window. This feeds the posture score at -1 pt each.",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 } ] },
+          "unit": "short",
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2_critical_24h_unique_findings_value",
+          "legendFormat": "critical",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "Unique High Findings (24h)",
+      "description": "Distinct high-severity control failures (by ControlID) in the rolling 24h window. Feeds the posture score at -0.5 pt each.",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "orange", "value": 10 }, { "color": "red", "value": 20 } ] },
+          "unit": "short",
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2_high_24h_unique_findings_value",
+          "legendFormat": "high",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "Unique Medium Findings (24h)",
+      "description": "Distinct medium-severity control failures (by CheckTitle) in the rolling 24h window. Feeds the posture score at -0.1 pt each.",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "orange", "value": 20 }, { "color": "red", "value": 50 } ] },
+          "unit": "short",
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2_medium_24h_unique_findings_value",
+          "legendFormat": "medium",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "SOC 2 Posture Score",
+      "description": "Weighted compliance score recorded as soc2:posture_score in VictoriaMetrics. score = clamp(100 - 1×critical_unique - 0.5×high_unique - 0.1×medium_unique, 0, 100) over the rolling 24h window. The stat panels to the left show the unique findings counts that drive this score.",
+      "type": "gauge",
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 50 }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 95 } ] },
+          "unit": "percent", "min": 0, "max": 100,
+          "decimals": 1
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true, "orientation": "auto" },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2:posture_score",
+          "legendFormat": "score",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "Prowler Failing Checks (24h)",
+      "description": "Distinct Prowler checks in FAIL state (by CheckTitle) in the rolling 24h window.",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "orange", "value": 15 }, { "color": "red", "value": 30 } ] },
+          "unit": "short", "color": { "mode": "thresholds" }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "prowler_fail_24h_unique_findings_value",
+          "legendFormat": "prowler_fail",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "Total Raw Alert Volume (24h)",
+      "description": "Total raw alert count across all SOC2 categories in the 24h window. This is the undeduped count — use the unique findings panels for actual distinct issues.",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "orange", "value": 2000 }, { "color": "red", "value": 5000 } ] },
+          "unit": "short"
+        }
+      },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2_fail_total_24h_hits",
+          "legendFormat": "total_raw",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Compliance trend",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "collapsed": false
+    },
+    {
+      "title": "SOC 2 Posture Score over time",
+      "description": "Recorded soc2:posture_score from VictoriaMetrics (vmalert recording rule fed by the wazuh-metrics-exporter). Drops correspond to new critical/high findings; recovery curves indicate remediation progress.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 15, "lineWidth": 2, "spanNulls": true },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 50 }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 95 } ] },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "score" }, "properties": [ { "id": "custom.thresholdsStyle", "value": { "mode": "area" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "min", "mean"] }, "tooltip": { "mode": "single" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "expr": "soc2:posture_score",
+          "legendFormat": "score"
+        }
+      ]
+    },
+    {
+      "title": "Prowler PASS vs FAIL over time",
+      "description": "Time series of Prowler check outcomes. Rising green / shrinking red = improving cloud control compliance.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 7 },
+      "timeFrom": "7d",
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 80, "stacking": { "mode": "normal", "group": "A" } },
+          "unit": "short"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "PASS" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "FAIL" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "WARN" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum", "lastNotNull"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "rule.groups:prowler_compliance",
+          "alias": "{{term data.Status}}",
+          "bucketAggs": [
+            { "type": "terms", "field": "data.Status", "id": "3", "settings": { "size": "5", "order": "desc", "orderBy": "_count" } },
+            { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "auto", "min_doc_count": "0" } }
+          ],
+          "metrics": [ { "type": "count", "id": "1" } ],
+          "timeField": "@timestamp"
+        }
+      ]
+    },
+    {
+      "title": "SOC2 failures by severity over time",
+      "description": "All SOC2 control failures (rule.groups:soc2_fail) bucketed by data.Severity. Tracks whether the overall posture is improving.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 7 },
+      "timeFrom": "7d",
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 80, "stacking": { "mode": "normal", "group": "A" } },
+          "unit": "short"
+        },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": "(?i)^critical$" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byRegexp", "options": "(?i)^high$" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] },
+          { "matcher": { "id": "byRegexp", "options": "(?i)^medium$" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } } ] },
+          { "matcher": { "id": "byRegexp", "options": "(?i)^low$" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "rule.groups:soc2_fail",
+          "alias": "{{term data.Severity}}",
+          "bucketAggs": [
+            { "type": "terms", "field": "data.Severity", "id": "3", "settings": { "size": "10", "order": "desc", "orderBy": "_count", "missing": "unknown" } },
+            { "type": "date_histogram", "field": "@timestamp", "id": "2", "settings": { "interval": "auto", "min_doc_count": "0" } }
+          ],
+          "metrics": [ { "type": "count", "id": "1" } ],
+          "timeField": "@timestamp"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Top failing controls & scanners",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "collapsed": false
+    },
+    {
+      "title": "Top 10 failing Prowler checks",
+      "description": "Most frequent failing cloud controls in the window (data.CheckTitle).",
+      "type": "bargauge",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 16 },
+      "timeFrom": "7d",
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "fieldConfig": {
+        "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 5 }, { "color": "red", "value": 20 } ] }, "unit": "short" }
+      },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "rule.groups:prowler_compliance AND data.Status:FAIL",
+          "alias": "{{term data.CheckTitle}}",
+          "bucketAggs": [
+            { "type": "terms", "field": "data.CheckTitle", "id": "3", "settings": { "size": "10", "order": "desc", "orderBy": "_count", "missing": "(no title)" } }
+          ],
+          "metrics": [ { "type": "count", "id": "1" } ],
+          "timeField": "@timestamp"
+        }
+      ]
+    },
+    {
+      "title": "Failures by scanner",
+      "description": "Share of SOC2 failures contributed by each scanner. Helps identify which control area drives most of the open findings.",
+      "type": "piechart",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 },
+      "timeFrom": "7d",
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] }, "pieType": "donut", "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" } },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "rule.groups:soc2_fail",
+          "alias": "{{term data.Scanner}}",
+          "bucketAggs": [
+            { "type": "terms", "field": "data.Scanner", "id": "3", "settings": { "size": "10", "order": "desc", "orderBy": "_count", "missing": "(no scanner)" } }
+          ],
+          "metrics": [ { "type": "count", "id": "1" } ],
+          "timeField": "@timestamp"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Recent critical findings",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+      "collapsed": false
+    },
+    {
+      "title": "Latest critical / high SOC2 findings",
+      "description": "Most recent critical or high SOC2 findings (rule.groups:soc2_fail AND severity critical|high). Use this list to drive remediation. Click a row to see the raw Wazuh alert.",
+      "type": "table",
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 26 },
+      "timeFrom": "7d",
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${ds_wazuh}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "filterable": true, "inspect": false },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Severity" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } },
+              { "id": "mappings", "value": [
+                { "type": "value", "options": {
+                  "critical": { "color": "red", "index": 0 },
+                  "Critical": { "color": "red", "index": 1 },
+                  "high": { "color": "orange", "index": 2 },
+                  "High": { "color": "orange", "index": 3 },
+                  "medium": { "color": "yellow", "index": 4 },
+                  "Medium": { "color": "yellow", "index": 5 },
+                  "low": { "color": "blue", "index": 6 },
+                  "Low": { "color": "blue", "index": 7 }
+                } }
+              ] },
+              { "id": "custom.width", "value": 90 }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "Time" }, "properties": [ { "id": "custom.width", "value": 170 }, { "id": "unit", "value": "dateTimeAsIso" } ] },
+          { "matcher": { "id": "byName", "options": "Scanner" }, "properties": [ { "id": "custom.width", "value": 100 } ] },
+          { "matcher": { "id": "byName", "options": "Cluster" }, "properties": [ { "id": "custom.width", "value": 160 } ] },
+          { "matcher": { "id": "byName", "options": "Control" }, "properties": [ { "id": "custom.width", "value": 110 } ] },
+          { "matcher": { "id": "byName", "options": "Rule level" }, "properties": [ { "id": "custom.width", "value": 80 }, { "id": "custom.cellOptions", "value": { "type": "color-text" } } ] },
+          { "matcher": { "id": "byName", "options": "Title / Description" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "auto", "wrapText": true } } ] }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": { "show": false, "reducer": ["sum"], "countRows": false, "fields": "" },
+        "sortBy": [ { "displayName": "Time", "desc": true } ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "rule.groups:soc2_fail AND data.Severity:(critical OR Critical OR high OR High)",
+          "alias": "",
+          "metrics": [ { "type": "raw_data", "id": "1", "settings": { "size": "100" } } ],
+          "bucketAggs": [],
+          "timeField": "@timestamp"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "_id": true, "_index": true, "_type": true, "_score": true, "highlight": true, "sort": true, "_source": true,
+              "host": true, "manager.name": true, "id": true, "input.type": true, "decoder.name": true,
+              "rule.mail": true, "rule.firedtimes": true, "predecoder.program_name": true,
+              "rule.pci_dss": true, "rule.gdpr": true, "rule.hipaa": true, "rule.nist_800_53": true, "rule.tsc": true,
+              "rule.mitre.id": true, "rule.mitre.tactic": true, "rule.mitre.technique": true,
+              "rule.groups": true, "rule.id": true,
+              "data.Provider": true, "data.Region": true, "data.ResourceId": true, "data.ServiceName": true,
+              "data.CheckID": true, "data.StatusExtended": true, "data.Status": true,
+              "data.ControlName": true, "data.ResourceCount": true, "data.SampleResources": true, "data.ScoreFactor": true, "data.Framework": true,
+              "data.TestNumber": true, "data.TestDesc": true, "data.Remediation": true, "data.Scored": true, "data.Section": true, "data.SectionDesc": true,
+              "data.SecretType": true, "data.DetectorName": true, "data.Verified": true, "data.SourceFile": true, "data.Redacted": true, "data.ImageName": true, "data.File": true,
+              "data.uri": true, "data.output": true, "data.Detector": true,
+              "agent.id": true, "agent.ip": true, "location": true, "full_log": true
+            },
+            "indexByName": {
+              "@timestamp": 0,
+              "data.Severity": 1,
+              "data.Scanner": 2,
+              "data.CheckTitle": 3,
+              "data.ControlID": 4,
+              "data.Cluster": 5,
+              "agent.name": 6,
+              "rule.level": 7,
+              "rule.description": 8
+            },
+            "renameByName": {
+              "@timestamp": "Time",
+              "data.Severity": "Severity",
+              "data.Scanner": "Scanner",
+              "data.CheckTitle": "Check",
+              "data.ControlID": "Control",
+              "data.Cluster": "Cluster",
+              "agent.name": "Agent",
+              "rule.level": "Rule level",
+              "rule.description": "Title / Description"
+            }
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Scanner liveness (operational context)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 37 },
+      "collapsed": true,
+      "panels": [
+        {
+          "title": "Prowler last run",
+          "description": "Time since last successful Prowler scan. Stale data invalidates the compliance posture above.",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 38 },
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 86400 }, { "color": "red", "value": 172800 } ] }, "unit": "s" } },
+          "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+          "targets": [ { "expr": "time() - max(kube_cronjob_status_last_successful_time{cronjob=\"prowler-soc2-scan\"})", "refId": "A" } ]
+        },
+        {
+          "title": "Kubescape last run",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 6, "y": 38 },
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 86400 }, { "color": "red", "value": 172800 } ] }, "unit": "s" } },
+          "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+          "targets": [ { "expr": "time() - max(kube_cronjob_status_last_successful_time{cronjob=\"kubescape-scan\"})", "refId": "A" } ]
+        },
+        {
+          "title": "kube-bench last run",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 12, "y": 38 },
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 86400 }, { "color": "red", "value": 172800 } ] }, "unit": "s" } },
+          "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+          "targets": [ { "expr": "time() - max(kube_cronjob_status_last_successful_time{cronjob=\"kube-bench-cis-scan\"})", "refId": "A" } ]
+        },
+        {
+          "title": "TruffleHog last run",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 18, "y": 38 },
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 86400 }, { "color": "red", "value": 172800 } ] }, "unit": "s" } },
+          "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+          "targets": [ { "expr": "time() - max(kube_cronjob_status_last_successful_time{cronjob=\"trufflehog-secret-scan\"})", "refId": "A" } ]
+        },
+        {
+          "title": "Grype last run",
+          "description": "Time since last successful Grype vulnerability scan.",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 12, "x": 0, "y": 43 },
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 86400 }, { "color": "red", "value": 172800 } ] }, "unit": "s" } },
+          "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+          "targets": [ { "expr": "time() - max(kube_cronjob_status_last_successful_time{cronjob=~\"grype-.*\"})", "refId": "A" } ]
+        },
+        {
+          "title": "Wazuh agents reporting",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 12, "x": 12, "y": 43 },
+          "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 1 }, { "color": "green", "value": 3 } ] }, "unit": "short" } },
+          "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+          "targets": [ { "expr": "sum(kube_daemonset_status_number_ready{daemonset=\"wazuh-agent\"})", "refId": "A" } ]
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["soc2", "compliance", "security", "wazuh", "prowler", "kubescape", "kube-bench", "trufflehog"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "WazuhIndexer", "value": "WazuhIndexer" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Wazuh indexer",
+        "multi": false,
+        "name": "ds_wazuh",
+        "query": "grafana-opensearch-datasource",
+        "type": "datasource"
+      },
+      {
+        "current": { "selected": false, "text": "VictoriaMetrics", "value": "VictoriaMetrics" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Metrics",
+        "multi": false,
+        "name": "ds_prom",
+        "query": "prometheus",
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": { "from": "now-7d", "to": "now" },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "SOC 2 Compliance Overview",
+  "uid": "soc2-compliance-overview",
+  "version": 3
+}

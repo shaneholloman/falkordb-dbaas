@@ -1,0 +1,91 @@
+# Custom Wazuh decoders for SOC 2 compliance monitoring.
+#
+# Deployed as a ConfigMap and mounted into the Wazuh Manager container
+# at /var/ossec/etc/decoders/local_decoder.xml.
+#
+# Uses parent-child decoder pattern required by Wazuh 4.14:
+#   Parent decoder matches syslog program_name
+#   Child decoder uses prematch + JSON_Decoder plugin to extract fields
+#
+# Decoders:
+#   grype      — CVE vulnerability scanner
+#   prowler    — Cloud compliance scanner
+#   falco      — Runtime threat detection
+#   trufflehog — Secret leak scanner
+#   kube-bench — CIS benchmark scanner
+#   kubescape  — Kubernetes security scanner
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-custom-decoders
+  namespace: security
+  labels:
+    app: wazuh
+    component: decoders
+data:
+  local_decoder.xml: |
+    <!-- SOC 2 Evidence Engine — Custom Decoders (parent-child pattern) -->
+
+    <!-- Grype CVE scanner -->
+    <decoder name="grype">
+        <program_name>^grype</program_name>
+    </decoder>
+    <decoder name="grype-json">
+        <parent>grype</parent>
+        <prematch>^{</prematch>
+        <plugin_decoder>JSON_Decoder</plugin_decoder>
+    </decoder>
+
+    <!-- Prowler compliance scanner -->
+    <decoder name="prowler">
+        <program_name>^prowler</program_name>
+    </decoder>
+    <decoder name="prowler-json">
+        <parent>prowler</parent>
+        <prematch>^{</prematch>
+        <plugin_decoder>JSON_Decoder</plugin_decoder>
+    </decoder>
+
+    <!-- Falco runtime threat detection (syslog path — scan jobs forwarding via TCP) -->
+    <decoder name="falco">
+        <program_name>^falco</program_name>
+    </decoder>
+    <!-- Falco runtime threat detection (localfile path — file_output JSON read by wazuh-agent) -->
+    <decoder name="falco">
+        <prematch type="pcre2">"source"\s*:\s*"(syscall|k8s_audit|plugin)"</prematch>
+    </decoder>
+    <decoder name="falco-json">
+        <parent>falco</parent>
+        <prematch>^{</prematch>
+        <plugin_decoder>JSON_Decoder</plugin_decoder>
+    </decoder>
+
+    <!-- TruffleHog secret scanner -->
+    <decoder name="trufflehog">
+        <program_name>^trufflehog</program_name>
+    </decoder>
+    <decoder name="trufflehog-json">
+        <parent>trufflehog</parent>
+        <prematch>^{</prematch>
+        <plugin_decoder>JSON_Decoder</plugin_decoder>
+    </decoder>
+
+    <!-- kube-bench CIS benchmark -->
+    <decoder name="kube-bench">
+        <program_name>^kube-bench</program_name>
+    </decoder>
+    <decoder name="kube-bench-json">
+        <parent>kube-bench</parent>
+        <prematch>^{</prematch>
+        <plugin_decoder>JSON_Decoder</plugin_decoder>
+    </decoder>
+
+    <!-- KubeScape security scanner -->
+    <decoder name="kubescape">
+        <program_name>^kubescape</program_name>
+    </decoder>
+    <decoder name="kubescape-json">
+        <parent>kubescape</parent>
+        <prematch>^{</prematch>
+        <plugin_decoder>JSON_Decoder</plugin_decoder>
+    </decoder>

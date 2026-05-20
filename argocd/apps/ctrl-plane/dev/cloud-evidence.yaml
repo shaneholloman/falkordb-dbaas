@@ -1,0 +1,22 @@
+# Cloud Evidence Collector — deployed on ctrl-plane to collect GCP evidence.
+# Runs weekly, uploads to GCS evidence locker under cloud-evidence/YYYY/MM/DD/gcp/
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloud-evidence
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/FalkorDB/falkordb-dbaas.git
+    targetRevision: dev
+    path: argocd/kustomize/cloud-evidence/overlays/ctrl-plane-dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: security
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      prune: true
+      selfHeal: true

@@ -418,6 +418,8 @@
             }
           },
           "mappings": [],
+          "min": 0,
+          "max": 100,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -430,7 +432,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "percent"
         },
         "overrides": [
           {
@@ -496,7 +499,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", image=~\".+falkordb.+\"}[$__rate_interval])) by (pod)",
+          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", image=~\".+falkordb.+\"}[$__rate_interval])) by (pod) / clamp_min(sum(kube_pod_container_resource_limits{resource=\"cpu\", namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"}) by (pod), 1e-9)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -511,7 +514,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "0.8 * sum(kube_pod_container_resource_limits{resource=\"cpu\", namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"}) by (pod)",
+          "expr": "0 * sum(kube_pod_container_resource_limits{resource=\"cpu\", namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"}) by (pod) + 80",
           "legendFormat": "80% CPU limit, {{ pod }}",
           "range": true,
           "refId": "B"

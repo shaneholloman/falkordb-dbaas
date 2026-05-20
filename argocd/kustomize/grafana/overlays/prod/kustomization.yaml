@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - wazuh-indexer-cred-env-secret.yaml
 
 patches:
   # Grafana CR: memory limit, root_url, ingress host

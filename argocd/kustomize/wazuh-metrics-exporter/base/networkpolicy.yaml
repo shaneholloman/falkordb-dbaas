@@ -1,0 +1,22 @@
+# NetworkPolicy — wazuh-metrics-exporter
+# Ingress: allow alloy (observability namespace) to scrape /metrics.
+# Egress: unrestricted (needs to reach wazuh-indexer + DNS).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-metrics-exporter-netpol
+  namespace: security
+spec:
+  podSelector:
+    matchLabels:
+      app: wazuh-metrics-exporter
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - port: metrics
+          protocol: TCP

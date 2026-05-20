@@ -1,0 +1,275 @@
+# Kubescape exceptions — ctrl-plane-dev
+# Suppress accepted-risk controls for infrastructure workloads
+# that inherently reference credentials in their configuration.
+# Last reviewed: 2026-05-17
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubescape-exceptions
+  namespace: security
+  labels:
+    app: kubescape
+    component: soc2-evidence
+data:
+  exceptions.json: |
+    [
+      {
+        "name": "C-0012: infra tooling with expected credential references",
+        "policyType": "postureExceptionPolicy",
+        "actions": ["alertOnly"],
+        "resources": [
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "observability",
+              "name": "kubernetes-secret-generator"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "metrics-agent-linux-config-images"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "observability",
+              "name": "dashboards-k8s-views-namespaces"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "security",
+              "name": "wazuh-dashboard"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "observability",
+              "name": "alloy"
+            }
+          }
+        ],
+        "posturePolicies": [
+          {
+            "controlID": "C-0012"
+          }
+        ]
+      },
+      {
+        "name": "C-0057: infra DaemonSets requiring privileged access",
+        "policyType": "postureExceptionPolicy",
+        "actions": ["alertOnly"],
+        "resources": [
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "efficiency-daemon"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "gke-managed-networking-dra-driver",
+              "name": "networking-dra-driver"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "security",
+              "name": "falco"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "gcsfusecsi-node"
+            }
+          }
+        ],
+        "posturePolicies": [
+          {
+            "controlID": "C-0057"
+          }
+        ]
+      },
+      {
+        "name": "C-0048/C-0045: GKE infra DaemonSets requiring hostPath mounts",
+        "policyType": "postureExceptionPolicy",
+        "actions": ["alertOnly"],
+        "resources": [
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "efficiency-daemon"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "gke-managed-networking-dra-driver",
+              "name": "networking-dra-driver"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "security",
+              "name": "falco"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "gcsfusecsi-node"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "fluentbit-gke"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "gke-metrics-agent"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "pdcsi-node"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "ip-masq-agent"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "netd"
+            }
+          }
+        ],
+        "posturePolicies": [
+          {
+            "controlID": "C-0048"
+          },
+          {
+            "controlID": "C-0045"
+          }
+        ]
+      },
+      {
+        "name": "C-0015: GKE system controllers and operators with secrets RBAC",
+        "policyType": "postureExceptionPolicy",
+        "actions": ["alertOnly"],
+        "resources": [
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "*"
+            }
+          }
+        ],
+        "posturePolicies": [
+          {
+            "controlID": "C-0015"
+          }
+        ]
+      },
+      {
+        "name": "C-0038/C-0041: Infra DaemonSets requiring host PID/IPC/Network",
+        "policyType": "postureExceptionPolicy",
+        "actions": ["alertOnly"],
+        "resources": [
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "security",
+              "name": "wazuh-agent"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "security",
+              "name": "kube-bench-cis-scan"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "node-exporter",
+              "name": "node-exporter"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "security",
+              "name": "falco"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "gke-managed-networking-dra-driver",
+              "name": "networking-dra-driver"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "efficiency-daemon"
+            }
+          }
+        ],
+        "posturePolicies": [
+          {
+            "controlID": "C-0038"
+          },
+          {
+            "controlID": "C-0041"
+          }
+        ]
+      },
+      {
+        "name": "C-0046: Wazuh agent requires NET_RAW for host monitoring",
+        "policyType": "postureExceptionPolicy",
+        "actions": ["alertOnly"],
+        "resources": [
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "security",
+              "name": "wazuh-agent"
+            }
+          }
+        ],
+        "posturePolicies": [
+          {
+            "controlID": "C-0046"
+          }
+        ]
+      }
+    ]

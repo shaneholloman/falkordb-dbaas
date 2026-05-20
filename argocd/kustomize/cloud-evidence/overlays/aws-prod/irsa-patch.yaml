@@ -1,0 +1,9 @@
+# Annotate the cloud-evidence ServiceAccount with the IRSA role ARN
+# so EKS can inject AWS credentials via projected service account token.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud-evidence
+  namespace: security
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::148761665810:role/security/prowler-soc2-scanner

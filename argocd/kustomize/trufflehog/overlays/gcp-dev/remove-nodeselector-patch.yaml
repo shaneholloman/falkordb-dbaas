@@ -1,0 +1,13 @@
+# Schedule scan pods on the observability node pool in GCP app-plane clusters.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trufflehog-secret-scan
+  namespace: security
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          nodeSelector:
+            node_pool: observability

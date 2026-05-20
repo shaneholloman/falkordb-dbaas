@@ -91,6 +91,28 @@ spec:
                     target_match:
                       alertname: FalkorDBDown
                     equal: ["namespace", "cluster", "environment"]
+                  # SOC 2 security stack — when a scanner is Failing, suppress its redundant Stale alert
+                  - source_match: { alertname: ProwlerScanFailing }
+                    target_match: { alertname: ProwlerScanStale }
+                  - source_match: { alertname: GrypeScanFailing }
+                    target_match: { alertname: GrypeScanStale }
+                  - source_match: { alertname: KubeBenchScanFailing }
+                    target_match: { alertname: KubeBenchScanStale }
+                  - source_match: { alertname: KubescapeScanFailing }
+                    target_match: { alertname: KubescapeScanStale }
+                  - source_match: { alertname: TrufflehogScanFailing }
+                    target_match: { alertname: TrufflehogScanStale }
+                  # If CronJob is Suspended, neither Failing nor Stale add information
+                  - source_match: { alertname: ProwlerCronJobSuspended }
+                    target_match_re: { alertname: 'ProwlerScan(Failing|Stale)' }
+                  - source_match: { alertname: GrypeCronJobSuspended }
+                    target_match_re: { alertname: 'GrypeScan(Failing|Stale)' }
+                  - source_match: { alertname: KubeBenchCronJobSuspended }
+                    target_match_re: { alertname: 'KubeBenchScan(Failing|Stale)' }
+                  - source_match: { alertname: KubescapeCronJobSuspended }
+                    target_match_re: { alertname: 'KubescapeScan(Failing|Stale)' }
+                  - source_match: { alertname: TrufflehogCronJobSuspended }
+                    target_match_re: { alertname: 'TrufflehogScan(Failing|Stale)' }
                 route:
                   group_by: ["alertname", "namespace", "pod"]
                   group_wait: 30s
@@ -104,6 +126,24 @@ spec:
                     - match:
                         alertname: InfoInhibitor
                       receiver: "blackhole"
+                    # SOC 2 security alerts — operational warnings stay in AM UI (no page),
+                    # only criticals page. Larger group/repeat intervals reduce noise on
+                    # daily-scan failures that don't warrant 12h re-pages.
+                    - matchers:
+                        - team = security
+                        - severity = critical
+                      receiver: "pagerduty"
+                      group_by: ["alertname", "cluster"]
+                      group_wait: 5m
+                      group_interval: 30m
+                      repeat_interval: 24h
+                    - matchers:
+                        - team = security
+                      receiver: "blackhole"
+                      group_by: ["alertname", "cluster"]
+                      group_wait: 5m
+                      group_interval: 1h
+                      repeat_interval: 7d
                     - receiver: "pagerduty"
                 receivers:
                   - name: blackhole

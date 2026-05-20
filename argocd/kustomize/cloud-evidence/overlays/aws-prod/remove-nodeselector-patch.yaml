@@ -1,0 +1,13 @@
+# Schedule pods on the observability node pool in AWS app-plane clusters.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cloud-evidence-collector
+  namespace: security
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          nodeSelector:
+            node_pool: observability

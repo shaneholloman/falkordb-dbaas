@@ -1,0 +1,93 @@
+name: Collect SOC 2 Evidence
+
+# Automated collection of SOC 2 audit evidence from all infrastructure.
+# Collects IAM, firewall, TLS, RBAC, vuln scans, etc. and uploads to GCS.
+
+permissions:
+  contents: read
+  id-token: write
+
+on:
+  schedule:
+    # First day of each month at 06:00 UTC
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to collect evidence from'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+      controls:
+        description: 'Comma-separated control numbers (empty = all)'
+        required: false
+        type: string
+        default: ''
+
+env:
+  EVIDENCE_BUCKET: falkordb-evidence-locker-a89z
+
+jobs:
+  collect-evidence:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'prod' }}
+    timeout-minutes: 30
+    steps:
+      - name: Check authorised actor (manual runs only)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          ACTOR: ${{ github.actor }}
+        run: |
+          ALLOWED_USERS=("swilly22" "MuhammadQadora" "dudizimber" "AviAvni" "barakb")
+          for user in "${ALLOWED_USERS[@]}"; do
+            if [[ "$ACTOR" == "$user" ]]; then
+              echo "Actor '$ACTOR' is authorised."
+              exit 0
+            fi
+          done
+          echo "Actor '$ACTOR' is not authorised."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          pip install google-cloud-storage requests
+
+      - name: Authenticate to Google Cloud (GCS read-only)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Collect SOC 2 evidence
+        env:
+          ENVIRONMENT: ${{ inputs.environment || 'prod' }}
+          EVIDENCE_BUCKET: ${{ env.EVIDENCE_BUCKET }}
+          GITHUB_ORG: FalkorDB
+          GITHUB_REPOS: falkordb-dbaas,falkordb
+          PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          WAZUH_API_URL: ${{ secrets.WAZUH_API_URL }}
+          WAZUH_API_PASS: ${{ secrets.WAZUH_API_PASS }}
+          REPO_ROOT: ${{ github.workspace }}
+        run: |
+          ARGS="--environment $ENVIRONMENT --bucket $EVIDENCE_BUCKET"
+          if [ -n "${{ inputs.controls }}" ]; then
+            ARGS="$ARGS --controls ${{ inputs.controls }}"
+          fi
+          python scripts/collect_soc2_evidence.py $ARGS
+
+      - name: Upload manifest as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: soc2-evidence-manifest-${{ github.run_id }}
+          path: /tmp/soc2-evidence-*/manifest.json
+          retention-days: 90

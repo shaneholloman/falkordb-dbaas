@@ -1,0 +1,16 @@
+# NetworkPolicy — TruffleHog secret scanner CronJob pods
+# Denies all ingress. Egress unrestricted (batch job needs metadata server,
+# GCS, DNS, PyPI, GitHub, K8s API, Wazuh syslog).
+# NOTE: Egress cannot be restricted while GKE uses Calico (post-DNAT eval).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: trufflehog-netpol
+  namespace: security
+spec:
+  podSelector:
+    matchLabels:
+      app: trufflehog
+  policyTypes:
+    - Ingress
+  ingress: []

@@ -59,6 +59,12 @@ def _download_gcs_or_url(url: str, dest: str) -> Optional[str]:
         if url.startswith("gs://"):
             without_scheme = url[len("gs://"):]
             bucket_name, _, blob_name = without_scheme.partition("/")
+            # Log credential state for debugging GCS auth failures in CI.
+            creds_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+            creds_exists = os.path.isfile(creds_file) if creds_file else False
+            print(f"  GCS download: bucket={bucket_name}, blob={blob_name}, "
+                  f"GOOGLE_APPLICATION_CREDENTIALS={'exists' if creds_exists else 'MISSING'}",
+                  flush=True)
             client = gcs_storage.Client()
             bucket = client.bucket(bucket_name)
             bucket.blob(blob_name).download_to_filename(dest)
@@ -75,7 +81,9 @@ def _download_gcs_or_url(url: str, dest: str) -> Optional[str]:
         else:
             return f"ERROR: Unsupported URL scheme. Only gs:// and https:// from allowed hosts are supported."
     except Exception as exc:
-        return f"ERROR: Failed to download {url}: {exc}"
+        # Strip query params to avoid leaking signed-URL tokens in logs.
+        safe_url = url.split("?")[0] if url.startswith("https://") else url
+        return f"ERROR: Failed to download {safe_url}: {exc}"
     return None
 
 
@@ -383,16 +391,31 @@ async def run_falkordb_local(params: RunFalkorDBLocalParams) -> str:
         err = _safe_extract_tar(aof_tar, data_dir)
         if err:
             return err
+        # rdb_uploader.py archives as "appendonlydir.snapshot" — rename to
+        # "appendonlydir" which is what Redis/FalkorDB expects on startup.
+        snapshot_dir = os.path.join(data_dir, "appendonlydir.snapshot")
+        target_dir = os.path.join(data_dir, "appendonlydir")
+        if os.path.isdir(snapshot_dir) and not os.path.isdir(target_dir):
+            os.rename(snapshot_dir, target_dir)
 
     image = f"falkordb/falkordb:{params.version}"
+    # The falkordb/falkordb image uses --dir /var/lib/falkordb/data (set by
+    # FALKORDB_DATA_PATH in run.sh).  Mount our data there so Redis finds
+    # dump.rdb / appendonlydir on startup.
+    # If an AOF directory is present, enable appendonly so Redis loads it.
+    has_aof = os.path.isdir(os.path.join(data_dir, "appendonlydir"))
+    docker_cmd = [
+        "docker", "run", "-d",
+        "--name", "falkordb-oom-triage",
+        "-p", "6399:6379",
+        "--security-opt=no-new-privileges",
+        "-v", f"{data_dir}:/var/lib/falkordb/data",
+    ]
+    if has_aof:
+        docker_cmd += ["-e", "REDIS_ARGS=--appendonly yes"]
+    docker_cmd.append(image)
     result = subprocess.run(
-        [
-            "docker", "run", "-d",
-            "--name", "falkordb-oom-triage",
-            "-p", "6399:6379",
-            "-v", f"{data_dir}:/data",
-            image,
-        ],
+        docker_cmd,
         capture_output=True,
         text=True,
     )

@@ -15,7 +15,7 @@ spec:
     helm:
       valuesObject:
         nodeSelector:
-          node_pool: observability-resources
+          node_pool: observability
       parameters:
         - name: installCRDs
           value: "true"

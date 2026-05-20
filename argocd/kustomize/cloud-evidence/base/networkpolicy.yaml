@@ -1,0 +1,30 @@
+# Restrict network for cloud-evidence collector — only allow egress to:
+# - GCS (via Google APIs)
+# - AWS APIs (for EKS/IAM)
+# - Metadata server (Workload Identity)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloud-evidence
+  namespace: security
+spec:
+  podSelector:
+    matchLabels:
+      app: cloud-evidence
+  policyTypes:
+    - Egress
+  egress:
+    # DNS
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # HTTPS (GCS, AWS APIs, GCE metadata)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

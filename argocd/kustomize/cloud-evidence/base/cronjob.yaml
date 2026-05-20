@@ -1,0 +1,113 @@
+# Cloud Evidence Collector — weekly CronJob that queries cloud provider APIs
+# (GCP IAM, GKE clusters, firewall rules, AWS IAM, EKS clusters, encryption)
+# and uploads structured JSON evidence to the GCS Evidence Locker.
+#
+# This runs in-cluster with Workload Identity, so the GitHub Action does NOT
+# need gcloud/aws CLI access — it reads everything from GCS.
+#
+# Schedule: Every Sunday at 06:30 UTC (before compliance-report at 08:30)
+# Results: gs://BUCKET/cloud-evidence/YYYY/MM/DD/<cloud-provider>/
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cloud-evidence-collector
+  namespace: security
+  labels:
+    app: cloud-evidence
+    component: soc2-evidence
+spec:
+  schedule: "30 6 * * 0"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800  # 30 min max
+      template:
+        metadata:
+          labels:
+            app: cloud-evidence
+            component: soc2-evidence
+        spec:
+          serviceAccountName: cloud-evidence
+          restartPolicy: Never
+          nodeSelector:
+            node_pool: security
+          tolerations:
+            - key: cloud.google.com/gke-spot
+              operator: Equal
+              value: "true"
+              effect: NoSchedule
+            - key: eks.amazonaws.com/capacityType
+              operator: Equal
+              value: SPOT
+              effect: NoSchedule
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: tmp
+              emptyDir: {}
+            - name: script
+              configMap:
+                name: cloud-evidence-script
+          containers:
+            - name: collector
+              image: google/cloud-sdk:slim@sha256:42d0af3434d40a895da768a87001b87938c3ff2a0f16c81a00e78b857b75b611
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+                - name: script
+                  mountPath: /scripts
+              env:
+                - name: EVIDENCE_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: cloud-evidence-infra
+                      key: evidence-bucket
+                - name: CLOUD_PROVIDER
+                  valueFrom:
+                    configMapKeyRef:
+                      name: cloud-evidence-config
+                      key: cloud-provider
+                - name: GCP_PROJECT_IDS
+                  valueFrom:
+                    configMapKeyRef:
+                      name: cloud-evidence-config
+                      key: gcp-project-ids
+                      optional: true
+                - name: AWS_REGION
+                  valueFrom:
+                    configMapKeyRef:
+                      name: cloud-evidence-config
+                      key: aws-region
+                      optional: true
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  # Install boto3 for AWS calls (only if AWS provider)
+                  if [ "$CLOUD_PROVIDER" = "aws" ] || [ "$CLOUD_PROVIDER" = "all" ]; then
+                    pip install --quiet --no-cache-dir --target /tmp/pip-packages boto3
+                  fi
+                  pip install --quiet --no-cache-dir --target /tmp/pip-packages google-cloud-storage
+                  export PYTHONPATH="/tmp/pip-packages:${PYTHONPATH:-}"
+
+                  python3 /scripts/collect_cloud_evidence.py

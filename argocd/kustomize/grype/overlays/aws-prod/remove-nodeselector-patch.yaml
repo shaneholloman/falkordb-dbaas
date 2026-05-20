@@ -1,0 +1,30 @@
+# Schedule scan pods on the observability node pool in AWS app-plane clusters.
+# m5.large nodes (8GB RAM) provide sufficient memory for scan workloads.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: grype-cve-scan
+  namespace: security
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          nodeSelector:
+            node_pool: observability
+          tolerations:
+            - key: cloud.google.com/gke-spot
+              operator: Equal
+              value: "true"
+              effect: NoSchedule
+            - key: eks.amazonaws.com/capacityType
+              operator: Equal
+              value: SPOT
+              effect: NoSchedule
+            - key: kubernetes.azure.com/scalesetpriority
+              operator: Equal
+              value: spot
+              effect: NoSchedule
+            - key: CriticalAddonsOnly
+              operator: Exists
+              effect: NoSchedule

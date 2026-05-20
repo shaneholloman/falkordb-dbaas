@@ -13,7 +13,14 @@ spec:
       valuesObject:
         fullnameOverride: grafana-operator
         nodeSelector:
-          node_pool: observability-resources
+          node_pool: observability
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
   destination:
     server: https://kubernetes.default.svc
     namespace: observability

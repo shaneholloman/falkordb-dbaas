@@ -1,0 +1,496 @@
+# Wazuh Manager — central SIEM/XDR hub (production).
+# See dev/wazuh.yaml for detailed comments.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: wazuh
+  namespace: argocd
+spec:
+  project: default
+  source:
+    chart: wazuh
+    repoURL: https://morgoved.github.io/wazuh-helm/
+    targetRevision: 1.0.22
+    helm:
+      releaseName: wazuh
+      valuesObject:
+        cert-manager:
+          enabled: false
+        certificates:
+          enabled: true
+        autoreload:
+          enabled: true
+        agent:
+          enabled: false
+
+        wazuh:
+          enabled: true
+          nodeSelector:
+            node_pool: security
+          # Cluster key is injected at runtime by the init-cluster-key
+          # init container from the wazuh-cluster-key SealedSecret.
+          key: "placeholder-replaced-at-runtime"
+          authd:
+            enabled: true
+            existingSecret: "wazuh-manager-authd"
+          # Custom SOC 2 rules (full rules in wazuh-custom-rules ConfigMap)
+          localRules: |
+            <group name="local,">
+              <rule id="100001" level="0">
+                <description>Placeholder local rule</description>
+              </rule>
+            </group>
+          # Custom decoders (full decoders in wazuh-custom-decoders ConfigMap)
+          localDecoders: |
+            <!-- local decoders placeholder -->
+          # Pre-create agent groups so the register_agent.py script can assign
+          # agents immediately without a 404 "group does not exist" error.
+          agentGroupConf:
+            - name: ctrl-plane-prod
+              agent: |
+                <agent_config>
+                  <labels>
+                    <label key="cluster_id">ctrl-plane-prod</label>
+                    <label key="plane">ctrl-plane</label>
+                    <label key="env">prod</label>
+                    <label key="cloud">gcp</label>
+                  </labels>
+                  <localfile>
+                    <location>journald</location>
+                    <log_format>journald</log_format>
+                  </localfile>
+                </agent_config>
+            - name: app-plane-prod
+              agent: |
+                <agent_config>
+                  <labels>
+                    <label key="cluster_id">app-plane-prod</label>
+                    <label key="plane">app-plane</label>
+                    <label key="env">prod</label>
+                  </labels>
+                  <localfile>
+                    <location>journald</location>
+                    <log_format>journald</log_format>
+                  </localfile>
+                </agent_config>
+          # LoadBalancer managed separately via kustomize (wazuh-manager)
+          apiCred:
+            existingSecret: "wazuh-api-cred"
+          loadBalancer:
+            enabled: false
+
+          master:
+            enabled: true
+            annotations:
+              configmap.reloader.stakater.com/reload: "wazuh-custom-rules,wazuh-custom-decoders,wazuh-accepted-cves,wazuh-alert-exceptions,wazuh-filebeat-finish,wazuh-google-chat-integration,wazuh-cluster-key-injector"
+            resources:
+              requests:
+                cpu: "2"
+                memory: "4Gi"
+              limits:
+                cpu: "4"
+                memory: "8Gi"
+            storageSize: 100Gi
+            storageClass: "standard-rwo"
+            service:
+              type: ClusterIP
+              annotations: {}
+              ports:
+                - name: agents
+                  protocol: TCP
+                  port: 1514
+                  targetPort: 1514
+                - name: registration
+                  protocol: TCP
+                  port: 1515
+                  targetPort: 1515
+                - name: api
+                  protocol: TCP
+                  port: 55000
+                  targetPort: 55000
+                - name: syslog
+                  protocol: TCP
+                  port: 514
+                  targetPort: 514
+            # Google Chat integration scripts
+            additionalVolumes:
+              - name: google-chat-integration
+                configMap:
+                  name: wazuh-google-chat-integration
+                  defaultMode: 0755
+              - name: google-chat-webhook
+                secret:
+                  secretName: wazuh-google-chat-webhook
+              # Phase-2 custom rules/decoders + risk-accepted CVE list.
+              # These ConfigMaps live in argocd/kustomize/wazuh-rules.
+              - name: wazuh-custom-rules
+                configMap:
+                  name: wazuh-custom-rules
+              - name: wazuh-custom-decoders
+                configMap:
+                  name: wazuh-custom-decoders
+              - name: wazuh-accepted-cves
+                configMap:
+                  name: wazuh-accepted-cves
+              # Alert exceptions — suppresses known false-positives from Google Chat
+              - name: alert-exceptions
+                configMap:
+                  name: wazuh-alert-exceptions
+              # Override the s6 filebeat finish script — the default kills the
+              # container when filebeat exits (even code 0 from close_inactive).
+              - name: filebeat-finish
+                configMap:
+                  name: wazuh-filebeat-finish
+                  defaultMode: 0755
+              # cont-init.d script to inject cluster key after 0-wazuh-init
+              - name: cluster-key-injector
+                configMap:
+                  name: wazuh-cluster-key-injector
+                  defaultMode: 0755
+              # Cluster key secret for injection into ossec.conf
+              - name: cluster-key
+                secret:
+                  secretName: wazuh-cluster-key
+            additionalVolumeMounts:
+              - name: google-chat-integration
+                mountPath: /var/ossec/integrations/custom-google-chat
+                subPath: custom-google-chat
+                readOnly: true
+              - name: google-chat-integration
+                mountPath: /var/ossec/integrations/custom-google-chat.py
+                subPath: custom-google-chat.py
+                readOnly: true
+              - name: google-chat-webhook
+                mountPath: /var/ossec/etc/secrets/google-chat
+                readOnly: true
+              # Override filebeat finish script to prevent container crash
+              - name: filebeat-finish
+                mountPath: /etc/services.d/filebeat/finish
+                subPath: finish
+                readOnly: true
+              # Custom Phase-2 rules — mount directly into ruleset directory
+              # where Wazuh 4.14 loads them from <decoder_dir>ruleset/decoders</decoder_dir>
+              - name: wazuh-custom-rules
+                mountPath: /var/ossec/ruleset/rules/9999-custom_rules.xml
+                subPath: local_rules.xml
+                readOnly: true
+              - name: wazuh-custom-decoders
+                mountPath: /var/ossec/ruleset/decoders/9999-custom_decoders.xml
+                subPath: local_decoder.xml
+                readOnly: true
+              # CDB list of risk-accepted CVEs (used by suppression rule 100404).
+              - name: wazuh-accepted-cves
+                mountPath: /var/ossec/etc/lists/accepted-cves
+                subPath: accepted-cves
+              # Alert exceptions file for Google Chat integration
+              - name: alert-exceptions
+                mountPath: /var/ossec/etc/alert-exceptions.json
+                subPath: alert-exceptions.json
+                readOnly: true
+              # Inject cluster key after 0-wazuh-init copies the config template.
+              # Runs as cont-init.d/1-inject-key (between 0-wazuh-init and 2-manager).
+              - name: cluster-key-injector
+                mountPath: /etc/cont-init.d/1-inject-key
+                subPath: inject-key.sh
+                readOnly: true
+              - name: cluster-key
+                mountPath: /run/secrets/cluster-key
+                readOnly: true
+            extraConf: |
+              <auth>
+                <force>
+                  <enabled>yes</enabled>
+                  <disconnected_time enabled="yes">1h</disconnected_time>
+                  <after_registration_time>1h</after_registration_time>
+                </force>
+              </auth>
+              <remote>
+                <connection>syslog</connection>
+                <port>514</port>
+                <protocol>tcp</protocol>
+                <allowed-ips>0.0.0.0/0</allowed-ips>
+              </remote>
+              <syscheck>
+                <frequency>43200</frequency>
+                <scan_on_start>yes</scan_on_start>
+                <directories check_all="yes" realtime="yes">/etc</directories>
+                <directories check_all="yes">/usr/bin</directories>
+                <directories check_all="yes">/usr/sbin</directories>
+                <directories check_all="yes">/bin</directories>
+              </syscheck>
+              <integration>
+                <name>custom-google-chat</name>
+                <hook_url>FROM_SECRET</hook_url>
+                <level>10</level>
+                <alert_format>json</alert_format>
+              </integration>
+              <!-- Risk-accepted CVE suppression list (referenced by rule 100404) -->
+              <ruleset>
+                <list>etc/lists/accepted-cves</list>
+              </ruleset>
+              <vulnerability-detector>
+                <enabled>yes</enabled>
+                <interval>12h</interval>
+                <run_on_start>yes</run_on_start>
+                <provider name="canonical">
+                  <enabled>yes</enabled>
+                  <os>focal</os>
+                  <os>jammy</os>
+                  <update_interval>1h</update_interval>
+                </provider>
+                <provider name="redhat">
+                  <enabled>yes</enabled>
+                  <os>8</os>
+                  <os>9</os>
+                  <update_interval>1h</update_interval>
+                </provider>
+                <provider name="nvd">
+                  <enabled>yes</enabled>
+                  <update_interval>1h</update_interval>
+                </provider>
+              </vulnerability-detector>
+              <command>
+                <name>yara-scan</name>
+                <executable>yara.sh</executable>
+                <extra_args>-yara_path /usr/bin/yara -yara_rules /var/ossec/ruleset/yara/rules/</extra_args>
+                <timeout_allowed>yes</timeout_allowed>
+              </command>
+              <active-response>
+                <command>yara-scan</command>
+                <location>local</location>
+                <rules_id>100200,100201,100202</rules_id>
+              </active-response>
+            # Inject Google Chat webhook URL from sealed secret
+            extraSpec:
+              # Raise the Wazuh API rate limit so all agents can register
+              # concurrently without hitting 429 "Too Many Requests".
+              pod:
+                initContainers:
+                  - name: init-cluster-key
+                    image: alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339
+                    command: ["sh", "-c"]
+                    args:
+                      - |
+                        # Inject cluster key from SealedSecret into ossec.conf
+                        OSSEC_CONF=/mnt/master/wazuh/var/ossec/etc/ossec.conf
+                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/key)
+                        if [ -f "$OSSEC_CONF" ]; then
+                          # Replace placeholder OR any existing 32-char hex key
+                          sed -i "s|<key>[a-zA-Z0-9_-]\{1,\}</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
+                        fi
+                        # Also configure API rate limits
+                        API_YAML=/mnt/master/wazuh/var/ossec/api/configuration/api.yaml
+                        mkdir -p "$(dirname "$API_YAML")"
+                        if grep -q 'max_request_per_minute' "$API_YAML" 2>/dev/null; then
+                          sed -i 's/max_login_attempts:.*/max_login_attempts: 50/' "$API_YAML"
+                          sed -i 's/block_time:.*/block_time: 300/' "$API_YAML"
+                          sed -i 's/max_request_per_minute:.*/max_request_per_minute: 1000/' "$API_YAML"
+                        else
+                          cat > "$API_YAML" <<'EOF'
+                        access:
+                          max_login_attempts: 50
+                          block_time: 300
+                          max_request_per_minute: 1000
+                        EOF
+                        fi
+                    volumeMounts:
+                      - name: wazuh-manager-master
+                        mountPath: /mnt/master
+                      - name: cluster-key
+                        mountPath: /run/secrets/cluster-key
+                        readOnly: true
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 16Mi
+                      limits:
+                        cpu: 10m
+                        memory: 16Mi
+          worker:
+            enabled: true
+            replicas: 2
+            resources:
+              requests:
+                cpu: "2"
+                memory: "4Gi"
+              limits:
+                cpu: "4"
+                memory: "8Gi"
+            storageSize: 100Gi
+            storageClass: "standard-rwo"
+            additionalVolumes:
+              - name: cluster-key-injector
+                configMap:
+                  name: wazuh-cluster-key-injector
+                  defaultMode: 0755
+              - name: cluster-key
+                secret:
+                  secretName: wazuh-cluster-key
+              - name: filebeat-finish
+                configMap:
+                  name: wazuh-filebeat-finish
+                  defaultMode: 0755
+            additionalVolumeMounts:
+              - name: cluster-key-injector
+                mountPath: /etc/cont-init.d/1-inject-key
+                subPath: inject-key.sh
+                readOnly: true
+              - name: cluster-key
+                mountPath: /run/secrets/cluster-key
+                readOnly: true
+              - name: filebeat-finish
+                mountPath: /etc/services.d/filebeat/finish
+                subPath: finish
+                readOnly: true
+            extraSpec:
+              pod:
+                initContainers:
+                  - name: init-cluster-key
+                    image: alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339
+                    command: ["sh", "-c"]
+                    args:
+                      - |
+                        OSSEC_CONF=/mnt/worker/wazuh/var/ossec/etc/ossec.conf
+                        CLUSTER_KEY=$(cat /run/secrets/cluster-key/key)
+                        if [ -f "$OSSEC_CONF" ]; then
+                          sed -i "s|<key>placeholder-replaced-at-runtime</key>|<key>${CLUSTER_KEY}</key>|" "$OSSEC_CONF"
+                        fi
+                    volumeMounts:
+                      - name: wazuh-manager-worker
+                        mountPath: /mnt/worker
+                      - name: cluster-key
+                        mountPath: /run/secrets/cluster-key
+                        readOnly: true
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 16Mi
+                      limits:
+                        cpu: 10m
+                        memory: 16Mi
+
+        indexer:
+          enabled: true
+          replicas: 3
+          cred:
+            existingSecret: "wazuh-indexer-cred"
+          resources:
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+          nodeSelector:
+            node_pool: security
+          storageSize: 200Gi
+          storageClass: "standard-rwo"
+          env:
+            OPENSEARCH_JAVA_OPTS: "-Xms4g -Xmx4g -Dlog4j2.formatMsgNoLookups=true"
+          # Chart's built-in securityadmin job is disabled (PostDelete = only runs
+          # on app deletion). Our securityadmin-patch job in wazuh-manager-secrets
+          # handles security index initialization with correct hashes from sealed
+          # secrets, preventing the chart's lookup() fallback to default passwords.
+          job:
+            annotations:
+              argocd.argoproj.io/hook: PostDelete
+              argocd.argoproj.io/hook-delete-policy: HookSucceeded,BeforeHookCreation
+
+        dashboard:
+          enabled: true
+          replicas: 2
+          cred:
+            existingSecret: "wazuh-dashboard-cred"
+            username: "kibanaserver"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+          nodeSelector:
+            node_pool: security
+          ingress:
+            enabled: true
+            className: nginx
+            annotations:
+              cert-manager.io/cluster-issuer: letsencrypt-prod
+            host: "wazuh.security.internal.falkordb.cloud"
+            tls:
+              - secretName: dashboard-ingress-tls
+                hosts:
+                  - wazuh.security.internal.falkordb.cloud
+          extraSpec:
+            pod:
+              volumes:
+                - name: soc2-dashboard
+                  configMap:
+                    name: wazuh-dashboard-soc2
+                - name: api-cred
+                  secret:
+                    secretName: wazuh-api-cred
+            container:
+              volumeMounts:
+                - name: soc2-dashboard
+                  mountPath: /usr/share/wazuh-dashboard/config/security-dashboards.ndjson
+                  subPath: security-dashboards.ndjson
+                  readOnly: true
+                - name: api-cred
+                  mountPath: /run/secrets/api-cred
+                  readOnly: true
+              lifecycle:
+                postStart:
+                  exec:
+                    command:
+                      - /bin/sh
+                      - -c
+                      - |
+                        # Background the entire hook so kubelet does not kill the
+                        # container while waiting for the dashboard to become ready.
+                        (
+                          WAZUH_YML=/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
+                          # Wait for wazuh.yml to be created by the plugin (up to 120s)
+                          for i in $(seq 1 60); do
+                            [ -f "$WAZUH_YML" ] && break
+                            sleep 2
+                          done
+                          if [ -f "$WAZUH_YML" ]; then
+                            API_USER=$(cat /run/secrets/api-cred/API_USERNAME)
+                            API_PASS=$(cat /run/secrets/api-cred/API_PASSWORD)
+                            ESC_USER=$(printf '%s' "$API_USER" | sed 's/[&|\\]/\\&/g')
+                            ESC_PASS=$(printf '%s' "$API_PASS" | sed 's/[&|\\]/\\&/g')
+                            sed -i "/hosts:/,/password:/{s|username:.*|username: $ESC_USER|;s|password:.*|password: $ESC_PASS|}" "$WAZUH_YML"
+                          fi
+                          # Wait for dashboard to be ready, then import saved objects
+                          for i in $(seq 1 30); do
+                            curl -sS -k -o /dev/null -w '' "http://localhost:5601/api/status" 2>/dev/null && break
+                            sleep 5
+                          done
+                          curl -sS -k --fail -XPOST \
+                            "https://localhost:5601/api/saved_objects/_import?overwrite=true" \
+                            -H "osd-xsrf: true" \
+                            --form file=@/usr/share/wazuh-dashboard/config/security-dashboards.ndjson
+                        ) &
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: security
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+    automated:
+      prune: true
+      selfHeal: true
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: dashboard-ingress-tls
+      jsonPointers:
+        - /data
+    - group: ""
+      kind: Secret
+      name: wazuh-cluster-key
+      jsonPointers:
+        - /data

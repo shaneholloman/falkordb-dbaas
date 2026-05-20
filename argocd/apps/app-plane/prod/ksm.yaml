@@ -25,6 +25,13 @@ spec:
             fullnameOverride: ksm
             nodeSelector:
               node_pool: observability
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
       destination:
         server: "{{.server}}"
         namespace: observability

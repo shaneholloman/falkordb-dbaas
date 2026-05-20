@@ -1,0 +1,16 @@
+# NetworkPolicy — Prowler CronJob pods
+# Denies all ingress. Egress unrestricted (batch job needs metadata server,
+# GCS, DNS, PyPI, K8s API, cloud provider APIs, Wazuh syslog).
+# NOTE: Egress cannot be restricted while GKE uses Calico (post-DNAT eval).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prowler-netpol
+  namespace: security
+spec:
+  podSelector:
+    matchLabels:
+      app: prowler
+  policyTypes:
+    - Ingress
+  ingress: []
