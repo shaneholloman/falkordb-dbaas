@@ -6,7 +6,7 @@ This kustomize package now has provider-aware overlays:
 - `overlays/eks`
 - `overlays/aks`
 
-Each overlay patches `provider-extra.conf` to collect provider-specific system/node/CNI logs while keeping shared Loki/Alloy output behavior in the base config.
+Each overlay patches `provider-extra.conf` to collect provider-specific system/node/CNI logs, and may also patch other shared base fragments when needed (for example, GKE also patches `inputs-common.conf` to expand `Exclude_Path` for GKE-only system namespaces), while keeping shared Loki/Alloy output behavior in the base config.
 
 ## Shared normalized labels/fields
 
