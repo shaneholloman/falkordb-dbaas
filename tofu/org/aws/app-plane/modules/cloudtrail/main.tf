@@ -254,6 +254,83 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "private_bucket" {
   }
 }
 
+# ── S3 Access Logging Bucket ─────────────────────────────────────────
+# Prowler / CIS: CloudTrail S3 bucket must have access logging enabled.
+
+resource "aws_s3_bucket" "access_logs" {
+  provider = aws.cloudtrail
+
+  bucket = "${var.s3_bucket_name}-access-logs"
+}
+
+resource "aws_s3_bucket_versioning" "access_logs" {
+  provider = aws.cloudtrail
+
+  bucket = aws_s3_bucket.access_logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_ownership_controls" "access_logs" {
+  provider = aws.cloudtrail
+
+  bucket = aws_s3_bucket.access_logs.id
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "access_logs" {
+  provider = aws.cloudtrail
+
+  bucket                  = aws_s3_bucket.access_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
+  provider = aws.cloudtrail
+
+  bucket = aws_s3_bucket.access_logs.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "access_logs" {
+  provider = aws.cloudtrail
+
+  bucket = aws_s3_bucket.access_logs.id
+
+  rule {
+    id     = "expire-access-logs"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = 90
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+}
+
+resource "aws_s3_bucket_logging" "cloudtrail_bucket" {
+  provider = aws.cloudtrail
+
+  bucket        = aws_s3_bucket.private_bucket.id
+  target_bucket = aws_s3_bucket.access_logs.id
+  target_prefix = "access-logs/"
+}
+
 # ── CloudTrail ────────────────────────────────────────────────────────
 
 resource "aws_cloudtrail" "main" {
