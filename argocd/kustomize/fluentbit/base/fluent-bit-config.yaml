@@ -134,6 +134,8 @@ data:
         # Exclude kube-system logs to avoid duplication with provider overlays.
         Exclude_Path      /var/log/containers/*_kube-system_*.log
         Parser            cri
+        Docker_Mode       On
+        Docker_Mode_Parser docker
         Mem_Buf_Limit     5MB
         DB                /var/log/flb_workload.db
         Skip_Long_Lines   On
@@ -265,6 +267,13 @@ data:
         Regex       ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<log>.*)$
         Time_Key    time
         Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+        Time_Keep   On
+
+    [PARSER]
+        Name        docker
+        Format      json
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
         Time_Keep   On
 
     [PARSER]
