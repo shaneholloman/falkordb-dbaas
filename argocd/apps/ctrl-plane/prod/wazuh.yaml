@@ -25,6 +25,8 @@ spec:
 
         wazuh:
           enabled: true
+          images:
+            tag: "4.14.4"
           nodeSelector:
             node_pool: security
           # Cluster key is injected at runtime by the init-cluster-key
@@ -372,6 +374,8 @@ spec:
         indexer:
           enabled: true
           replicas: 3
+          images:
+            tag: "4.14.4"
           cred:
             existingSecret: "wazuh-indexer-cred"
           resources:
@@ -399,6 +403,8 @@ spec:
         dashboard:
           enabled: true
           replicas: 2
+          images:
+            tag: "4.14.4"
           cred:
             existingSecret: "wazuh-dashboard-cred"
             username: "kibanaserver"
