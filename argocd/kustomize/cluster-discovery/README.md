@@ -98,7 +98,7 @@ The service is deployed via ArgoCD Applications:
 - **Requests**: 100m CPU, 256Mi memory
 - **Limits**: 500m CPU, 512Mi memory
 - **Replicas**: 1
-- **Node Selector**: `node_pool: observability-resources`
+- **Node Selector**: `node_pool: observability`
 
 ## Service Account
 

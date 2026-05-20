@@ -24,7 +24,7 @@ This stack is a **prerequisite** for `runtime/gcp/k8s`.
 | Pool                         | Machine        | Max nodes | Role                                  |
 |------------------------------|----------------|-----------|---------------------------------------|
 | `default-pool`               | e2-medium      | 1         | GKE-required default                  |
-| `observability-resources`    | e2-standard-4  | 20        | VictoriaMetrics, Grafana, Alertmanager|
+| `observability`              | e2-standard-4  | 20        | VictoriaMetrics, Grafana, Alertmanager|
 | `backend`                    | e2-standard-2  | 20        | Backend API pods                      |
 | `security`                   | e2-standard-4  | 10        | Wazuh Manager (sysctls)               |
 | `security-infra`             | e2-medium      | 3         | Kyverno, Sealed Secrets (always-on)   |
