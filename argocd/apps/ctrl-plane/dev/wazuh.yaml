@@ -1,6 +1,6 @@
 # Wazuh Manager — central SIEM/XDR hub for multi-cloud security monitoring.
 #
-# Deployed via the morgoved/wazuh-helm chart (appVersion 4.14.1).
+# Deployed via the morgoved/wazuh-helm chart (appVersion 4.14.4).
 # Architecture: 1 master + N workers + indexer cluster + dashboard.
 # Agents in spoke clusters connect via the LoadBalancer service.
 #

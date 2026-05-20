@@ -47,7 +47,7 @@ spec:
           emptyDir: {}
       containers:
         - name: securityadmin
-          image: "wazuh/wazuh-indexer:4.14.1"
+          image: "wazuh/wazuh-indexer:4.14.4"
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true
