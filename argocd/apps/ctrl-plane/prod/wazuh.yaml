@@ -199,13 +199,6 @@ spec:
                 mountPath: /run/secrets/cluster-key
                 readOnly: true
             extraConf: |
-              <auth>
-                <force>
-                  <enabled>yes</enabled>
-                  <disconnected_time enabled="yes">1h</disconnected_time>
-                  <after_registration_time>1h</after_registration_time>
-                </force>
-              </auth>
               <remote>
                 <connection>syslog</connection>
                 <port>514</port>
