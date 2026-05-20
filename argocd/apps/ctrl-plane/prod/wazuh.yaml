@@ -180,10 +180,11 @@ spec:
                 mountPath: /var/ossec/ruleset/decoders/9999-custom_decoders.xml
                 subPath: local_decoder.xml
                 readOnly: true
-              # CDB list of risk-accepted CVEs (used by suppression rule 100404).
+              # CDB list of risk-accepted CVEs (staged; copied to writable path by 1-inject-key)
               - name: wazuh-accepted-cves
-                mountPath: /var/ossec/etc/lists/accepted-cves
+                mountPath: /wazuh-config-mount/lists/accepted-cves
                 subPath: accepted-cves
+                readOnly: true
               # Alert exceptions file for Google Chat integration
               - name: alert-exceptions
                 mountPath: /var/ossec/etc/alert-exceptions.json
