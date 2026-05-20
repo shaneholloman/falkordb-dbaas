@@ -370,3 +370,81 @@ spec:
           annotations:
             summary: "Falco pod(s) misscheduled"
             description: "Falco DaemonSet has misscheduled pods. Investigate node scheduling."
+
+    - name: soc2.infra
+      interval: 1m
+      rules:
+        - alert: WazuhIndexerDown
+          expr: |
+            up{job="wazuh-indexer"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            team: security
+          annotations:
+            summary: "Wazuh Indexer (OpenSearch) is unreachable"
+            description: "The Wazuh Indexer has been down for >5 minutes. Alert storage and Grafana queries will fail."
+
+        - alert: WazuhIndexerDiskHigh
+          expr: |
+            (
+              kubelet_volume_stats_available_bytes{namespace="security", persistentvolumeclaim=~".*wazuh-indexer.*"}
+              /
+              kubelet_volume_stats_capacity_bytes{namespace="security", persistentvolumeclaim=~".*wazuh-indexer.*"}
+            ) < 0.2
+          for: 15m
+          labels:
+            severity: warning
+            team: security
+          annotations:
+            summary: "Wazuh Indexer PVC is >80% full"
+            description: "PVC {{ $labels.persistentvolumeclaim }} has only {{ $value | humanizePercentage }} free space. Consider increasing retention rotation or expanding the volume."
+
+        - alert: WazuhIndexerDiskCritical
+          expr: |
+            (
+              kubelet_volume_stats_available_bytes{namespace="security", persistentvolumeclaim=~".*wazuh-indexer.*"}
+              /
+              kubelet_volume_stats_capacity_bytes{namespace="security", persistentvolumeclaim=~".*wazuh-indexer.*"}
+            ) < 0.1
+          for: 5m
+          labels:
+            severity: critical
+            team: security
+          annotations:
+            summary: "Wazuh Indexer PVC is >90% full"
+            description: "PVC {{ $labels.persistentvolumeclaim }} has only {{ $value | humanizePercentage }} free. Imminent risk of write rejection."
+
+        - alert: SecurityPodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace="security"}[15m]) * 60 * 15 > 3
+          for: 10m
+          labels:
+            severity: warning
+            team: security
+          annotations:
+            summary: "Security pod {{ $labels.pod }} is crash-looping"
+            description: "Container {{ $labels.container }} in pod {{ $labels.pod }} has restarted >3 times in 15 minutes."
+
+        - alert: KyvernoDown
+          expr: |
+            up{job=~"kyverno.*"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            team: security
+          annotations:
+            summary: "Kyverno policy engine is down"
+            description: "Kyverno has been unreachable for >5 minutes. Policy enforcement is not operational."
+
+        - alert: SecurityNamespacePodNotReady
+          expr: |
+            kube_pod_status_ready{namespace="security", condition="true"} == 0
+            and on(pod, namespace) kube_pod_status_phase{phase="Running"} == 1
+          for: 10m
+          labels:
+            severity: warning
+            team: security
+          annotations:
+            summary: "Security pod {{ $labels.pod }} is running but not ready"
+            description: "Pod {{ $labels.pod }} in the security namespace has been running but not ready for >10 minutes."
