@@ -20,7 +20,7 @@ variable "cluster_user_role_audiences" {
 
 variable "cloudtrail_region" {
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
   description = "AWS region where CloudTrail resources reside"
 }
 

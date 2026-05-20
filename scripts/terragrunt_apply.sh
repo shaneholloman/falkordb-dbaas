@@ -119,6 +119,23 @@ case "$STACK" in
     export TF_GRAFANA_GOOGLE_CLIENT_SECRET="$(tfvar grafana_google_client_secret)"
     export TF_DB_EXPORTER_SA_ID="$(tfvar db_exporter_sa_id)"
     export TF_ARGOCD_SA_ID="$(tfvar argocd_sa_id)"
+    # The infra dependency terragrunt.hcl is evaluated and needs these env vars.
+    INFRA_TFVARS="$(dirname "$STACK_DIR")/infra/$(basename "$TFVARS_ARG")"
+    if [ -f "$INFRA_TFVARS" ]; then
+      _infra_tfvar() {
+        grep -E "^[[:space:]]*${1}[[:space:]]*=" "$INFRA_TFVARS" \
+          | sed -E 's/^[^=]+=[ \t]*//' \
+          | sed 's/^"//; s/"$//' \
+          | tr -d '\r'
+      }
+      export TF_CTRL_PLANE_DEV_ZONES="$(_infra_tfvar zones)"
+      export TF_CTRL_PLANE_IP_RANGE_SUBNET="$(_infra_tfvar ip_range_subnet)"
+      export TF_CTRL_PLANE_IP_RANGE_PODS="$(_infra_tfvar ip_range_pods)"
+      export TF_CTRL_PLANE_IP_RANGE_SERVICES="$(_infra_tfvar ip_range_services)"
+      export TF_DEFAULT_MAX_PODS_PER_NODE="$(_infra_tfvar default_max_pods_per_node)"
+      export TF_OMNISTRATE_SERVICE_ID="$(_infra_tfvar omnistrate_service_id)"
+      export TF_OMNISTRATE_ENVIRONMENT_ID="$(_infra_tfvar omnistrate_environment_id)"
+    fi
     ;;
   azure)
     export TF_AZURE_SUBSCRIPTION_ID="$(tfvar subscription_id)"

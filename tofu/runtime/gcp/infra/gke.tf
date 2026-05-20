@@ -2,7 +2,8 @@
 #
 # Node pools:
 #   default-pool               — GKE-required default (0-1 nodes, e2-medium)
-#   observability-resources    — observability + Grafana pods (0-20, e2-standard-4)
+#   observability             — observability pods, new pool (0-20, e2-standard-4)
+#   observability-resources    — observability + Grafana pods (0-20, e2-standard-4) [migration: to be removed]
 #   backend                    — backend API pods (0-20, e2-standard-2)
 #   security                   — Wazuh Manager (0-10, e2-standard-4, sysctls)
 #   security-infra             — Kyverno & Sealed Secrets (1-3, e2-small, always-on)
@@ -76,13 +77,23 @@ module "gke" {
       max_pods_per_node  = 25
     },
     {
+      name               = "observability"
+      machine_type       = "e2-standard-4"
+      disk_size_gb       = 30
+      min_count          = 0
+      max_count          = 20
+      image_type         = "COS_CONTAINERD"
+      initial_node_count = 2
+      max_pods_per_node  = 25
+    },
+    {
       name               = "observability-resources"
       machine_type       = "e2-standard-4"
       disk_size_gb       = 30
       min_count          = 0
       max_count          = 20
       image_type         = "COS_CONTAINERD"
-      initial_node_count = 0
+      initial_node_count = 2
       max_pods_per_node  = 25
     },
     {
@@ -120,6 +131,9 @@ module "gke" {
     "default-pool" = {
       "goog-gke-node-pool-provisioning-model" = "on-demand"
     }
+    "observability" = {
+      "goog-gke-node-pool-provisioning-model" = "on-demand"
+    }
     "observability-resources" = {
       "goog-gke-node-pool-provisioning-model" = "on-demand"
     }
@@ -138,8 +152,11 @@ module "gke" {
     "default-pool" = {
       "node_pool" = "default"
     }
-    "observability-resources" = {
+    "observability" = {
       "node_pool" = "observability"
+    }
+    "observability-resources" = {
+      "node_pool" = "observability-resources"
     }
     "backend" = {
       "node_pool" = "backend"

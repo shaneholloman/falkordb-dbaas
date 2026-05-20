@@ -27,6 +27,12 @@ variable "prowler_gcp_sa_id" {
   description = "Unique numeric ID of the prowler-uploader GCP service account (used as OIDC subject for AWS federation)"
 }
 
+variable "prowler_additional_gcp_sa_ids" {
+  type        = list(string)
+  default     = []
+  description = "Additional GCP SA unique IDs allowed to assume the prowler role (e.g. other environment's prowler SA)"
+}
+
 variable "google_oidc_additional_audiences" {
   type        = list(string)
   default     = []

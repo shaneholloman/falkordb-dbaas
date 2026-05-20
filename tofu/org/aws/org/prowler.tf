@@ -20,7 +20,11 @@ data "aws_caller_identity" "current" {}
 # must include the GCP SA unique ID for AWS to accept the token.
 resource "aws_iam_openid_connect_provider" "google" {
   url            = "https://accounts.google.com"
-  client_id_list = concat([var.prowler_gcp_sa_id], var.google_oidc_additional_audiences)
+  client_id_list = concat([var.prowler_gcp_sa_id], var.prowler_additional_gcp_sa_ids, var.google_oidc_additional_audiences)
+}
+
+locals {
+  all_prowler_sa_ids = concat([var.prowler_gcp_sa_id], var.prowler_additional_gcp_sa_ids)
 }
 
 resource "aws_iam_role" "prowler_scanner" {
@@ -38,9 +42,9 @@ resource "aws_iam_role" "prowler_scanner" {
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringEquals = {
-            "accounts.google.com:aud"  = var.prowler_gcp_sa_id
+            "accounts.google.com:aud"  = local.all_prowler_sa_ids
             "accounts.google.com:oaud" = "sts.amazonaws.com"
-            "accounts.google.com:sub"  = var.prowler_gcp_sa_id
+            "accounts.google.com:sub"  = local.all_prowler_sa_ids
           }
         }
       }
@@ -48,9 +52,8 @@ resource "aws_iam_role" "prowler_scanner" {
   })
 
   tags = {
-    Purpose     = "soc2-compliance-scanning"
-    ManagedBy   = "tofu"
-    Environment = var.environment
+    Purpose   = "soc2-compliance-scanning"
+    ManagedBy = "tofu"
   }
 }
 
