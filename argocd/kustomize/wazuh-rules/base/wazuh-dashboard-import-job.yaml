@@ -1,0 +1,66 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wazuh-dashboard-import
+  namespace: security
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      nodeSelector:
+        node_pool: security
+      containers:
+        - name: import
+          image: curlimages/curl:8.7.1
+          env:
+            - name: DASHBOARD_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: wazuh-dashboard-cred
+                  key: DASHBOARD_USERNAME
+            - name: DASHBOARD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: wazuh-dashboard-cred
+                  key: DASHBOARD_PASSWORD
+          volumeMounts:
+            - name: dashboards
+              mountPath: /data/security-dashboards.ndjson
+              subPath: security-dashboards.ndjson
+              readOnly: true
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Wait for the dashboard to become ready (up to 120s)
+              for i in $(seq 1 24); do
+                if curl -sS -k -o /dev/null -w '' \
+                  "http://wazuh-dashboard:5601/api/status" 2>/dev/null; then
+                  break
+                fi
+                echo "Waiting for dashboard to be ready... ($i/24)"
+                sleep 5
+              done
+
+              # Import saved objects
+              echo "Importing dashboards..."
+              RESP=$(curl -sS -k -u "$DASHBOARD_USERNAME:$DASHBOARD_PASSWORD" \
+                -XPOST "http://wazuh-dashboard:5601/api/saved_objects/_import?overwrite=true" \
+                -H "osd-xsrf: true" \
+                --form file=@/data/security-dashboards.ndjson)
+
+              echo "$RESP"
+
+              # Check for success
+              echo "$RESP" | grep -q '"success":true' && echo "Import successful!" && exit 0
+              echo "Import failed!" && exit 1
+      volumes:
+        - name: dashboards
+          configMap:
+            name: wazuh-dashboard-soc2

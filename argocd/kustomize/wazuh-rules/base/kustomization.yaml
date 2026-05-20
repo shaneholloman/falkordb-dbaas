@@ -6,6 +6,7 @@ resources:
   - wazuh-custom-rules.yaml
   - wazuh-accepted-cves.yaml
   - wazuh-dashboard-soc2.yaml
+  - wazuh-dashboard-import-job.yaml
   - wazuh-google-chat-integration.yaml
   - wazuh-alert-exceptions.yaml
   - wazuh-filebeat-finish.yaml

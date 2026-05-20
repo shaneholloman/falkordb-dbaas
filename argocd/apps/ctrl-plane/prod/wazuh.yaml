@@ -421,23 +421,7 @@ spec:
                 hosts:
                   - wazuh.security.internal.falkordb.cloud
           extraSpec:
-            pod:
-              volumes:
-                - name: soc2-dashboard
-                  configMap:
-                    name: wazuh-dashboard-soc2
-                - name: api-cred
-                  secret:
-                    secretName: wazuh-api-cred
             container:
-              volumeMounts:
-                - name: soc2-dashboard
-                  mountPath: /usr/share/wazuh-dashboard/config/security-dashboards.ndjson
-                  subPath: security-dashboards.ndjson
-                  readOnly: true
-                - name: api-cred
-                  mountPath: /run/secrets/api-cred
-                  readOnly: true
               lifecycle:
                 postStart:
                   exec:
@@ -455,21 +439,11 @@ spec:
                             sleep 2
                           done
                           if [ -f "$WAZUH_YML" ]; then
-                            API_USER=$(cat /run/secrets/api-cred/API_USERNAME)
-                            API_PASS=$(cat /run/secrets/api-cred/API_PASSWORD)
-                            ESC_USER=$(printf '%s' "$API_USER" | sed 's/[&|\\]/\\&/g')
-                            ESC_PASS=$(printf '%s' "$API_PASS" | sed 's/[&|\\]/\\&/g')
+                            # API_USERNAME and API_PASSWORD are env vars from wazuh-api-cred secret
+                            ESC_USER=$(printf '%s' "$API_USERNAME" | sed 's/[&|\\]/\\&/g')
+                            ESC_PASS=$(printf '%s' "$API_PASSWORD" | sed 's/[&|\\]/\\&/g')
                             sed -i "/hosts:/,/password:/{s|username:.*|username: $ESC_USER|;s|password:.*|password: $ESC_PASS|}" "$WAZUH_YML"
                           fi
-                          # Wait for dashboard to be ready, then import saved objects
-                          for i in $(seq 1 30); do
-                            curl -sS -k -o /dev/null -w '' "http://localhost:5601/api/status" 2>/dev/null && break
-                            sleep 5
-                          done
-                          curl -sS -k --fail -XPOST \
-                            "https://localhost:5601/api/saved_objects/_import?overwrite=true" \
-                            -H "osd-xsrf: true" \
-                            --form file=@/usr/share/wazuh-dashboard/config/security-dashboards.ndjson
                         ) &
 
   destination:
