@@ -158,6 +158,38 @@ data:
         {
           "comment": "Rootcheck 'Excessive number of hidden processes' — companion false positive to rule 521 on cloud VMs with many kernel threads",
           "rule_id": "510"
+        },
+        {
+          "comment": "Falco 'Read Sensitive K8s Files' from host-level processes (kubelet, containerd) — container=<NA> means no container context; these are normal GKE node operations reading SA certs/tokens, not container credential theft",
+          "rule_id": "100501",
+          "field": "data.output",
+          "pattern": "container=<NA>",
+          "is_regex": false
+        },
+        {
+          "comment": "Log file size reduced — normal logrotate/truncation on GKE nodes, not evidence of log tampering",
+          "rule_id": "592"
+        },
+        {
+          "comment": "File integrity change on GKE system config — GKE auto-updates containerd and crictl configs during node maintenance",
+          "rule_id": "550",
+          "field": "full_log",
+          "pattern": "/host/etc/(containerd|crictl)",
+          "is_regex": true
+        },
+        {
+          "comment": "Prowler 'Block Project-Wide SSH Keys' — GKE manages node SSH keys at project level by design; cannot disable without breaking GKE node access",
+          "rule_id": "100101",
+          "field": "data.CheckTitle",
+          "pattern": "Block Project-Wide SSH Keys",
+          "is_regex": false
+        },
+        {
+          "comment": "Prowler CSEK check on VM disks — we use Google-managed encryption keys by policy; CSEK not adopted; tracked as accepted compliance gap",
+          "rule_id": "100103",
+          "field": "data.CheckTitle",
+          "pattern": "Customer-Supplied Encryption",
+          "is_regex": false
         }
       ]
     }

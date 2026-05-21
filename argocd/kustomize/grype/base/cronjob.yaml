@@ -100,8 +100,9 @@ spec:
                   set -e
 
                   # Install Python dependencies (non-root, user-local)
+                  # Pin kubernetes<32 — v32+ has in-cluster auth regression on GKE
                   pip install --quiet --no-cache-dir --user \
-                    google-cloud-storage kubernetes
+                    google-cloud-storage 'kubernetes<32'
 
                   # Run the scanner
                   export PATH="$HOME/.local/bin:$PATH"

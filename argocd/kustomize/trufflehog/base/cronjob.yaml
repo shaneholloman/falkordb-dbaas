@@ -115,8 +115,9 @@ spec:
                   tar xzf /tmp/trufflehog.tar.gz -C /tmp trufflehog
                   chmod +x /tmp/trufflehog
 
+                  # Pin kubernetes<32 — v32+ has in-cluster auth regression on GKE
                   pip install --quiet --no-cache-dir --user \
-                    google-cloud-storage kubernetes
+                    google-cloud-storage 'kubernetes<32'
 
                   export PATH="/tmp:$HOME/.local/bin:$PATH"
                   python3 <<'PYEOF'
