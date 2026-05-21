@@ -10,8 +10,8 @@ spec:
   duration: 8760h  # 1 year
   renewBefore: 720h  # 30 days
   issuerRef:
-    name: selfsigned-issuer
-    kind: ClusterIssuer
+    name: wazuh-selfsigned-issuer
+    kind: Issuer
   dnsNames:
     - wazuh-manager-lb
     - wazuh-manager-lb.security
