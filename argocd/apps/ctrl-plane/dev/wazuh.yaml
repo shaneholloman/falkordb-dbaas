@@ -1,6 +1,6 @@
 # Wazuh Manager — central SIEM/XDR hub for multi-cloud security monitoring.
 #
-# Deployed via the morgoved/wazuh-helm chart (appVersion 4.14.1).
+# Deployed via the morgoved/wazuh-helm chart (appVersion 4.14.4).
 # Architecture: 1 master + N workers + indexer cluster + dashboard.
 # Agents in spoke clusters connect via the LoadBalancer service.
 #
@@ -43,6 +43,8 @@ spec:
 
         wazuh:
           enabled: true
+          images:
+            tag: "4.14.4"
           nodeSelector:
             node_pool: security
           # Cluster key is injected at runtime by the init-cluster-key
@@ -200,10 +202,11 @@ spec:
                 mountPath: /var/ossec/ruleset/decoders/9999-custom_decoders.xml
                 subPath: local_decoder.xml
                 readOnly: true
-              # CDB list of risk-accepted CVEs (used by suppression rule 100404)
+              # CDB list of risk-accepted CVEs (staged; copied to writable path by 1-inject-key)
               - name: wazuh-accepted-cves
-                mountPath: /var/ossec/etc/lists/accepted-cves
+                mountPath: /wazuh-config-mount/lists/accepted-cves
                 subPath: accepted-cves
+                readOnly: true
               # Alert exceptions file for Google Chat integration
               - name: alert-exceptions
                 mountPath: /var/ossec/etc/alert-exceptions.json
@@ -220,13 +223,6 @@ spec:
                 readOnly: true
             # Appended to the template-generated ossec.conf
             extraConf: |
-              <auth>
-                <force>
-                  <enabled>yes</enabled>
-                  <disconnected_time enabled="yes">1h</disconnected_time>
-                  <after_registration_time>1h</after_registration_time>
-                </force>
-              </auth>
               <remote>
                 <connection>syslog</connection>
                 <port>514</port>
@@ -395,6 +391,8 @@ spec:
         indexer:
           enabled: true
           replicas: 3
+          images:
+            tag: "4.14.4"
           cred:
             # existingSecret provides INDEXER_USERNAME/INDEXER_PASSWORD env vars at runtime.
             # Hashes for internal_users.yml are applied by our custom securityadmin-patch
@@ -425,6 +423,8 @@ spec:
         dashboard:
           enabled: true
           replicas: 1
+          images:
+            tag: "4.14.4"
           cred:
             existingSecret: "wazuh-dashboard-cred"
             username: "kibanaserver"
@@ -447,25 +447,9 @@ spec:
               - secretName: dashboard-ingress-tls
                 hosts:
                   - wazuh.security.dev.internal.falkordb.cloud
-          # SOC 2 dashboard import on startup
+          # API credential injection on startup
           extraSpec:
-            pod:
-              volumes:
-                - name: soc2-dashboard
-                  configMap:
-                    name: wazuh-dashboard-soc2
-                - name: api-cred
-                  secret:
-                    secretName: wazuh-api-cred
             container:
-              volumeMounts:
-                - name: soc2-dashboard
-                  mountPath: /usr/share/wazuh-dashboard/config/security-dashboards.ndjson
-                  subPath: security-dashboards.ndjson
-                  readOnly: true
-                - name: api-cred
-                  mountPath: /run/secrets/api-cred
-                  readOnly: true
               lifecycle:
                 postStart:
                   exec:
@@ -483,21 +467,11 @@ spec:
                             sleep 2
                           done
                           if [ -f "$WAZUH_YML" ]; then
-                            API_USER=$(cat /run/secrets/api-cred/API_USERNAME)
-                            API_PASS=$(cat /run/secrets/api-cred/API_PASSWORD)
-                            ESC_USER=$(printf '%s' "$API_USER" | sed 's/[&|\\]/\\&/g')
-                            ESC_PASS=$(printf '%s' "$API_PASS" | sed 's/[&|\\]/\\&/g')
+                            # API_USERNAME and API_PASSWORD are env vars from wazuh-api-cred secret
+                            ESC_USER=$(printf '%s' "$API_USERNAME" | sed 's/[&|\\]/\\&/g')
+                            ESC_PASS=$(printf '%s' "$API_PASSWORD" | sed 's/[&|\\]/\\&/g')
                             sed -i "/hosts:/,/password:/{s|username:.*|username: $ESC_USER|;s|password:.*|password: $ESC_PASS|}" "$WAZUH_YML"
                           fi
-                          # Wait for dashboard to be ready, then import saved objects
-                          for i in $(seq 1 30); do
-                            curl -sS -k -o /dev/null -w '' "http://localhost:5601/api/status" 2>/dev/null && break
-                            sleep 5
-                          done
-                          curl -sS -k --fail -XPOST \
-                            "https://localhost:5601/api/saved_objects/_import?overwrite=true" \
-                            -H "osd-xsrf: true" \
-                            --form file=@/usr/share/wazuh-dashboard/config/security-dashboards.ndjson
                         ) &
 
   destination:

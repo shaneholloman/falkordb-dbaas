@@ -30,3 +30,20 @@ data:
       sed -i 's|<after_registration_time>1h</after_registration_time>|<after_registration_time>0</after_registration_time>|g' "$OSSEC_CONF"
       echo "Auth force timers set to 0"
     fi
+    # Copy accepted-cves CDB list from read-only ConfigMap mount to writable path.
+    # Must happen after 0-wazuh-init (which chowns /var/ossec/etc/lists/) to avoid
+    # 'Read-only file system' errors that crash the container.
+    CVES_SRC=/wazuh-config-mount/lists/accepted-cves
+    CVES_DST=/var/ossec/etc/lists/accepted-cves
+    if [ -f "$CVES_SRC" ]; then
+      cp "$CVES_SRC" "$CVES_DST"
+      chown wazuh:wazuh "$CVES_DST" 2>/dev/null || true
+      echo "Accepted-CVEs list copied to $CVES_DST"
+    fi
+    # Increase JSON decoder field limit — default 256 is too low for complex
+    # events (Prowler findings, Grype output, K8s audit logs with many fields).
+    INTERNAL_OPTS=/var/ossec/etc/local_internal_options.conf
+    if ! grep -q 'analysisd.decoder_order_size' "$INTERNAL_OPTS" 2>/dev/null; then
+      echo "analysisd.decoder_order_size=1024" >> "$INTERNAL_OPTS"
+      echo "JSON decoder field limit raised to 1024"
+    fi

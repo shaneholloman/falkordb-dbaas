@@ -1,5 +1,6 @@
-# Reduce grype memory limit to fit on e2-standard-2 nodes (6Gi allocatable)
-# alongside wazuh-agent, falco, and system pods.
+# Reduce grype memory request to fit on e2-standard-2 nodes (~6Gi allocatable)
+# alongside wazuh-agent, alloy, and system pods. Keep limit high enough for
+# large image scans (Grype DB + SBOM can spike to ~4-5Gi).
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -18,4 +19,4 @@ spec:
                   memory: "512Mi"
                 limits:
                   cpu: "2"
-                  memory: "4Gi"
+                  memory: "6Gi"
