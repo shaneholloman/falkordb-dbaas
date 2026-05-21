@@ -174,7 +174,7 @@ data:
           "comment": "File integrity change on GKE system config — GKE auto-updates containerd and crictl configs during node maintenance",
           "rule_id": "550",
           "field": "full_log",
-          "pattern": "/host/etc/containerd/\\|/host/etc/crictl",
+          "pattern": "/host/etc/(containerd|crictl)",
           "is_regex": true
         },
         {
