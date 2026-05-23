@@ -58,6 +58,9 @@ spec:
                 limits:
                   cpu: 200m
                   memory: 256Mi
+            features:
+              validatingAdmissionPolicyReports:
+                enabled: false
             config:
               webhookLabels:
                 app.kubernetes.io/managed-by: argocd
