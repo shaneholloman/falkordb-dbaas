@@ -8,29 +8,7 @@ spec:
   source:
     repoURL: https://github.com/FalkorDB/falkordb-dbaas.git
     targetRevision: main
-    path: argocd/kustomize/fluentbit/overlays/gke
-    kustomize:
-      patches:
-        - target:
-            kind: DaemonSet
-            name: fluent-bit
-          patch: |-
-            apiVersion: apps/v1
-            kind: DaemonSet
-            metadata:
-              name: fluent-bit
-            spec:
-              template:
-                spec:
-                  containers:
-                    - name: fluent-bit
-                      env:
-                        - name: CLUSTER_NAME
-                          value: ctrl-plane-prod
-                        - name: CLOUD_PROVIDER
-                          value: gcp
-                        - name: CLOUD_REGION
-                          value: unknown
+    path: argocd/kustomize/fluentbit
   destination:
     server: https://kubernetes.default.svc
     namespace: fluent-bit
