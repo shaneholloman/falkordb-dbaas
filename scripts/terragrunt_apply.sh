@@ -11,7 +11,7 @@
 #   ./scripts/terragrunt_apply.sh gcp-infra terraform.dev.tfvars plan
 #   ./scripts/terragrunt_apply.sh gcp-infra terraform.dev.tfvars output -raw wazuh_ip
 #   ./scripts/terragrunt_apply.sh azure terraform.prod.tfvars apply -auto-approve
-#   ./scripts/terragrunt_apply.sh aws-org terraform.dev.tfvars output
+#   ./scripts/terragrunt_apply.sh aws-org terraform.prod.tfvars output
 #
 # Stacks:
 #   gcp-infra       tofu/runtime/gcp/infra      (terragrunt + env vars)
@@ -62,7 +62,14 @@ case "$STACK" in
   gcp-core)       STACK_DIR="$ROOT_DIR/tofu/org/gcp/core"       ; TOOL=terragrunt ;;
   gcp-workloads)  STACK_DIR="$ROOT_DIR/tofu/org/gcp/workloads"  ; TOOL=terragrunt ;;
   gcp-bootstrap)  STACK_DIR="$ROOT_DIR/tofu/bootstrap/gcp"      ; TOOL=terragrunt ;;
-  aws-org)        STACK_DIR="$ROOT_DIR/tofu/org/aws/org"         ; TOOL=terragrunt ;;
+  aws-org)
+    # The aws-org stack manages the root account and org-wide resources.
+    # It must only be applied with prod tfvars.
+    case "$(basename "$TFVARS_ARG")" in
+      *prod*) ;;
+      *) echo "Error: aws-org stack manages the root account and must only be run with prod tfvars (got '$TFVARS_ARG')" >&2; exit 1 ;;
+    esac
+    STACK_DIR="$ROOT_DIR/tofu/org/aws/org" ; TOOL=terragrunt ;;
   aws-app-plane)  STACK_DIR="$ROOT_DIR/tofu/org/aws/app-plane"  ; TOOL=terragrunt ;;
   aws-bootstrap)  STACK_DIR="$ROOT_DIR/tofu/bootstrap/aws"      ; TOOL=terragrunt ;;
   *) echo "Error: unknown stack '$STACK'" >&2; exit 1 ;;
