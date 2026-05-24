@@ -41,15 +41,6 @@ data:
         DB                /var/log/flb_eks_aws_routed_eni.db
         Skip_Long_Lines   On
 
-    [INPUT]
-        Name              tail
-        Tag               cni.aws-plugin
-        Path              /var/log/amazon/*.log
-        Parser            aws_cni_json
-        Mem_Buf_Limit     5MB
-        DB                /var/log/flb_eks_amazon_cni.db
-        Skip_Long_Lines   On
-
     [FILTER]
         Name                kubernetes
         Match               kube.system.var.log.containers.*
@@ -83,16 +74,6 @@ data:
         Name                modify
         Match               cni.aws-vpc
         Add                 source aws-vpc-cni
-        Add                 log_type cni
-        Add                 workload node
-        Add                 namespace kube-system
-        Add                 pod n/a
-        Add                 container n/a
-
-    [FILTER]
-        Name                modify
-        Match               cni.aws-plugin
-        Add                 source aws-cni-plugin
         Add                 log_type cni
         Add                 workload node
         Add                 namespace kube-system

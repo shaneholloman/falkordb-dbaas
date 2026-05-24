@@ -45,7 +45,7 @@ Adds:
 - `kube-system` container logs
 - kubelet/containerd/docker (where present)
 - `/var/log/dmesg`, `/var/log/messages|/var/log/syslog`
-- AWS VPC CNI paths (`/var/log/aws-routed-eni/`, `/var/log/amazon/`)
+- AWS VPC CNI logs from `/var/log/aws-routed-eni/`
 
 ### AKS overlay
 
