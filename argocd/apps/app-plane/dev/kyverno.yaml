@@ -68,6 +68,13 @@ spec:
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+      ignoreDifferences:
+        - group: apiextensions.k8s.io
+          kind: CustomResourceDefinition
+          jsonPointers:
+            - /metadata/annotations
+            - /metadata/labels
       destination:
         server: "{{.server}}"
         namespace: kyverno
