@@ -5,16 +5,36 @@ metadata:
   namespace: fluent-bit
 data:
   victoria-logs-filter.lua: |
+    function string_value(value)
+        if value == nil then
+            return nil
+        end
+        if type(value) == "string" then
+            return value
+        end
+        return tostring(value)
+    end
+
     function map_log_to_msg(tag, timestamp, record)
-        if type(record["log"]) == "string" then
-            record["_msg"] = record["log"]
+        local msg = string_value(record["log"])
+        if msg ~= nil then
+            record["_msg"] = msg
             record["log"] = nil
-        elseif type(record["MESSAGE"]) == "string" then
-            record["_msg"] = record["MESSAGE"]
+        elseif string_value(record["MESSAGE"]) ~= nil then
+            record["_msg"] = string_value(record["MESSAGE"])
             record["MESSAGE"] = nil
-        elseif type(record["message"]) == "string" then
-            record["_msg"] = record["message"]
+        elseif string_value(record["message"]) ~= nil then
+            record["_msg"] = string_value(record["message"])
             record["message"] = nil
+        elseif string_value(record["msg"]) ~= nil then
+            record["_msg"] = string_value(record["msg"])
+            record["msg"] = nil
+        elseif string_value(record["log.msg"]) ~= nil then
+            record["_msg"] = string_value(record["log.msg"])
+        elseif string_value(record["log.message"]) ~= nil then
+            record["_msg"] = string_value(record["log.message"])
+        else
+            record["_msg"] = "missing log message"
         end
         return 1, timestamp, record
     end
@@ -56,6 +76,23 @@ data:
         return nil
     end
 
+    function populate_kubernetes_fields_from_source_path(record)
+        if record["source_path"] == nil then
+            return
+        end
+
+        local pod_name, namespace_name, container_name = string.match(
+            record["source_path"],
+            "/var/log/containers/([^_]+)_([^_]+)_(.+)%-.+%.log$"
+        )
+
+        if pod_name ~= nil then
+            record["pod"] = fallback(record["pod"], pod_name)
+            record["namespace"] = fallback(record["namespace"], namespace_name)
+            record["container"] = fallback(record["container"], container_name)
+        end
+    end
+
     function map_log_labels(tag, timestamp, record)
         local kubernetes = record["kubernetes"]
         local labels = nil
@@ -67,6 +104,8 @@ data:
             record["container"] = fallback(kubernetes["container_name"], record["container"])
             record["node"] = fallback(kubernetes["host"], record["node"])
         end
+
+        populate_kubernetes_fields_from_source_path(record)
 
         if labels ~= nil and (record["workload"] == nil or record["workload"] == "") then
             record["workload"] = first_non_empty(
