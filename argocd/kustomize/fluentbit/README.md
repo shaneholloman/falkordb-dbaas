@@ -35,7 +35,7 @@ Adds:
     `config-management-system`, `gke-managed-*`
 - Node/system logs: kubelet, containerd, node-problem-detector, kubelet-monitor,
   kube-container-runtime-monitor, kube-node-installation, kube-node-configuration,
-  kube-logrotate, gcfsd, gcfs-snapshotter, criproxy, container-runtime,
+   kube-logrotate, gcfsd, gcfs-snapshotter, criproxy, docker, container-runtime,
   kube-proxy, startup script logs
 - gVisor runtime and panic logs from `/var/log/pods/`
 - Network/CNI style logs where available, including GKE policy action logs

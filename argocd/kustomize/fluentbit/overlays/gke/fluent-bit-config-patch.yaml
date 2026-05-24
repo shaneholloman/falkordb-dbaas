@@ -128,6 +128,12 @@ data:
         Read_From_Tail    On
 
     [INPUT]
+        Name              systemd
+        Tag               node.docker
+        Systemd_Filter    _SYSTEMD_UNIT=docker.service
+        Read_From_Tail    On
+
+    [INPUT]
         Name              tail
         Tag               node.gvisor
         Path              /var/log/pods/*/*.log
@@ -260,6 +266,11 @@ data:
         Name                modify
         Match               node.container-runtime
         Add                 source container-runtime
+
+    [FILTER]
+        Name                modify
+        Match               node.docker
+        Add                 source docker
 
     [FILTER]
         Name                modify
