@@ -6,13 +6,13 @@ metadata:
 data:
   victoria-logs-filter.lua: |
     function map_log_to_msg(tag, timestamp, record)
-        if record["log"] then
+        if type(record["log"]) == "string" then
             record["_msg"] = record["log"]
             record["log"] = nil
-        elseif record["MESSAGE"] then
+        elseif type(record["MESSAGE"]) == "string" then
             record["_msg"] = record["MESSAGE"]
             record["MESSAGE"] = nil
-        elseif record["message"] then
+        elseif type(record["message"]) == "string" then
             record["_msg"] = record["message"]
             record["message"] = nil
         end
@@ -22,7 +22,7 @@ data:
     function map_log_to_error_label(tag, timestamp, record)
         if record["level"] == nil then
             local msg = ""
-            if record["_msg"] ~= nil then
+            if type(record["_msg"]) == "string" then
                 msg = string.lower(record["_msg"])
             end
             if string.find(msg, "error") or
@@ -89,7 +89,9 @@ data:
             record["reason"] = fallback(reason_value, "unknown")
             record["type"] = fallback(type_value, "unknown")
         end
-        record["_msg"] = fallback(record["_msg"], record["message"])
+        if record["_msg"] == nil and type(record["message"]) == "string" then
+            record["_msg"] = record["message"]
+        end
 
         record["cluster"] = fallback(record["cluster"], os.getenv("CLUSTER_NAME"))
         record["cloud_provider"] = fallback(record["cloud_provider"], os.getenv("CLOUD_PROVIDER"))
@@ -283,4 +285,11 @@ data:
         Regex        ^(?<time>[^ ]* +[^ ]* +[^ ]*) (?<host>[^ ]*) (?<ident>[a-zA-Z0-9_\/\.\-]*)(?:\[(?<pid>[0-9]+)\])?(?:<(?<priority>[0-9]+)>)?(?:\[[^\]]+\])?(?<message>.*)$
         Time_Key     time
         Time_Format  %b %d %H:%M:%S
+        Time_Keep    On
+
+    [PARSER]
+        Name         aws_cni_json
+        Format       json
+        Time_Key     ts
+        Time_Format  %Y-%m-%dT%H:%M:%S.%LZ
         Time_Keep    On

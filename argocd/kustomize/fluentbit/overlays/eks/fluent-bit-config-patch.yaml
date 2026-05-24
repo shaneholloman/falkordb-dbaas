@@ -36,7 +36,7 @@ data:
         Name              tail
         Tag               cni.aws-vpc
         Path              /var/log/aws-routed-eni/*.log
-        Parser            syslog
+        Parser            aws_cni_json
         Mem_Buf_Limit     5MB
         DB                /var/log/flb_eks_aws_routed_eni.db
         Skip_Long_Lines   On
@@ -45,7 +45,7 @@ data:
         Name              tail
         Tag               cni.aws-plugin
         Path              /var/log/amazon/*.log
-        Parser            syslog
+        Parser            aws_cni_json
         Mem_Buf_Limit     5MB
         DB                /var/log/flb_eks_amazon_cni.db
         Skip_Long_Lines   On
