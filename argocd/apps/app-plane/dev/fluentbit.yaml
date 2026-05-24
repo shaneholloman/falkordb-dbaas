@@ -11,6 +11,10 @@ spec:
         selector:
           matchLabels:
             role: app-plane
+        values:
+          cloudProvider: '{{ if hasKey .metadata.labels "cloud_provider" }}{{ index .metadata.labels "cloud_provider" }}{{ else }}unknown{{ end }}'
+          providerOverlay: '{{ if hasKey .metadata.labels "cloud_provider" }}{{ if eq (index .metadata.labels "cloud_provider") "gcp" }}gke{{ else if eq (index .metadata.labels "cloud_provider") "aws" }}eks{{ else if eq (index .metadata.labels "cloud_provider") "azure" }}aks{{ else }}unsupported{{ end }}{{ else }}unsupported{{ end }}'
+          region: '{{ if hasKey .metadata.labels "region" }}{{ index .metadata.labels "region" }}{{ else }}unknown{{ end }}'
   template:
     metadata:
       name: '{{ regexFind "h?c-[A-Za-z0-9]+" .name }}-fluentbit'
@@ -19,7 +23,29 @@ spec:
       source:
         repoURL: https://github.com/FalkorDB/falkordb-dbaas.git
         targetRevision: dev
-        path: argocd/kustomize/fluentbit
+        path: 'argocd/kustomize/fluentbit/overlays/{{ .values.providerOverlay }}'
+        kustomize:
+          patches:
+            - target:
+                kind: DaemonSet
+                name: fluent-bit
+              patch: |-
+                apiVersion: apps/v1
+                kind: DaemonSet
+                metadata:
+                  name: fluent-bit
+                spec:
+                  template:
+                    spec:
+                      containers:
+                        - name: fluent-bit
+                          env:
+                            - name: CLUSTER_NAME
+                              value: '{{ regexFind "h?c-[A-Za-z0-9]+" .name }}'
+                            - name: CLOUD_PROVIDER
+                              value: '{{ .values.cloudProvider }}'
+                            - name: CLOUD_REGION
+                              value: '{{ .values.region }}'
       destination:
         server: "{{.server}}"
         namespace: fluent-bit
