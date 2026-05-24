@@ -76,6 +76,13 @@ data:
         return nil
     end
 
+    function fallback_unknown(value, default_value)
+        if value == nil or value == "" or value == "unknown" then
+            return default_value
+        end
+        return value
+    end
+
     function populate_kubernetes_fields_from_source_path(record)
         if record["source_path"] == nil then
             return
@@ -87,9 +94,9 @@ data:
         )
 
         if pod_name ~= nil then
-            record["pod"] = fallback(record["pod"], pod_name)
-            record["namespace"] = fallback(record["namespace"], namespace_name)
-            record["container"] = fallback(record["container"], container_name)
+            record["pod"] = fallback_unknown(record["pod"], pod_name)
+            record["namespace"] = fallback_unknown(record["namespace"], namespace_name)
+            record["container"] = fallback_unknown(record["container"], container_name)
         end
     end
 
