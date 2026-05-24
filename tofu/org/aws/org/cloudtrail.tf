@@ -180,6 +180,15 @@ resource "aws_cloudtrail" "org" {
   is_organization_trail         = true
   enable_log_file_validation    = true
   enable_logging                = true
+
+  advanced_event_selector {
+    name = "Management events selector"
+
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Management"]
+    }
+  }
 }
 
 # ── Imports ───────────────────────────────────────────────────────────
