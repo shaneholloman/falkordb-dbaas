@@ -5,3 +5,4 @@ resources:
   - ../../base
 patches:
   - path: fluent-bit-config-patch.yaml
+  - path: fluent-bit-daemonset-patch.yaml

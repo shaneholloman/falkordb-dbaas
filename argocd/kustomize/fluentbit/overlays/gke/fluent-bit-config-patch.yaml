@@ -86,6 +86,84 @@ data:
         Read_From_Tail    On
 
     [INPUT]
+        Name              systemd
+        Tag               node.kube-node-installation
+        Systemd_Filter    _SYSTEMD_UNIT=kube-node-installation.service
+        Read_From_Tail    On
+
+    [INPUT]
+        Name              systemd
+        Tag               node.kube-node-configuration
+        Systemd_Filter    _SYSTEMD_UNIT=kube-node-configuration.service
+        Read_From_Tail    On
+
+    [INPUT]
+        Name              systemd
+        Tag               node.kube-logrotate
+        Systemd_Filter    _SYSTEMD_UNIT=kube-logrotate.service
+        Read_From_Tail    On
+
+    [INPUT]
+        Name              systemd
+        Tag               node.gcfsd
+        Systemd_Filter    _SYSTEMD_UNIT=gcfsd.service
+        Read_From_Tail    On
+
+    [INPUT]
+        Name              systemd
+        Tag               node.gcfs-snapshotter
+        Systemd_Filter    _SYSTEMD_UNIT=gcfs-snapshotter.service
+        Read_From_Tail    On
+
+    [INPUT]
+        Name              systemd
+        Tag               node.criproxy
+        Systemd_Filter    _SYSTEMD_UNIT=criproxy.service
+        Read_From_Tail    On
+
+    [INPUT]
+        Name              systemd
+        Tag               node.container-runtime
+        Systemd_Filter    _SYSTEMD_UNIT=container-runtime.service
+        Read_From_Tail    On
+
+    [INPUT]
+        Name              tail
+        Tag               node.gvisor
+        Path              /var/log/pods/*/*.log
+        Exclude_Path      /var/log/pods/*/*_panic.log
+        Key               message
+        Mem_Buf_Limit     5MB
+        DB                /var/log/flb_gke_gvisor.db
+        Skip_Long_Lines   On
+        Refresh_Interval  5
+        Rotate_Wait       30
+        Path_Key          source_path
+
+    [INPUT]
+        Name              tail
+        Tag               node.gvisor-panic
+        Path              /var/log/pods/*/*_panic.log
+        Key               message
+        Mem_Buf_Limit     5MB
+        DB                /var/log/flb_gke_gvisor_panic.db
+        Skip_Long_Lines   On
+        Refresh_Interval  5
+        Rotate_Wait       30
+        Path_Key          source_path
+
+    [INPUT]
+        Name              tail
+        Tag               node.kube-proxy
+        Path              /var/log/kube-proxy.log
+        Key               message
+        Mem_Buf_Limit     5MB
+        DB                /var/log/flb_gke_kube_proxy.db
+        Skip_Long_Lines   On
+        Refresh_Interval  5
+        Rotate_Wait       30
+
+    [INPUT]
         Name              tail
         Tag               node.startup
         Path              /var/log/startupscript.log,/var/log/startup-script.log
@@ -102,6 +180,17 @@ data:
         Mem_Buf_Limit     5MB
         DB                /var/log/flb_gke_network.db
         Skip_Long_Lines   On
+
+    [INPUT]
+        Name              tail
+        Tag               cni.gke-policy-action
+        Path              /var/log/network/policy_action.log
+        Key               message
+        Mem_Buf_Limit     5MB
+        DB                /var/log/flb_gke_policy_action.db
+        Skip_Long_Lines   On
+        Refresh_Interval  5
+        Rotate_Wait       30
 
     [FILTER]
         Name                kubernetes
@@ -139,8 +228,63 @@ data:
 
     [FILTER]
         Name                modify
+        Match               node.kube-node-installation
+        Add                 source kube-node-installation
+
+    [FILTER]
+        Name                modify
+        Match               node.kube-node-configuration
+        Add                 source kube-node-configuration
+
+    [FILTER]
+        Name                modify
+        Match               node.kube-logrotate
+        Add                 source kube-logrotate
+
+    [FILTER]
+        Name                modify
+        Match               node.gcfsd
+        Add                 source gcfsd
+
+    [FILTER]
+        Name                modify
+        Match               node.gcfs-snapshotter
+        Add                 source gcfs-snapshotter
+
+    [FILTER]
+        Name                modify
+        Match               node.criproxy
+        Add                 source criproxy
+
+    [FILTER]
+        Name                modify
+        Match               node.container-runtime
+        Add                 source container-runtime
+
+    [FILTER]
+        Name                modify
+        Match               node.gvisor
+        Add                 source gvisor
+
+    [FILTER]
+        Name                modify
+        Match               node.gvisor-panic
+        Add                 source gvisor-panic
+
+    [FILTER]
+        Name                modify
+        Match               node.kube-proxy
+        Add                 source kube-proxy
+
+    [FILTER]
+        Name                modify
         Match               node.startup
         Add                 source startup-script
+
+    [FILTER]
+        Name                modify
+        Match               cni.gke-policy-action
+        Add                 source policy-action
 
     [FILTER]
         Name                modify
