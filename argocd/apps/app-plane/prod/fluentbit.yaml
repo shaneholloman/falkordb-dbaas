@@ -12,9 +12,9 @@ spec:
           matchLabels:
             role: app-plane
         values:
-          cloudProvider: '{{ if hasKey .metadata.labels "cloud_provider" }}{{ index .metadata.labels "cloud_provider" }}{{ else }}unknown{{ end }}'
-          providerOverlay: '{{ if hasKey .metadata.labels "cloud_provider" }}{{ if eq (index .metadata.labels "cloud_provider") "gcp" }}gke{{ else if eq (index .metadata.labels "cloud_provider") "aws" }}eks{{ else if eq (index .metadata.labels "cloud_provider") "azure" }}aks{{ else }}unsupported{{ end }}{{ else }}unsupported{{ end }}'
-          region: '{{ if hasKey .metadata.labels "region" }}{{ index .metadata.labels "region" }}{{ else }}unknown{{ end }}'
+          cloudProvider: '{{ with index .metadata.labels "cloud_provider" }}{{ . }}{{ else }}unknown{{ end }}'
+          providerOverlay: '{{ with index .metadata.labels "cloud_provider" }}{{ if eq . "gcp" }}gke{{ else if eq . "aws" }}eks{{ else if eq . "azure" }}aks{{ else }}unsupported{{ end }}{{ else }}unsupported{{ end }}'
+          region: '{{ with index .metadata.labels "region" }}{{ . }}{{ else }}unknown{{ end }}'
   template:
     metadata:
       name: '{{ regexFind "h?c-[A-Za-z0-9]+" .name }}-fluentbit'
