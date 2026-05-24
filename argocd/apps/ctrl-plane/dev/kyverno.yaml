@@ -8,7 +8,7 @@ spec:
   source:
     chart: kyverno
     repoURL: https://kyverno.github.io/kyverno/
-    targetRevision: 3.6.1
+    targetRevision: 3.8.1
     helm:
       releaseName: kyverno
       valuesObject:
@@ -42,9 +42,6 @@ spec:
         reportsController:
           nodeSelector:
             node_pool: security-infra
-        features:
-          validatingAdmissionPolicyReports:
-            enabled: false
         # Audit mode by default — switch to enforce per-policy
         config:
           webhooks:
