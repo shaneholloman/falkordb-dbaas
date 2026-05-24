@@ -8,8 +8,10 @@ module "project" {
   folder_id       = var.project_parent_id
   billing_account = var.billing_account_id
   lien            = true
+  deletion_policy = "PREVENT"
 
   create_project_sa = false
+
 
   activate_apis = [
     "container.googleapis.com",

@@ -10,7 +10,7 @@ metadata:
   name: prowler-soc2-scan
   namespace: security
 spec:
-  schedule: "0 2 * * *"
+  schedule: "0 7 * * *"
   timeZone: "Etc/UTC"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
