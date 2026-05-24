@@ -52,12 +52,6 @@ spec:
                   values:
                     - kube-system
                     - kyverno
-  ignoreDifferences:
-    - group: apiextensions.k8s.io
-      kind: CustomResourceDefinition
-      jqPathExpressions:
-        - .spec.conversion
-        - .status
   destination:
     server: https://kubernetes.default.svc
     namespace: kyverno
@@ -65,7 +59,6 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
-      - RespectIgnoreDifferences=true
     automated:
       prune: true
       selfHeal: true
