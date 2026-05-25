@@ -149,28 +149,6 @@ export class K8sRepository {
     return password.replace(/\n$/, '');
   }
 
-  private async _getDeploymentPasswordSecretName(kubeConfig: k8s.KubeConfig, namespace: string, podId: string): Promise<string> {
-    const deploymentPassword = await this._getDeploymentPassword(kubeConfig, namespace, podId);
-    const k8sCoreApi = kubeConfig.makeApiClient(k8s.CoreV1Api);
-    const secrets = await k8sCoreApi.listNamespacedSecret(namespace).then((res) => res.body.items);
-
-    const matchingSecret = secrets.find((secret) => {
-      const encodedPassword = secret.data?.adminpassword;
-      if (!encodedPassword) {
-        return false;
-      }
-
-      const secretPassword = Buffer.from(encodedPassword, 'base64').toString('utf8').replace(/\n$/, '');
-      return secretPassword === deploymentPassword;
-    });
-
-    if (!matchingSecret?.metadata?.name) {
-      throw new Error(`Could not find a secret with the current admin password for pod ${podId} in namespace ${namespace}`);
-    }
-
-    return matchingSecret.metadata.name;
-  }
-
   private async _executeCommand(kubeConfig: k8s.KubeConfig, instanceId: string, podId: string, command: string[], timeout = 60): Promise<string> {
     const exec = new k8s.Exec(kubeConfig);
 
@@ -584,7 +562,9 @@ export class K8sRepository {
     }, 'Creating import RDB job');
 
     const kubeConfig = await this._getK8sConfig(cloudProvider, clusterId, region, { projectId });
-    const passwordSecretName = await this._getDeploymentPasswordSecretName(kubeConfig, namespace, podId);
+
+    const k8sCoreApi = kubeConfig.makeApiClient(k8s.CoreV1Api);
+    const secrets = await k8sCoreApi.listNamespacedSecret(namespace).then((res) => res.body.items);
 
     const tlsFlag = hasTLS ? '--tls' : '';
     const scheme = hasTLS ? 'rediss' : 'redis';
@@ -732,11 +712,11 @@ export class K8sRepository {
                     mountPath: '/data',
                   },
                 ],
-                envFrom: [{
+                envFrom: secrets.filter((s) => s.metadata?.name.startsWith('file')).map((s) => ({
                   secretRef: {
-                    name: passwordSecretName,
+                    name: s.metadata?.name,
                   }
-                }]
+                }))
               },
             ],
             restartPolicy: 'Never',
