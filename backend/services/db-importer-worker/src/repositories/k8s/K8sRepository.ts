@@ -146,7 +146,11 @@ export class K8sRepository {
       throw new Error('Could not get password');
     }
 
-    return password.replace(/\n$/, '');
+    return this._normalizeRedisPassword(password);
+  }
+
+  private _normalizeRedisPassword(password: string): string {
+    return password.replace(/[\r\n]+$/, '');
   }
 
   private async _executeCommand(kubeConfig: k8s.KubeConfig, instanceId: string, podId: string, command: string[], timeout = 60): Promise<string> {
@@ -562,9 +566,31 @@ export class K8sRepository {
     }, 'Creating import RDB job');
 
     const kubeConfig = await this._getK8sConfig(cloudProvider, clusterId, region, { projectId });
+    const deploymentPassword = await this._getDeploymentPassword(kubeConfig, namespace, podId);
 
     const k8sCoreApi = kubeConfig.makeApiClient(k8s.CoreV1Api);
     const secrets = await k8sCoreApi.listNamespacedSecret(namespace).then((res) => res.body.items);
+    const fileSecrets = secrets.filter((s) => s.metadata?.name.startsWith('file'));
+    const fileSecretsWithAdminPassword = fileSecrets.filter((s) => s.data?.adminpassword);
+    const mismatchedPasswordSecrets = fileSecretsWithAdminPassword.filter((secret) => {
+      const encodedPassword = secret.data?.adminpassword;
+      if (!encodedPassword) {
+        return false;
+      }
+      const secretPassword = this._normalizeRedisPassword(
+        Buffer.from(encodedPassword, 'base64').toString('utf8'),
+      );
+      return secretPassword !== deploymentPassword;
+    });
+
+    if (fileSecretsWithAdminPassword.length === 0) {
+      throw new Error(`Could not find file secrets with adminpassword in namespace ${namespace}`);
+    }
+    if (mismatchedPasswordSecrets.length > 0) {
+      throw new Error(
+        `Found file secrets with adminpassword that does not match pod ${podId}: ${mismatchedPasswordSecrets.map((s) => s.metadata?.name).join(', ')}`,
+      );
+    }
 
     const tlsFlag = hasTLS ? '--tls' : '';
     const scheme = hasTLS ? 'rediss' : 'redis';
@@ -575,7 +601,7 @@ export class K8sRepository {
         echo "ERROR: adminpassword env var is not set" >&2
         exit 1
       fi
-      PASS="$adminpassword"
+      PASS=$(printf '%s' "$adminpassword" | tr -d '\r\n')
 
       apk --update add curl redis >/dev/null \\
         || { echo "ERROR: failed to install curl/redis" >&2; exit 1; }
@@ -712,7 +738,7 @@ export class K8sRepository {
                     mountPath: '/data',
                   },
                 ],
-                envFrom: secrets.filter((s) => s.metadata?.name.startsWith('file')).map((s) => ({
+                envFrom: fileSecrets.map((s) => ({
                   secretRef: {
                     name: s.metadata?.name,
                   }
