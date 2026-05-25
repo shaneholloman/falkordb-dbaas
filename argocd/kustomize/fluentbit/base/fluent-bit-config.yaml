@@ -5,6 +5,39 @@ metadata:
   namespace: fluent-bit
 data:
   victoria-logs-filter.lua: |
+    function first_non_empty(...)
+        local values = { ... }
+        for i = 1, #values do
+            local value = values[i]
+            if value ~= nil and value ~= "" then
+                return value
+            end
+        end
+        return nil
+    end
+
+    function structured_log_to_string(value)
+        local message = first_non_empty(
+            value["_msg"],
+            value["msg"],
+            value["message"],
+            value["MESSAGE"],
+            value["log"],
+            value["error"],
+            value["err"]
+        )
+        if message ~= nil then
+            return string_value(message)
+        end
+
+        local parts = {}
+        for key, item in pairs(value) do
+            table.insert(parts, key .. "=" .. string_value(item))
+        end
+        table.sort(parts)
+        return table.concat(parts, " ")
+    end
+
     function string_value(value)
         if value == nil then
             return nil
@@ -12,10 +45,26 @@ data:
         if type(value) == "string" then
             return value
         end
+        if type(value) == "table" then
+            return structured_log_to_string(value)
+        end
         return tostring(value)
     end
 
+    function promote_level_from_structured_log(record, value)
+        if type(value) ~= "table" or record["level"] ~= nil then
+            return
+        end
+
+        local level = first_non_empty(value["level"], value["severity"], value["log.level"])
+        if level ~= nil then
+            record["level"] = string.lower(string_value(level))
+        end
+    end
+
     function map_log_to_msg(tag, timestamp, record)
+        promote_level_from_structured_log(record, record["log"])
+        promote_level_from_structured_log(record, record["structured_log"])
         local msg = string_value(record["log"])
         if msg ~= nil then
             record["_msg"] = msg
@@ -33,6 +82,8 @@ data:
             record["_msg"] = string_value(record["log.msg"])
         elseif string_value(record["log.message"]) ~= nil then
             record["_msg"] = string_value(record["log.message"])
+        elseif string_value(record["structured_log"]) ~= nil then
+            record["_msg"] = string_value(record["structured_log"])
         else
             record["_msg"] = "missing log message"
         end
@@ -228,7 +279,7 @@ data:
         Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
         Kube_Tag_Prefix     kube.var.log.containers.
         Merge_Log           On
-        Merge_Log_Key       log
+        Merge_Log_Key       structured_log
         Labels              On
         Annotations         Off
         Buffer_Size         1MB
