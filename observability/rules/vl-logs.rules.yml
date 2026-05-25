@@ -39,6 +39,7 @@ spec:
           expr: |
             level: "error" | 
             stats by (pod, namespace, cluster, environment) count() as error_count | 
+            filter not (pod: "unknown" and namespace: "unknown") |
             filter error_count :> 150
           for: 2m
           labels:

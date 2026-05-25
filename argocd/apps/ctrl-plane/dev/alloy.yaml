@@ -419,7 +419,12 @@ spec:
 
                     stage.static_labels {
                       values = {
-                        cluster = "{{ .name }}",
+                        cluster     = "{{ .name }}",
+                        environment = "dev",
+                        cloud_provider = "gcp",
+                        region      = "us-central1",
+                        source      = "kubernetes-events",
+                        log_type    = "event",
                       }
                     }
                   }

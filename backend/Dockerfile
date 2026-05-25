@@ -1,7 +1,5 @@
-ARG NODE_VERSION=24.12.0
-
 # Alpine image
-FROM node:$NODE_VERSION-alpine AS alpine
+FROM node:24.12.0-alpine AS alpine
 RUN apk update
 RUN apk add --no-cache libc6-compat
 
