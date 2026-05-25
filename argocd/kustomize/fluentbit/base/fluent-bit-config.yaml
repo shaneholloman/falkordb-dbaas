@@ -90,20 +90,38 @@ data:
         return 1, timestamp, record
     end
   victoria-logs-error-label.lua: |
+    function access_log_status(msg)
+        local status = string.match(msg, '^%S+ %S+ %S+ %[.-%] "%a+ [^"]+ HTTP/%d%.%d" (%d%d%d)')
+        if status ~= nil then
+            return tonumber(status)
+        end
+        return nil
+    end
+
     function map_log_to_error_label(tag, timestamp, record)
         if record["level"] == nil then
             local msg = ""
             if type(record["_msg"]) == "string" then
-                msg = string.lower(record["_msg"])
+                msg = record["_msg"]
             end
-            if string.find(msg, "error") or
-               string.find(msg, "critical") or
-               string.find(msg, "fatal") or
-               string.find(msg, "crash") or
-               string.find(msg, "panic") then
+            local status = access_log_status(msg)
+            if status ~= nil then
+                if status >= 500 then
                     record["level"] = "error"
                 else
                     record["level"] = "info"
+                end
+            else
+                msg = string.lower(msg)
+                if string.find(msg, "error") or
+                   string.find(msg, "critical") or
+                   string.find(msg, "fatal") or
+                   string.find(msg, "crash") or
+                   string.find(msg, "panic") then
+                    record["level"] = "error"
+                else
+                    record["level"] = "info"
+                end
             end
         end
         return 1, timestamp, record
