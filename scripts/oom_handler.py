@@ -15,7 +15,7 @@ import urllib3
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 # ---------------------------------------------------------------------------
@@ -34,6 +34,13 @@ def mask_email(email: str) -> str:
     return f"{masked_local}@{domain}"
 
 
+def format_tags(tags: dict[str, str]) -> str:
+    """Format custom tags as a comma-separated key=value string."""
+    if not tags:
+        return "No tags"
+    return ", ".join(f"{k}={v}" for k, v in tags.items())
+
+
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -43,6 +50,7 @@ class CustomerInfo:
     email: str
     name: str
     subscription_id: str
+    tags: dict[str, str] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +130,11 @@ class OmnistrateClient:
         subscription_id = matching_instance.get("subscriptionId", "")
         subscription_owner_name = matching_instance.get("subscriptionOwnerName", "Unknown")
 
+        # Extract custom tags from the instance
+        _nested = matching_instance.get("consumptionResourceInstanceResult") or {}
+        _raw_tags = _nested.get("customTags") or []
+        tags = {t["key"]: t["value"] for t in _raw_tags if "key" in t and "value" in t}
+
         users_url = f"{self.api_url}/fleet/users"
         users_params = {"pageSize": 100}
         next_page_token = None
@@ -141,6 +154,7 @@ class OmnistrateClient:
                         email=user.get("email", "unknown@unknown.com"),
                         name=subscription_owner_name,
                         subscription_id=subscription_id,
+                        tags=tags
                     )
 
             next_page_token = users_data.get("nextPageToken")
@@ -153,6 +167,7 @@ class OmnistrateClient:
             email=f"{subscription_owner_name}@internal.falkordb.com",
             name=subscription_owner_name,
             subscription_id=subscription_id,
+            tags=tags
         )
 
 
@@ -199,6 +214,7 @@ class GoogleChatNotifier:
                         "widgets": [
                             {"keyValue": {"topLabel": "Customer", "content": f"{customer.name} ({customer.email})"}},
                             {"keyValue": {"topLabel": "Subscription ID", "content": customer.subscription_id}},
+                            {"keyValue": {"topLabel": "Tags", "content": format_tags(customer.tags)}},
                             {"keyValue": {"topLabel": "Cluster", "content": cluster}},
                             {"keyValue": {"topLabel": "Namespace", "content": namespace}},
                             {"keyValue": {"topLabel": "Pod", "content": pod}},
@@ -375,7 +391,8 @@ def main(args):
 
     required_env_vars = [
         "OMNISTRATE_API_URL", "OMNISTRATE_USERNAME", "OMNISTRATE_PASSWORD",
-        "OMNISTRATE_SERVICE_ID", "OMNISTRATE_ENVIRONMENT_ID",
+        "OMNISTRATE_INTERNAL_SERVICE_ID",
+        "OMNISTRATE_INTERNAL_PROD_ENVIRONMENT", "OMNISTRATE_INTERNAL_DEV_ENVIRONMENT",
         "GOOGLE_CHAT_WEBHOOK_URL",
     ]
     missing = [v for v in required_env_vars if not os.environ.get(v)]
@@ -397,8 +414,12 @@ def main(args):
         api_url=os.environ["OMNISTRATE_API_URL"],
         username=os.environ["OMNISTRATE_USERNAME"],
         password=os.environ["OMNISTRATE_PASSWORD"],
-        service_id=os.environ["OMNISTRATE_SERVICE_ID"],
-        environment_id=os.environ["OMNISTRATE_ENVIRONMENT_ID"],
+        service_id=os.environ["OMNISTRATE_INTERNAL_SERVICE_ID"],
+        environment_id=(
+            os.environ["OMNISTRATE_INTERNAL_PROD_ENVIRONMENT"]
+            if environment == "prod"
+            else os.environ["OMNISTRATE_INTERNAL_DEV_ENVIRONMENT"]
+        ),
         verify_ssl=verify_ssl,
     )
     try:

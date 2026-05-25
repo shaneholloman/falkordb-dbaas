@@ -13,7 +13,7 @@ import requests
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import List, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import argparse
 import urllib3
 from urllib.parse import quote
@@ -33,12 +33,20 @@ def mask_email(email: str) -> str:
     return f"{masked_local}@{domain}"
 
 
+def format_tags(tags: dict[str, str]) -> str:
+    """Format custom tags as a comma-separated key=value string."""
+    if not tags:
+        return "No tags"
+    return ", ".join(f"{k}={v}" for k, v in tags.items())
+
+
 @dataclass
 class CustomerInfo:
     """Customer information from Omnistrate API"""
     email: str
     name: str
     subscription_id: str
+    tags: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -296,6 +304,11 @@ class OmnistrateClient:
         # Extract subscription owner info from the instance
         subscription_id = matching_instance.get("subscriptionId", "")
         subscription_owner_name = matching_instance.get("subscriptionOwnerName", "Unknown")
+
+        # Extract custom tags from the instance
+        _nested = matching_instance.get("consumptionResourceInstanceResult") or {}
+        _raw_tags = _nested.get("customTags") or []
+        tags = {t["key"]: t["value"] for t in _raw_tags if "key" in t and "value" in t}
         
         # Get users with pagination - search each page and return early when match found
         users_url = f"{self.api_url}/fleet/users"
@@ -330,7 +343,8 @@ class OmnistrateClient:
                     return CustomerInfo(
                         email=email,
                         name=subscription_owner_name,
-                        subscription_id=subscription_id
+                        subscription_id=subscription_id,
+                        tags=tags
                     )
             
             # Check for next page
@@ -347,7 +361,8 @@ class OmnistrateClient:
         return CustomerInfo(
             email=synthetic_email,
             name=subscription_owner_name,
-            subscription_id=subscription_id
+            subscription_id=subscription_id,
+            tags=tags
         )
 
 
@@ -979,6 +994,7 @@ class GitHubIssueManager:
 
 **Customer:** {customer.name} {customer.email}
 **Subscription ID:** {customer.subscription_id}
+**Tags:** {format_tags(customer.tags)}
 **Pod:** {pod}
 **Container:** {container}
 **Namespace:** {namespace}
@@ -1039,7 +1055,8 @@ class GitHubIssueManager:
         cluster: str,
         container: str,
         log_url: str,
-        timestamp: str
+        timestamp: str,
+        customer_tags: Optional[dict[str, str]] = None
     ):
         """Add comment to existing issue"""
         # Format stack traces - handle variable length
@@ -1054,6 +1071,7 @@ class GitHubIssueManager:
 **Container:** {container}
 **Namespace:** {namespace}
 **Cluster:** {cluster}
+**Tags:** {format_tags(customer_tags or {})}
 
 {stack_trace_section}
 **Exit Code:** {crash.exit_code}
@@ -1186,7 +1204,8 @@ class GoogleChatNotifier:
         issue_number: int,
         issue_repo: str,
         log_url: str,
-        is_new_crash_type: bool
+        is_new_crash_type: bool,
+        customer_tags: Optional[dict[str, str]] = None
     ):
         """Send crash notification to Google Chat"""
         if is_new_crash_type:
@@ -1210,7 +1229,8 @@ class GoogleChatNotifier:
                             {"keyValue": {"topLabel": "Cluster", "content": cluster}},
                             {"keyValue": {"topLabel": "Pod", "content": pod}},
                             {"keyValue": {"topLabel": "Namespace", "content": namespace}},
-                            {"keyValue": {"topLabel": "Exit Code", "content": crash.exit_code}}
+                            {"keyValue": {"topLabel": "Exit Code", "content": crash.exit_code}},
+                            {"keyValue": {"topLabel": "Tags", "content": format_tags(customer_tags or {})}}
                         ]
                     },
                     {
@@ -1275,6 +1295,7 @@ class GoogleChatNotifier:
         issue_number: int,
         issue_repo: str,
         log_url: str,
+        customer_tags: Optional[dict[str, str]] = None
     ):
         """Send a recurring-crash warning card to Google Chat.
 
@@ -1296,7 +1317,8 @@ class GoogleChatNotifier:
                             {"keyValue": {"topLabel": "Cluster", "content": cluster}},
                             {"keyValue": {"topLabel": "Pod", "content": pod}},
                             {"keyValue": {"topLabel": "Namespace", "content": namespace}},
-                            {"keyValue": {"topLabel": "Exit Code", "content": crash.exit_code}}
+                            {"keyValue": {"topLabel": "Exit Code", "content": crash.exit_code}},
+                            {"keyValue": {"topLabel": "Tags", "content": format_tags(customer_tags or {})}}
                         ]
                     },
                     {
@@ -1388,7 +1410,8 @@ def main(args):
     # Validate required environment variables
     required_env_vars = [
         'OMNISTRATE_API_URL', 'OMNISTRATE_USERNAME', 'OMNISTRATE_PASSWORD',
-        'OMNISTRATE_SERVICE_ID', 'OMNISTRATE_ENVIRONMENT_ID',
+        'OMNISTRATE_INTERNAL_SERVICE_ID',
+        'OMNISTRATE_INTERNAL_PROD_ENVIRONMENT', 'OMNISTRATE_INTERNAL_DEV_ENVIRONMENT',
         'VMAUTH_USERNAME', 'VMAUTH_PASSWORD',
         'GITHUB_TOKEN', 'ISSUE_REPO',
         'GOOGLE_CHAT_WEBHOOK_URL'
@@ -1403,8 +1426,12 @@ def main(args):
     omnistrate_url = os.environ['OMNISTRATE_API_URL']
     omnistrate_user = os.environ['OMNISTRATE_USERNAME']
     omnistrate_pass = os.environ['OMNISTRATE_PASSWORD']
-    service_id = os.environ['OMNISTRATE_SERVICE_ID']
-    environment_id = os.environ['OMNISTRATE_ENVIRONMENT_ID']
+    service_id = os.environ['OMNISTRATE_INTERNAL_SERVICE_ID']
+    environment_id = (
+        os.environ['OMNISTRATE_INTERNAL_PROD_ENVIRONMENT']
+        if environment == 'prod'
+        else os.environ['OMNISTRATE_INTERNAL_DEV_ENVIRONMENT']
+    )
     
     vmauth_url = args.vmauth_url
     vmauth_user = os.environ['VMAUTH_USERNAME']
@@ -1482,7 +1509,8 @@ def main(args):
         print(f"📝 Different crash detected for existing issue #{existing_issue}")
         github.add_comment(
             existing_issue, crash, args.pod, args.namespace,
-            args.cluster, args.container, log_url, timestamp
+            args.cluster, args.container, log_url, timestamp,
+            customer_tags=customer.tags
         )
         issue_number = existing_issue
         is_duplicate = False
@@ -1504,14 +1532,16 @@ def main(args):
     if is_same_crash:
         delivered = notifier.send_recurring_crash_notification(
             customer.email, args.cluster, args.pod, args.namespace,
-            crash, issue_number, issue_repo, log_url
+            crash, issue_number, issue_repo, log_url,
+            customer_tags=customer.tags
         )
         if delivered:
             print("Recurring crash notification sent!")
     else:
         notifier.send_notification(
             customer.email, args.cluster, args.pod, args.namespace,
-            crash, issue_number, issue_repo, log_url, is_new_crash_type
+            crash, issue_number, issue_repo, log_url, is_new_crash_type,
+            customer_tags=customer.tags
         )
         print("Notification sent!")
     
