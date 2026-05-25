@@ -15,7 +15,7 @@ spec:
         app.kubernetes.io/name: fluent-bit
       annotations:
         configmap.reloader.stakater.com/reload: "fluent-bit-config,fluent-bit-lua-scripts"
-        fluentbit.falkordb.com/config-revision: "2026-05-25-structured-logs"
+        fluentbit.falkordb.com/config-revision: "2026-05-25-workload-inference"
     spec:
       serviceAccountName: fluent-bit
       containers:

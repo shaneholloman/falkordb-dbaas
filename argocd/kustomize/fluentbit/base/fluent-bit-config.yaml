@@ -151,6 +151,29 @@ data:
         end
     end
 
+    function infer_workload_from_pod(pod_name)
+        if pod_name == nil or pod_name == "" or pod_name == "unknown" or pod_name == "n/a" then
+            return nil
+        end
+
+        local statefulset_name = string.match(pod_name, "^(.+)%-%d+$")
+        if statefulset_name ~= nil then
+            return statefulset_name
+        end
+
+        local deployment_name = string.match(pod_name, "^(.+)%-[a-z0-9]+%-[a-z0-9]+$")
+        if deployment_name ~= nil then
+            return deployment_name
+        end
+
+        local daemonset_name = string.match(pod_name, "^(.+)%-[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9]$")
+        if daemonset_name ~= nil then
+            return daemonset_name
+        end
+
+        return pod_name
+    end
+
     function map_log_labels(tag, timestamp, record)
         local kubernetes = record["kubernetes"]
         local labels = nil
@@ -172,6 +195,8 @@ data:
                 labels["k8s-app"]
             )
         end
+
+        record["workload"] = fallback_unknown(record["workload"], infer_workload_from_pod(record["pod"]))
 
         local involved_object = record["involvedObject"]
         local reason_value = fallback(record["reason"], record["reportingReason"])
