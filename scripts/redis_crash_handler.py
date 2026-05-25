@@ -33,7 +33,7 @@ def mask_email(email: str) -> str:
     return f"{masked_local}@{domain}"
 
 
-def format_tags(tags: dict) -> str:
+def format_tags(tags: dict[str, str]) -> str:
     """Format custom tags as a comma-separated key=value string."""
     if not tags:
         return "No tags"
@@ -46,7 +46,7 @@ class CustomerInfo:
     email: str
     name: str
     subscription_id: str
-    tags: dict = field(default_factory=dict)
+    tags: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -1056,7 +1056,7 @@ class GitHubIssueManager:
         container: str,
         log_url: str,
         timestamp: str,
-        customer_tags: dict = None
+        customer_tags: Optional[dict[str, str]] = None
     ):
         """Add comment to existing issue"""
         # Format stack traces - handle variable length
@@ -1205,7 +1205,7 @@ class GoogleChatNotifier:
         issue_repo: str,
         log_url: str,
         is_new_crash_type: bool,
-        customer_tags: dict = None
+        customer_tags: Optional[dict[str, str]] = None
     ):
         """Send crash notification to Google Chat"""
         if is_new_crash_type:
@@ -1295,7 +1295,7 @@ class GoogleChatNotifier:
         issue_number: int,
         issue_repo: str,
         log_url: str,
-        customer_tags: dict = None
+        customer_tags: Optional[dict[str, str]] = None
     ):
         """Send a recurring-crash warning card to Google Chat.
 

@@ -34,7 +34,7 @@ def mask_email(email: str) -> str:
     return f"{masked_local}@{domain}"
 
 
-def format_tags(tags: dict) -> str:
+def format_tags(tags: dict[str, str]) -> str:
     """Format custom tags as a comma-separated key=value string."""
     if not tags:
         return "No tags"
@@ -50,7 +50,7 @@ class CustomerInfo:
     email: str
     name: str
     subscription_id: str
-    tags: dict = field(default_factory=dict)
+    tags: dict[str, str] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
