@@ -4,6 +4,7 @@ import { DiscoveryService } from './DiscoveryService';
 import { RegistrationService, ClusterSecret } from './RegistrationService';
 import { NodePoolService } from './NodePoolService';
 import { SecretManagementService } from './SecretManagementService';
+import { clearDeletingClustersNotIn, isClusterDeleting } from './DeletingClusterRegistry';
 
 export interface ClusterDiscoveryConfig {
   whitelist: string[];
@@ -42,6 +43,7 @@ export class ClusterDiscoveryService {
         this.config.whitelist,
         this.config.blacklist,
       );
+      clearDeletingClustersNotIn(discoveredClusters.map((cluster) => cluster.name));
 
       logger.info(
         {
@@ -81,10 +83,14 @@ export class ClusterDiscoveryService {
 
       const isNewCluster = !existingSecret;
 
-      // Ensure node pools exist and are up to date for all clusters
-      await this.nodePoolService.createObservabilityNodePoolIfNeeded(cluster);
-      await this.nodePoolService.createSecurityNodePoolIfNeeded(cluster);
-      await this.nodePoolService.createSecurityInfraNodePoolIfNeeded(cluster);
+      if (isClusterDeleting(cluster.name)) {
+        logger.info({ cluster: cluster.name }, 'Skipping node pool reconciliation for cluster deletion in progress');
+      } else {
+        // Ensure node pools exist and are up to date for all clusters
+        await this.nodePoolService.createObservabilityNodePoolIfNeeded(cluster);
+        await this.nodePoolService.createSecurityNodePoolIfNeeded(cluster);
+        await this.nodePoolService.createSecurityInfraNodePoolIfNeeded(cluster);
+      }
 
       // Register or update cluster
       await this.registrationService.registerOrUpdateCluster(cluster, existingSecret);
