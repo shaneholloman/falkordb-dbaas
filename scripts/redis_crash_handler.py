@@ -308,7 +308,7 @@ class OmnistrateClient:
         # Extract custom tags from the instance
         _nested = matching_instance.get("consumptionResourceInstanceResult") or {}
         _raw_tags = _nested.get("customTags") or []
-        tags = {t["key"]: t["value"] for t in _raw_tags if "key" in t and "value" in t}
+        tags = {t["key"]: t["value"] for t in _raw_tags if isinstance(t, dict) and "key" in t and "value" in t}
         
         # Get users with pagination - search each page and return early when match found
         users_url = f"{self.api_url}/fleet/users"
@@ -1408,10 +1408,18 @@ def main(args):
         print(f"⚠️  WARNING: SSL verification is DISABLED ({reason}). Use only in development environments.", file=sys.stderr)
     
     # Validate required environment variables
+    if environment not in ('prod', 'dev'):
+        print(f"❌ Error: Invalid ENVIRONMENT value '{environment}'. Must be 'prod' or 'dev'.", file=sys.stderr)
+        sys.exit(1)
+
+    env_var_for_environment = (
+        'OMNISTRATE_INTERNAL_PROD_ENVIRONMENT' if environment == 'prod'
+        else 'OMNISTRATE_INTERNAL_DEV_ENVIRONMENT'
+    )
     required_env_vars = [
         'OMNISTRATE_API_URL', 'OMNISTRATE_USERNAME', 'OMNISTRATE_PASSWORD',
         'OMNISTRATE_INTERNAL_SERVICE_ID',
-        'OMNISTRATE_INTERNAL_PROD_ENVIRONMENT', 'OMNISTRATE_INTERNAL_DEV_ENVIRONMENT',
+        env_var_for_environment,
         'VMAUTH_USERNAME', 'VMAUTH_PASSWORD',
         'GITHUB_TOKEN', 'ISSUE_REPO',
         'GOOGLE_CHAT_WEBHOOK_URL'
