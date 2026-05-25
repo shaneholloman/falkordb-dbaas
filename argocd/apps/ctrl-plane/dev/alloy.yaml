@@ -421,8 +421,8 @@ spec:
                       values = {
                         cluster     = "{{ .name }}",
                         environment = "dev",
-                        cloud_provider = "{{ with index .metadata.labels "cloud_provider" }}{{ . }}{{ else }}unknown{{ end }}",
-                        region      = "{{ with index .metadata.labels "region" }}{{ . }}{{ else }}unknown{{ end }}",
+                        cloud_provider = "gcp",
+                        region      = "us-central1",
                         source      = "kubernetes-events",
                         log_type    = "event",
                       }
