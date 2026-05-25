@@ -2,6 +2,7 @@ import { Cluster } from '../../types';
 import logger from '../../logger';
 import { EKSClient, DeleteNodegroupCommand, DescribeNodegroupCommand } from '@aws-sdk/client-eks';
 import { getAWSCredentials } from './client';
+import { forceDeleteNodePoolPods } from '../../services/ForceDeleteNodePoolPods';
 
 export async function deleteObservabilityNodePool(cluster: Cluster): Promise<void> {
   try {
@@ -25,6 +26,8 @@ export async function deleteObservabilityNodePool(cluster: Cluster): Promise<voi
     }
 
     // Delete the observability node group
+    await forceDeleteNodePoolPods(cluster, 'observability');
+
     await eksClient.send(
       new DeleteNodegroupCommand({
         clusterName: cluster.name,
@@ -67,6 +70,8 @@ export async function deleteSecurityNodePool(cluster: Cluster): Promise<void> {
       throw error;
     }
 
+    await forceDeleteNodePoolPods(cluster, 'security');
+
     await eksClient.send(
       new DeleteNodegroupCommand({
         clusterName: cluster.name,
@@ -108,6 +113,8 @@ export async function deleteSecurityInfraNodePool(cluster: Cluster): Promise<voi
       }
       throw error;
     }
+
+    await forceDeleteNodePoolPods(cluster, 'security-infra');
 
     await eksClient.send(
       new DeleteNodegroupCommand({
