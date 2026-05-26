@@ -570,7 +570,7 @@ export class K8sRepository {
 
     const k8sCoreApi = kubeConfig.makeApiClient(k8s.CoreV1Api);
     const secrets = await k8sCoreApi.listNamespacedSecret(namespace).then((res) => res.body.items);
-    const fileSecrets = secrets.filter((s) => s.metadata?.name.startsWith('file'));
+    const fileSecrets = secrets.filter((s) => s.metadata?.name?.startsWith('file'));
     const fileSecretsWithAdminPassword = fileSecrets.filter((s) => s.data?.adminpassword);
     const mismatchedPasswordSecrets = fileSecretsWithAdminPassword.filter((secret) => {
       const encodedPassword = secret.data?.adminpassword;
