@@ -159,7 +159,7 @@ describe('processInstanceCreated', () => {
       );
       expect(mockLogger.error).toHaveBeenCalledWith(
         { hasparams: true },
-        'Missing FalkorDB credentials in params',
+        'Missing falkordbUsername or falkordbPassword in instance params - will retry',
       );
     });
 
