@@ -105,7 +105,10 @@ export class OmnistrateRepository implements IOmnistrateRepository {
           ) as any
         )?.['resourceName'] ?? null,
       subscriptionId: instance?.['subscriptionId'],
-      params: instance?.['consumptionResourceInstanceResult']?.['result_params'] || instance?.['consumptionResourceInstanceResult']?.['launch_input_params'] || {},
+      params: {
+        ...(instance?.['consumptionResourceInstanceResult']?.['launch_input_params'] ?? {}),
+        ...(instance?.['consumptionResourceInstanceResult']?.['result_params'] ?? {}),
+      },
     } as OmnistrateInstance;
   }
 

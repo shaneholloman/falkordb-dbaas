@@ -54,7 +54,7 @@ export async function processInstanceRestored(
 
     if (!falkordbUsername || !falkordbPassword) {
       logger.error({ hasParams: !!instance.params }, 'Missing FalkorDB credentials in params');
-      throw new Error('Missing falkordbUser or falkordbPassword in instance resultParams - will retry');
+      throw new Error('Missing falkordbUser or falkordbPassword in instance params - will retry');
     }
 
     const cloudProvider = instance.cloudProvider;

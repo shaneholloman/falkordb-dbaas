@@ -52,7 +52,7 @@ export async function processInstanceCreated(
 
     if (!falkordbUsername || !falkordbPassword) {
       logger.error({ hasParams: !!instance.params }, 'Missing FalkorDB credentials in params');
-      throw new Error('Missing falkordbUsername or falkordbPassword in instance resultParams - will retry');
+      throw new Error('Missing falkordbUsername or falkordbPassword in instance params - will retry');
     }
 
     // Get cloud provider, cluster name, and region from instance
