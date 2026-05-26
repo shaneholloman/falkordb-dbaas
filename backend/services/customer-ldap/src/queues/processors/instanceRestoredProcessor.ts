@@ -48,12 +48,12 @@ export async function processInstanceRestored(
       return;
     }
 
-    const resultParams = instance.resultParams || {};
-    const falkordbUsername = resultParams.falkordbUser;
-    const falkordbPassword = resultParams.falkordbPassword;
+    const params = instance.params || {};
+    const falkordbUsername = params.falkordbUser;
+    const falkordbPassword = params.falkordbPassword;
 
     if (!falkordbUsername || !falkordbPassword) {
-      logger.error({ hasResultParams: !!instance.resultParams }, 'Missing FalkorDB credentials in resultParams');
+      logger.error({ hasParams: !!instance.params }, 'Missing FalkorDB credentials in params');
       throw new Error('Missing falkordbUser or falkordbPassword in instance resultParams - will retry');
     }
 

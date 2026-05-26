@@ -33,7 +33,7 @@ export const deleteUserHandler: RouteHandlerMethod<
       IOmnistrateRepository.repositoryName,
     );
     const instance = await omnistrateRepository.getInstance(sessionData.instanceId);
-    const originalUsername = instance.resultParams?.falkordbUser;
+    const originalUsername = instance.params?.falkordbUser;
     if (!originalUsername || username === originalUsername) {
       throw ApiError.forbidden('Cannot delete the original instance user', 'CANNOT_DELETE_ORIGINAL_USER');
     }
