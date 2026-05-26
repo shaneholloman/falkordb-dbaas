@@ -36,7 +36,7 @@ export const modifyUserHandler: RouteHandlerMethod<
     // Block any attempt to modify it through the customer-ldap API.
     const omnistrateRepository = request.diScope.resolve<IOmnistrateRepository>(IOmnistrateRepository.repositoryName);
     const instance = await omnistrateRepository.getInstance(sessionData.instanceId);
-    const principalUsername = instance.resultParams?.falkordbUser;
+    const principalUsername = instance.params?.falkordbUser;
 
     if (principalUsername && username === principalUsername) {
       throw ApiError.forbidden(

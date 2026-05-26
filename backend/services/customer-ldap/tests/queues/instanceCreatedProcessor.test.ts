@@ -81,7 +81,7 @@ describe('processInstanceCreated', () => {
         cloudProvider: 'gcp',
         clusterId: 'test-cluster',
         region: 'us-central1',
-        resultParams: {
+        params: {
           falkordbUser: 'test-user',
           falkordbPassword: 'test-password',
         },
@@ -151,15 +151,15 @@ describe('processInstanceCreated', () => {
         cloudProvider: 'gcp',
         clusterId: 'test-cluster',
         region: 'us-central1',
-        resultParams: {},
+        params: {},
       } as any);
 
       await expect(processInstanceCreated(mockJob, mockFastify)).rejects.toThrow(
         'Missing falkordbUsername or falkordbPassword',
       );
       expect(mockLogger.error).toHaveBeenCalledWith(
-        { hasResultParams: true },
-        'Missing FalkorDB credentials in resultParams',
+        { hasParams: true },
+        'Missing FalkorDB credentials in params',
       );
     });
 
@@ -169,7 +169,7 @@ describe('processInstanceCreated', () => {
         cloudProvider: null,
         clusterId: 'test-cluster',
         region: 'us-central1',
-        resultParams: {
+        params: {
           falkordbUser: 'test-user',
           falkordbPassword: 'test-password',
         },
@@ -186,7 +186,7 @@ describe('processInstanceCreated', () => {
         cloudProvider: 'gcp',
         clusterId: 'test-cluster',
         region: 'us-central1',
-        resultParams: {
+        params: {
           falkordbUser: 'test-user',
           falkordbPassword: 'test-password',
         },
@@ -207,7 +207,7 @@ describe('processInstanceCreated', () => {
         cloudProvider: 'gcp',
         clusterId: 'test-cluster',
         region: 'us-central1',
-        resultParams: {
+        params: {
           falkordbUser: 'test-user',
           falkordbPassword: 'test-password',
         },
@@ -232,7 +232,7 @@ describe('processInstanceCreated', () => {
         cloudProvider: 'gcp',
         clusterId: 'test-cluster',
         region: 'us-central1',
-        resultParams: {
+        params: {
           falkordbUser: 'test-user',
           falkordbPassword: 'test-password',
         },
