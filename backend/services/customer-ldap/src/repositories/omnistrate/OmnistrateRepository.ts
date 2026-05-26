@@ -139,7 +139,7 @@ export class OmnistrateRepository implements IOmnistrateRepository {
 
     const instance = await this.getInstance(instanceId);
 
-    this._options.logger.debug({ instance }, 'Checking if user has access to instance');
+    this._options.logger.debug({ instanceId }, 'Checking if user has access to instance');
 
     const subscriptionUsers = await this.getSubscriptionUsers(instance.subscriptionId);
     const user = subscriptionUsers.find((u) => u.userId === userId);
