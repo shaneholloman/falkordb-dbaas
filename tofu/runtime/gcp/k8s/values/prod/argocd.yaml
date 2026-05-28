@@ -38,6 +38,8 @@ configs:
     createSecret: false
   cm:
     url: https://argocd.observability.internal.falkordb.cloud
+    resource.compareoptions: |
+      ignoreResourceStatusField: all
     dex.config: |
       connectors:
       - config:
