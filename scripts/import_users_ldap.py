@@ -247,7 +247,8 @@ class LdapUserImporter:
                     logger.warning(
                         f"User '{username}' already exists in instance '{instance_id}', skipping"
                     )
-                    return self.import_user(instance_id, subscription_id, username, password, acl)  # Retry logic for idempotency
+                    # return self.import_user(instance_id, subscription_id, username, password, acl)  # Retry logic for idempotency
+                    return True
                 logger.error(
                     f"Failed to create user '{username}' in instance '{instance_id}': "
                     f"HTTP {response.status_code} - {response.text}"
