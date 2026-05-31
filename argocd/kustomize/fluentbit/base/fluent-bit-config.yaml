@@ -62,6 +62,14 @@ data:
         end
     end
 
+    function is_empty_container_log(tag, record)
+        return string.find(tag, "^kube%.") ~= nil and
+               record["source_path"] ~= nil and
+               string.find(record["source_path"], "/var/log/containers/", 1, true) ~= nil and
+               record["stream"] ~= nil and
+               record["logtag"] ~= nil
+    end
+
     function map_log_to_msg(tag, timestamp, record)
         promote_level_from_structured_log(record, record["log"])
         promote_level_from_structured_log(record, record["structured_log"])
@@ -84,6 +92,8 @@ data:
             record["_msg"] = string_value(record["log.message"])
         elseif string_value(record["structured_log"]) ~= nil then
             record["_msg"] = string_value(record["structured_log"])
+        elseif is_empty_container_log(tag, record) then
+            return -1, timestamp, record
         else
             record["_msg"] = "missing log message"
         end

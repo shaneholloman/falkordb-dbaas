@@ -51,7 +51,7 @@ substitutions:
   _IMAGE_NAME: 'free-tier-shutdown'
   _SERVICE_NAME: 'free-tier-shutdown'
   _NODE_ENV: 'development'
-  _OMNISTRATE_USER: david.zimberknopf@falkordb.com
+  _OMNISTRATE_USER: apikey@apikeys.invalid
   _OMNISTRATE_SERVICE_ID: s-KgFDwg5vBS
   _OMNISTRATE_ENVIRONMENT_ID: se-DC0AzhMHOD
   _OMNISTRATE_PRODUCT_TIER_ID: pt-055K4xaRsm

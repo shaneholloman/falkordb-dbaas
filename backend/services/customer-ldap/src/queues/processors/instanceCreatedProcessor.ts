@@ -45,14 +45,14 @@ export async function processInstanceCreated(
       throw new Error(`Instance ${instanceId} not found in Omnistrate - will retry`);
     }
 
-    // Extract FalkorDB credentials from resultParams
-    const resultParams = instance.resultParams || {};
-    const falkordbUsername = resultParams.falkordbUser;
-    const falkordbPassword = resultParams.falkordbPassword;
+    // Extract FalkorDB credentials from params
+    const params = instance.params || {};
+    const falkordbUsername = params.falkordbUser;
+    const falkordbPassword = params.falkordbPassword;
 
     if (!falkordbUsername || !falkordbPassword) {
-      logger.error({ hasResultParams: !!instance.resultParams }, 'Missing FalkorDB credentials in resultParams');
-      throw new Error('Missing falkordbUsername or falkordbPassword in instance resultParams - will retry');
+      logger.error({ hasParams: !!instance.params }, 'Missing FalkorDB credentials in params');
+      throw new Error('Missing falkordbUsername or falkordbPassword in instance params - will retry');
     }
 
     // Get cloud provider, cluster name, and region from instance

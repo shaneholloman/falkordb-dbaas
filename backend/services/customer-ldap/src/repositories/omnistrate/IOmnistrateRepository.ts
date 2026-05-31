@@ -27,7 +27,7 @@ export interface OmnistrateInstance {
   productTierName: string;
   deploymentType: string;
   subscriptionId: string;
-  resultParams?: Record<string, string>;
+  params?: Record<string, string>;
 }
 
 export interface SubscriptionUser {
