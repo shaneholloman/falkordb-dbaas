@@ -37,8 +37,8 @@ Hub-spoke security monitoring architecture providing continuous compliance scann
 
 | Component | Type | Version | Purpose |
 |-----------|------|---------|---------|
-| **Wazuh Manager** | Helm chart | 4.14.1 | Central SIEM — receives agent events, runs FIM, vulnerability detection |
-| **Wazuh Agent** | DaemonSet | 4.11.1 | Host-level log collection, file integrity monitoring, rootkit detection |
+| **Wazuh Manager** | Helm chart | 4.14.4 | Central SIEM — receives agent events, runs FIM, vulnerability detection |
+| **Wazuh Agent** | DaemonSet | 4.14.4 | Host-level log collection, file integrity monitoring, rootkit detection |
 | **Wazuh Custom Rules** | ConfigMap | — | SOC 2 rules: Prowler/Grype/Falco/TruffleHog/KubeBench/KubeScape detection |
 | **Prowler** | CronJob | 4.6.1 | Cloud security posture (SOC 2 / CIS compliance), daily at 02:00 UTC |
 | **Grype** | CronJob | — | Container image CVE scanning, results forwarded to Wazuh |

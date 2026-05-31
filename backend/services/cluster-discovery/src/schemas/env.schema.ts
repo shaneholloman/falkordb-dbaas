@@ -55,6 +55,8 @@ export const EnvSchema = Type.Object({
   WHITELIST_CLUSTERS: Type.Optional(Type.String()),
   BLACKLIST_CLUSTERS: Type.Optional(Type.String()),
   DELETE_UNKNOWN_SECRETS: Type.Boolean({ default: false }),
+  DELETION_SUPPRESSION_MS: Type.Optional(Type.Number()),
+  FORCE_DELETE_NODEPOOL_PODS_TIMEOUT_MS: Type.Optional(Type.Number()),
 
   // Webhook authentication
   OMNISTRATE_WEBHOOK_TOKEN: Type.String(),

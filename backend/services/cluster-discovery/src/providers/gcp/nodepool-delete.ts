@@ -1,6 +1,7 @@
 import { ClusterManagerClient } from '@google-cloud/container';
 import { Cluster } from '../../types';
 import logger from '../../logger';
+import { forceDeleteNodePoolPods } from '../../services/ForceDeleteNodePoolPods';
 
 const client = new ClusterManagerClient();
 
@@ -25,6 +26,8 @@ export async function deleteObservabilityNodePool(cluster: Cluster): Promise<voi
     return;
   }
   try {
+    await forceDeleteNodePoolPods(cluster, 'observability');
+
     await client.deleteNodePool({
       name: `projects/${process.env.APPLICATION_PLANE_GOOGLE_CLOUD_PROJECT}/locations/${cluster.region}/clusters/${cluster.name}/nodePools/observability`,
     });
@@ -57,6 +60,8 @@ export async function deleteSecurityNodePool(cluster: Cluster): Promise<void> {
   }
 
   try {
+    await forceDeleteNodePoolPods(cluster, 'security');
+
     await client.deleteNodePool({
       name: `${parent}/nodePools/security`,
     });
@@ -89,6 +94,8 @@ export async function deleteSecurityInfraNodePool(cluster: Cluster): Promise<voi
   }
 
   try {
+    await forceDeleteNodePoolPods(cluster, 'security-infra');
+
     await client.deleteNodePool({
       name: `${parent}/nodePools/security-infra`,
     });

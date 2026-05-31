@@ -24,6 +24,9 @@ spec:
     metadata:
       labels:
         app: wazuh-agent
+      annotations:
+        configmap.reloader.stakater.com/reload: "wazuh-agent-ossec-conf,wazuh-agent-entrypoint-scripts,wazuh-agent-config"
+        secret.reloader.stakater.com/reload: "wazuh-agent-key,wazuh-manager-ca"
     spec:
       serviceAccountName: wazuh-agent
       priorityClassName: security-monitoring

@@ -18,7 +18,7 @@ metadata:
   name: kubescape-scan
   namespace: security
 spec:
-  schedule: "0 6 * * *"
+  schedule: "15 8 * * *"
   timeZone: "Etc/UTC"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1

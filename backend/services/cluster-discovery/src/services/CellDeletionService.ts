@@ -1,7 +1,8 @@
 import logger from '../logger';
 import { OmnistrateClient } from '../providers/omnistrate/client';
-import { deleteObservabilityNodePool, deleteSecurityNodePool } from '../providers';
+import { deleteObservabilityNodePool, deleteSecurityInfraNodePool, deleteSecurityNodePool } from '../providers';
 import { Cluster } from '../types';
+import { markClusterDeleting, unmarkClusterDeleting } from './DeletingClusterRegistry';
 
 interface DeploymentCell {
   cloudProvider: 'gcp' | 'aws' | 'azure';
@@ -21,6 +22,8 @@ export async function handleCellDeletion(deploymentCellId: string): Promise<void
 
   const clusterName = buildClusterName(deploymentCell.cloudProvider, deploymentCellId);
   const cluster = await buildClusterConfig(omnistrateClient, deploymentCell, clusterName);
+
+  markClusterDeleting(clusterName);
 
   await deleteNodePool(cluster, deploymentCellId, clusterName);
 }
@@ -137,8 +140,14 @@ async function deleteNodePool(cluster: Partial<Cluster>, deploymentCellId: strin
 
   logger.info({ deploymentCellId, clusterName, hostMode }, `Deleting node pools for ${hostMode} cluster`);
 
-  await deleteObservabilityNodePool(cluster as Cluster);
-  await deleteSecurityNodePool(cluster as Cluster);
+  try {
+    await deleteObservabilityNodePool(cluster as Cluster);
+    await deleteSecurityNodePool(cluster as Cluster);
+    await deleteSecurityInfraNodePool(cluster as Cluster);
+  } catch (error) {
+    unmarkClusterDeleting(clusterName);
+    throw error;
+  }
 
   logger.info({ deploymentCellId, clusterName }, 'Successfully deleted node pools');
 }

@@ -4,6 +4,7 @@ import { EKSClient, DeleteNodegroupCommand, DescribeNodegroupCommand } from '@aw
 import { ClusterManagerClient } from '@google-cloud/container';
 import { ContainerServiceClient } from '@azure/arm-containerservice';
 import { getAWSBYOACredentials, getAzureBYOACredentials, getGCPBYOACredentials } from './credentials';
+import { forceDeleteNodePoolPods } from '../../services/ForceDeleteNodePoolPods';
 
 export async function deleteObservabilityNodePoolGCPBYOA(cluster: Cluster): Promise<void> {
   try {
@@ -56,6 +57,8 @@ export async function deleteObservabilityNodePoolGCPBYOA(cluster: Cluster): Prom
       logger.info({ cluster: cluster.name }, 'Observability node pool does not exist, nothing to delete.');
       return;
     }
+
+    await forceDeleteNodePoolPods(cluster, 'observability');
 
     await client.deleteNodePool({
       name: `projects/${cluster.gcpAccountID}/locations/${cluster.region}/clusters/${cluster.name}/nodePools/observability`,
@@ -112,6 +115,8 @@ export async function deleteObservabilityNodePoolAWSBYOA(cluster: Cluster): Prom
     }
 
     // Delete the observability node group
+    await forceDeleteNodePoolPods(cluster, 'observability');
+
     await eksClient.send(
       new DeleteNodegroupCommand({
         clusterName: cluster.name,
@@ -174,6 +179,8 @@ export async function deleteObservabilityNodePoolAzureBYOA(cluster: Cluster): Pr
       throw error;
     }
 
+    await forceDeleteNodePoolPods(cluster, OBSERVABILITY_POOL_NAME);
+
     await client.agentPools.beginDeleteAndWait(cluster.azureResourceGroupName, cluster.name, OBSERVABILITY_POOL_NAME);
 
     logger.info({ cluster: cluster.name }, 'Observability node pool deleted for BYOA Azure cluster.');
@@ -218,6 +225,8 @@ export async function deleteSecurityNodePoolGCPBYOA(cluster: Cluster): Promise<v
       logger.info({ cluster: cluster.name }, 'Security node pool does not exist, nothing to delete.');
       return;
     }
+
+    await forceDeleteNodePoolPods(cluster, 'security');
 
     await client.deleteNodePool({
       name: `${parent}/nodePools/security`,
@@ -266,6 +275,8 @@ export async function deleteSecurityNodePoolAWSBYOA(cluster: Cluster): Promise<v
       throw error;
     }
 
+    await forceDeleteNodePoolPods(cluster, 'security');
+
     await eksClient.send(
       new DeleteNodegroupCommand({
         clusterName: cluster.name,
@@ -307,6 +318,8 @@ export async function deleteSecurityNodePoolAzureBYOA(cluster: Cluster): Promise
       throw error;
     }
 
+    await forceDeleteNodePoolPods(cluster, SECURITY_POOL_NAME);
+
     await client.agentPools.beginDeleteAndWait(cluster.azureResourceGroupName, cluster.name, SECURITY_POOL_NAME);
 
     logger.info({ cluster: cluster.name }, 'Security node pool deleted for BYOA Azure cluster.');
@@ -347,6 +360,8 @@ export async function deleteSecurityInfraNodePoolGCPBYOA(cluster: Cluster): Prom
       logger.info({ cluster: cluster.name }, 'Security-infra node pool does not exist, nothing to delete.');
       return;
     }
+
+    await forceDeleteNodePoolPods(cluster, 'security-infra');
 
     await client.deleteNodePool({
       name: `${parent}/nodePools/security-infra`,
@@ -395,6 +410,8 @@ export async function deleteSecurityInfraNodePoolAWSBYOA(cluster: Cluster): Prom
       throw error;
     }
 
+    await forceDeleteNodePoolPods(cluster, 'security-infra');
+
     await eksClient.send(
       new DeleteNodegroupCommand({
         clusterName: cluster.name,
@@ -435,6 +452,8 @@ export async function deleteSecurityInfraNodePoolAzureBYOA(cluster: Cluster): Pr
       }
       throw error;
     }
+
+    await forceDeleteNodePoolPods(cluster, SECURITY_INFRA_POOL_NAME);
 
     await client.agentPools.beginDeleteAndWait(cluster.azureResourceGroupName, cluster.name, SECURITY_INFRA_POOL_NAME);
 

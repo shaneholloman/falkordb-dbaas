@@ -627,6 +627,10 @@ spec:
                       values = {
                         cluster     = "{{ regexFind "h?c-[A-Za-z0-9]+" .name }}",
                         environment = "prod",
+                        cloud_provider = "{{ with index .metadata.labels "cloud_provider" }}{{ . }}{{ else }}unknown{{ end }}",
+                        region      = "{{ with index .metadata.labels "region" }}{{ . }}{{ else }}unknown{{ end }}",
+                        source      = "kubernetes-events",
+                        log_type    = "event",
                       }
                     }
                   }

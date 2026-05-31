@@ -1,0 +1,445 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-lua-scripts
+  namespace: fluent-bit
+data:
+  victoria-logs-filter.lua: |
+    function first_non_empty(...)
+        local values = { ... }
+        for i = 1, #values do
+            local value = values[i]
+            if value ~= nil and value ~= "" then
+                return value
+            end
+        end
+        return nil
+    end
+
+    function structured_log_to_string(value)
+        local message = first_non_empty(
+            value["_msg"],
+            value["msg"],
+            value["message"],
+            value["MESSAGE"],
+            value["log"],
+            value["error"],
+            value["err"]
+        )
+        if message ~= nil then
+            return string_value(message)
+        end
+
+        local parts = {}
+        for key, item in pairs(value) do
+            table.insert(parts, key .. "=" .. string_value(item))
+        end
+        table.sort(parts)
+        return table.concat(parts, " ")
+    end
+
+    function string_value(value)
+        if value == nil then
+            return nil
+        end
+        if type(value) == "string" then
+            return value
+        end
+        if type(value) == "table" then
+            return structured_log_to_string(value)
+        end
+        return tostring(value)
+    end
+
+    function promote_level_from_structured_log(record, value)
+        if type(value) ~= "table" or record["level"] ~= nil then
+            return
+        end
+
+        local level = first_non_empty(value["level"], value["severity"], value["log.level"])
+        if level ~= nil then
+            record["level"] = string.lower(string_value(level))
+        end
+    end
+
+    function is_empty_container_log(tag, record)
+        return string.find(tag, "^kube%.") ~= nil and
+               record["source_path"] ~= nil and
+               string.find(record["source_path"], "/var/log/containers/", 1, true) ~= nil and
+               record["stream"] ~= nil and
+               record["logtag"] ~= nil
+    end
+
+    function map_log_to_msg(tag, timestamp, record)
+        promote_level_from_structured_log(record, record["log"])
+        promote_level_from_structured_log(record, record["structured_log"])
+        local msg = string_value(record["log"])
+        if msg ~= nil then
+            record["_msg"] = msg
+            record["log"] = nil
+        elseif string_value(record["MESSAGE"]) ~= nil then
+            record["_msg"] = string_value(record["MESSAGE"])
+            record["MESSAGE"] = nil
+        elseif string_value(record["message"]) ~= nil then
+            record["_msg"] = string_value(record["message"])
+            record["message"] = nil
+        elseif string_value(record["msg"]) ~= nil then
+            record["_msg"] = string_value(record["msg"])
+            record["msg"] = nil
+        elseif string_value(record["log.msg"]) ~= nil then
+            record["_msg"] = string_value(record["log.msg"])
+        elseif string_value(record["log.message"]) ~= nil then
+            record["_msg"] = string_value(record["log.message"])
+        elseif string_value(record["structured_log"]) ~= nil then
+            record["_msg"] = string_value(record["structured_log"])
+        elseif is_empty_container_log(tag, record) then
+            return -1, timestamp, record
+        else
+            record["_msg"] = "missing log message"
+        end
+        return 1, timestamp, record
+    end
+  victoria-logs-error-label.lua: |
+    function access_log_status(msg)
+        local status = string.match(msg, '^%S+ %S+ %S+ %[.-%] "%a+ [^"]+ HTTP/%d%.%d" (%d%d%d)')
+        if status ~= nil then
+            return tonumber(status)
+        end
+        return nil
+    end
+
+    function map_log_to_error_label(tag, timestamp, record)
+        if record["level"] == nil then
+            local msg = ""
+            if type(record["_msg"]) == "string" then
+                msg = record["_msg"]
+            end
+            local status = access_log_status(msg)
+            if status ~= nil then
+                if status >= 500 then
+                    record["level"] = "error"
+                else
+                    record["level"] = "info"
+                end
+            else
+                msg = string.lower(msg)
+                if string.find(msg, "error") or
+                   string.find(msg, "critical") or
+                   string.find(msg, "fatal") or
+                   string.find(msg, "crash") or
+                   string.find(msg, "panic") then
+                    record["level"] = "error"
+                else
+                    record["level"] = "info"
+                end
+            end
+        end
+        return 1, timestamp, record
+    end
+  victoria-logs-label-normalizer.lua: |
+    function fallback(value, default_value)
+        if value == nil or value == "" then
+            return default_value
+        end
+        return value
+    end
+
+    function first_non_empty(...)
+        local values = { ... }
+        for i = 1, #values do
+            local value = values[i]
+            if value ~= nil and value ~= "" then
+                return value
+            end
+        end
+        return nil
+    end
+
+    function fallback_unknown(value, default_value)
+        if value == nil or value == "" or value == "unknown" then
+            return default_value
+        end
+        return value
+    end
+
+    function populate_kubernetes_fields_from_source_path(record)
+        if record["source_path"] == nil then
+            return
+        end
+
+        local pod_name, namespace_name, container_name = string.match(
+            record["source_path"],
+            "/var/log/containers/([^_]+)_([^_]+)_(.+)%-.+%.log$"
+        )
+
+        if pod_name ~= nil then
+            record["pod"] = fallback_unknown(record["pod"], pod_name)
+            record["namespace"] = fallback_unknown(record["namespace"], namespace_name)
+            record["container"] = fallback_unknown(record["container"], container_name)
+        end
+    end
+
+    function infer_workload_from_pod(pod_name)
+        if pod_name == nil or pod_name == "" or pod_name == "unknown" or pod_name == "n/a" then
+            return nil
+        end
+
+        local statefulset_name = string.match(pod_name, "^(.+)%-%d+$")
+        if statefulset_name ~= nil then
+            return statefulset_name
+        end
+
+        local deployment_name = string.match(pod_name, "^(.+)%-[a-z0-9]+%-[a-z0-9]+$")
+        if deployment_name ~= nil then
+            return deployment_name
+        end
+
+        local daemonset_name = string.match(pod_name, "^(.+)%-[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9]$")
+        if daemonset_name ~= nil then
+            return daemonset_name
+        end
+
+        return pod_name
+    end
+
+    function map_log_labels(tag, timestamp, record)
+        local kubernetes = record["kubernetes"]
+        local labels = nil
+
+        if kubernetes ~= nil then
+            labels = kubernetes["labels"]
+            record["namespace"] = fallback(kubernetes["namespace_name"], record["namespace"])
+            record["pod"] = fallback(kubernetes["pod_name"], record["pod"])
+            record["container"] = fallback(kubernetes["container_name"], record["container"])
+            record["node"] = fallback(kubernetes["host"], record["node"])
+        end
+
+        populate_kubernetes_fields_from_source_path(record)
+
+        if labels ~= nil and (record["workload"] == nil or record["workload"] == "") then
+            record["workload"] = first_non_empty(
+                labels["app.kubernetes.io/name"],
+                labels["app"],
+                labels["k8s-app"]
+            )
+        end
+
+        record["workload"] = fallback_unknown(record["workload"], infer_workload_from_pod(record["pod"]))
+
+        local involved_object = record["involvedObject"]
+        local reason_value = fallback(record["reason"], record["reportingReason"])
+        local type_value = fallback(record["type"], record["event_type"])
+        local existing_involved_object = record["involved_object"]
+        local should_populate_event_fields = involved_object ~= nil or reason_value ~= nil or type_value ~= nil or existing_involved_object ~= nil
+        if should_populate_event_fields then
+            if involved_object ~= nil then
+                record["involved_object"] = fallback(involved_object["kind"], existing_involved_object)
+            end
+            record["involved_object"] = fallback(record["involved_object"], "unknown")
+            record["reason"] = fallback(reason_value, "unknown")
+            record["type"] = fallback(type_value, "unknown")
+        end
+        if record["_msg"] == nil and type(record["message"]) == "string" then
+            record["_msg"] = record["message"]
+        end
+
+        record["cluster"] = fallback(record["cluster"], os.getenv("CLUSTER_NAME"))
+        record["cloud_provider"] = fallback(record["cloud_provider"], os.getenv("CLOUD_PROVIDER"))
+        record["region"] = fallback(record["region"], os.getenv("CLOUD_REGION"))
+        record["node"] = fallback(record["node"], os.getenv("HOST_NAME"))
+        record["node_pool"] = fallback(record["node_pool"], os.getenv("NODE_POOL"))
+        local namespace_name = fallback(record["namespace_name"], "unknown")
+        record["namespace"] = fallback(record["namespace"], namespace_name)
+        record["pod"] = fallback(record["pod"], "unknown")
+        record["container"] = fallback(record["container"], "unknown")
+        record["workload"] = fallback(record["workload"], "unknown")
+        record["source"] = fallback(record["source"], "unknown")
+        record["log_type"] = fallback(record["log_type"], "unknown")
+
+        return 1, timestamp, record
+    end
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: fluent-bit
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         1
+        Daemon        Off
+        Log_Level     info
+        Parsers_File  parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+
+    @INCLUDE inputs-common.conf
+    @INCLUDE provider-extra.conf
+    @INCLUDE filters-common.conf
+    @INCLUDE outputs-common.conf
+
+  inputs-common.conf: |
+    [INPUT]
+        Name              tail
+        Tag               kube.var.log.containers.*
+        Path              /var/log/containers/*.log
+        # Exclude kube-system logs to avoid duplication with provider overlays.
+        Exclude_Path      /var/log/containers/*_kube-system_*.log
+        Parser            cri
+        Docker_Mode       On
+        Docker_Mode_Parser docker
+        Mem_Buf_Limit     5MB
+        DB                /var/log/flb_workload.db
+        Skip_Long_Lines   On
+        Refresh_Interval  5
+        Rotate_Wait       30
+        Path_Key          source_path
+
+    [INPUT]
+        Name              tail
+        Tag               node.syslog
+        Path              /var/log/syslog,/var/log/messages
+        Parser            syslog
+        Mem_Buf_Limit     5MB
+        DB                /var/log/flb_syslog.db
+        Skip_Long_Lines   On
+
+    [INPUT]
+        Name              systemd
+        Tag               node.kubelet
+        Systemd_Filter    _SYSTEMD_UNIT=kubelet.service
+        Read_From_Tail    On
+
+    [INPUT]
+        Name              systemd
+        Tag               node.containerd
+        Systemd_Filter    _SYSTEMD_UNIT=containerd.service
+        Read_From_Tail    On
+
+  provider-extra.conf: |
+    # Provider-specific inputs and filters are injected by overlays (gke/eks/aks).
+    # If the base is deployed directly, only workload, node syslog and kubelet/containerd
+    # inputs are enabled.
+
+  filters-common.conf: |
+    [FILTER]
+        Name                kubernetes
+        Match               kube.var.log.containers.*
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+        Kube_Tag_Prefix     kube.var.log.containers.
+        Merge_Log           On
+        Merge_Log_Key       structured_log
+        Labels              On
+        Annotations         Off
+        Buffer_Size         1MB
+
+    [FILTER]
+        Name                lua
+        Match               *
+        script              /fluent-bit/config/victoria-logs-filter.lua
+        call                map_log_to_msg
+
+    [FILTER]
+        Name                lua
+        Match               *
+        script              /fluent-bit/config/victoria-logs-error-label.lua
+        call                map_log_to_error_label
+
+    [FILTER]
+        Name                modify
+        Match               kube.var.log.containers.*
+        Add                 log_type workload
+        Add                 source container
+
+    [FILTER]
+        Name                modify
+        Match               node.*
+        Add                 workload node
+        Add                 namespace node-system
+        Add                 pod n/a
+        Add                 container n/a
+        Add                 log_type node
+
+    [FILTER]
+        Name                modify
+        Match               node.syslog
+        Add                 source syslog
+
+    [FILTER]
+        Name                modify
+        Match               node.kubelet
+        Add                 source kubelet
+
+    [FILTER]
+        Name                modify
+        Match               node.containerd
+        Add                 source containerd
+
+    [FILTER]
+        Name                lua
+        Match               *
+        script              /fluent-bit/config/victoria-logs-label-normalizer.lua
+        call                map_log_labels
+
+  outputs-common.conf: |
+    [OUTPUT]
+        Name          loki
+        Match         kube.*
+        Host          alloy.observability.svc.cluster.local
+        Port          3100
+        URI           /loki/api/v1/push
+        Labels        cluster=$cluster,cloud_provider=$cloud_provider,region=$region,node=$node,node_pool=$node_pool,namespace=$namespace,pod=$pod,container=$container,workload=$workload,log_type=$log_type,source=$source
+        Retry_Limit   3
+
+    [OUTPUT]
+        Name          loki
+        Match         node.*
+        Host          alloy.observability.svc.cluster.local
+        Port          3100
+        URI           /loki/api/v1/push
+        Labels        cluster=$cluster,cloud_provider=$cloud_provider,region=$region,node=$node,node_pool=$node_pool,namespace=$namespace,pod=$pod,container=$container,workload=$workload,log_type=$log_type,source=$source
+        Retry_Limit   3
+
+    [OUTPUT]
+        Name          loki
+        Match         cni.*
+        Host          alloy.observability.svc.cluster.local
+        Port          3100
+        URI           /loki/api/v1/push
+        Labels        cluster=$cluster,cloud_provider=$cloud_provider,region=$region,node=$node,node_pool=$node_pool,namespace=$namespace,pod=$pod,container=$container,workload=$workload,log_type=$log_type,source=$source
+        Retry_Limit   3
+
+  parsers.conf: |
+    [PARSER]
+        Name        cri
+        Format      regex
+        Regex       ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<log>.*)$
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+        Time_Keep   On
+
+    [PARSER]
+        Name        docker
+        Format      json
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%LZ
+        Time_Keep   On
+
+    [PARSER]
+        Name         syslog
+        Format       regex
+        Regex        ^(?<time>[^ ]* +[^ ]* +[^ ]*) (?<host>[^ ]*) (?<ident>[a-zA-Z0-9_\/\.\-]*)(?:\[(?<pid>[0-9]+)\])?(?:<(?<priority>[0-9]+)>)?(?:\[[^\]]+\])?(?<message>.*)$
+        Time_Key     time
+        Time_Format  %b %d %H:%M:%S
+        Time_Keep    On
+
+    [PARSER]
+        Name         aws_cni_json
+        Format       json
+        Time_Key     ts
+        Time_Format  %Y-%m-%dT%H:%M:%S.%LZ
+        Time_Keep    On

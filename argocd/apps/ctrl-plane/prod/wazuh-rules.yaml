@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/FalkorDB/falkordb-dbaas.git
     targetRevision: main
-    path: argocd/kustomize/wazuh-rules
+    path: argocd/kustomize/wazuh-rules/overlays/prod
   destination:
     server: https://kubernetes.default.svc
     namespace: security
