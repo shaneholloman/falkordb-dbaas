@@ -179,7 +179,7 @@ resource "aws_cloudtrail" "org" {
   is_multi_region_trail         = true
   is_organization_trail         = true
   enable_log_file_validation    = true
-  enable_logging                = true
+  enable_logging                = false
 
   advanced_event_selector {
     name = "Management events selector"
