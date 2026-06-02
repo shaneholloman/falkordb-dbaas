@@ -9,6 +9,10 @@ export class OmnistrateRepository {
 
   private static _token: string | null = null;
 
+  private static readonly _max429Retries = 3;
+
+  private static readonly _base429RetryDelayMs = 1000;
+
   constructor(
     _omnistrateUser: string,
     _omnistratePassword: string,
@@ -109,11 +113,61 @@ export class OmnistrateRepository {
     if (process.env.DRY_RUN === '1') {
       return;
     }
-    await OmnistrateRepository._client.post(
-      `/2022-09-01-00/fleet/service/${instance.serviceId}/environment/${instance.environmentId}/instance/${instance.id}/stop`,
-      {
-        resourceId: instance.resourceId,
-      },
+    await OmnistrateRepository._retryOn429(
+      () =>
+        OmnistrateRepository._client.post(
+          `/2022-09-01-00/fleet/service/${instance.serviceId}/environment/${instance.environmentId}/instance/${instance.id}/stop`,
+          {
+            resourceId: instance.resourceId,
+          },
+        ),
+      this._options.logger,
     );
+  }
+
+  private static async _retryOn429<T>(request: () => Promise<T>, logger: Logger): Promise<T> {
+    for (let retry = 0; ; retry += 1) {
+      try {
+        return await request();
+      } catch (error) {
+        if (!axios.isAxiosError(error) || error.response?.status !== 429 || retry >= this._max429Retries) {
+          throw error;
+        }
+
+        const delayMs =
+          this._getRetryAfterDelayMs(error.response.headers?.['retry-after']) ??
+          this._base429RetryDelayMs * 2 ** retry;
+
+        logger.warn(
+          { retry: retry + 1, maxRetries: this._max429Retries, delayMs },
+          'Omnistrate rate limit hit, retrying request',
+        );
+        await this._sleep(delayMs);
+      }
+    }
+  }
+
+  private static _getRetryAfterDelayMs(retryAfter: unknown): number | null {
+    const value = Array.isArray(retryAfter) ? retryAfter[0] : retryAfter;
+
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const retryAfterSeconds = Number(value);
+    if (Number.isFinite(retryAfterSeconds)) {
+      return Math.max(0, retryAfterSeconds * 1000);
+    }
+
+    const retryAfterDateMs = Date.parse(value);
+    if (Number.isFinite(retryAfterDateMs)) {
+      return Math.max(0, retryAfterDateMs - Date.now());
+    }
+
+    return null;
+  }
+
+  private static _sleep(delayMs: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 }
