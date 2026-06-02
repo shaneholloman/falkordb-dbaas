@@ -291,6 +291,20 @@ spec:
             summary: "FalkorDB rapid memory growth in namespace {{ $labels.namespace }}"
             description: "[cluster={{ $labels.cluster }}] FalkorDB instance in namespace {{ $labels.namespace }} is growing memory at more than 50MB/hour (current rate: {{ $value | humanize }}B/s). Investigate potential memory leak or unexpected data growth."
 
+        - alert: FalkorDBGraphMemoryImbalance
+          expr: >
+            (max(falkordb_graph_memory_total_mb{container="service"}) by (namespace, cluster)
+            /
+            sum(falkordb_graph_memory_total_mb{container="service"}) by (namespace, cluster))
+            > 0.7
+          for: 15m
+          labels:
+            severity: warning
+            cluster: '{{ $labels.cluster }}'
+          annotations:
+            summary: "Single graph consuming >70% of total graph memory in {{ $labels.namespace }}"
+            description: "[cluster={{ $labels.cluster }}] A single graph in namespace {{ $labels.namespace }} is consuming more than 70% of total graph memory. Consider graph eviction or migration."
+
     - name: falkordb.rules.standalone
       rules: []
 

@@ -30,23 +30,23 @@ This is the FalkorDB DBaaS (Database-as-a-Service) platform repository managing:
 
 | # | Task | File | Status |
 |---|------|------|--------|
-| 1 | Add container memory panels (working_set, rss, limits comparison) | `observability/grafana/dashboards/falkordb-cloud.json` | TODO |
-| 2 | Add memory fragmentation ratio panel (`redis_mem_fragmentation_ratio`) | `observability/grafana/dashboards/falkordb-cloud.json` | TODO |
-| 3 | Fix `FalkorDBOutOfConfiguredMaxmemoryCritical` severity: warning → critical | `observability/rules/falkordb.rules.yml` | TODO |
-| 4 | Add memory growth rate panel (`deriv(redis_memory_used_bytes[1h])`) | `observability/grafana/dashboards/falkordb-cloud.json` | TODO |
-| 5 | Add Redis memory breakdown panels (dataset vs overhead vs allocator) | `observability/grafana/dashboards/falkordb-cloud.json` | TODO |
-| 6 | Add graph count timeseries trend (currently only stat) | `observability/grafana/dashboards/falkordb-cloud.json` | TODO |
-| 7 | New alert: `FalkorDBMemoryFragmentationHigh` (ratio > 1.5 for 10m) | `observability/rules/falkordb.rules.yml` | TODO |
-| 8 | New alert: `FalkorDBMemoryGrowthRapid` (deriv threshold) | `observability/rules/falkordb.rules.yml` | TODO |
+| 1 | Add container memory panels (working_set, rss, limits comparison) | `observability/grafana/dashboards/falkordb-cloud.json` | DONE |
+| 2 | Add memory fragmentation ratio panel (`redis_mem_fragmentation_ratio`) | `observability/grafana/dashboards/falkordb-cloud.json` | DONE |
+| 3 | Fix `FalkorDBOutOfConfiguredMaxmemoryCritical` severity: warning → critical | `observability/rules/falkordb.rules.yml` | DONE |
+| 4 | Add memory growth rate panel (`deriv(redis_memory_used_bytes[1h])`) | `observability/grafana/dashboards/falkordb-cloud.json` | DONE |
+| 5 | Add Redis memory breakdown panels (dataset vs overhead vs allocator) | `observability/grafana/dashboards/falkordb-cloud.json` | DONE |
+| 6 | Add graph count timeseries trend (currently only stat) | `observability/grafana/dashboards/falkordb-cloud.json` | DONE |
+| 7 | New alert: `FalkorDBMemoryFragmentationHigh` (ratio > 1.5 for 10m) | `observability/rules/falkordb.rules.yml` | DONE |
+| 8 | New alert: `FalkorDBMemoryGrowthRapid` (deriv threshold) | `observability/rules/falkordb.rules.yml` | DONE |
 
-### Phase 2: After Exporter Enhancement (blocked on exporter team)
+### Phase 2: After Exporter Enhancement (exporter deployed in DEV)
 
 | # | Task | File | Status |
 |---|------|------|--------|
-| 9 | Update Alloy allowlist for `falkordb_graph_*` metrics | `argocd/apps/app-plane/{dev,prod}/alloy.yaml` | BLOCKED |
-| 10 | Per-graph memory panels (stacked by component, top-N table) | `observability/grafana/dashboards/falkordb-cloud.json` | BLOCKED |
-| 11 | Per-graph breakdown (node attrs by label, edge attrs by type) | `observability/grafana/dashboards/falkordb-cloud.json` | BLOCKED |
-| 12 | New alert: `FalkorDBGraphMemoryImbalance` (single graph >70% total) | `observability/rules/falkordb.rules.yml` | BLOCKED |
+| 9 | Update Alloy allowlist for `falkordb_graph_*` metrics | `argocd/apps/app-plane/dev/alloy.yaml` | DONE (dev only) |
+| 10 | Per-graph memory panels (stacked by component, top-N table) | `observability/grafana/dashboards/falkordb-cloud.json` | DONE |
+| 11 | Per-graph breakdown (node attrs by label, edge attrs by type) | `observability/grafana/dashboards/falkordb-cloud.json` | DONE |
+| 12 | New alert: `FalkorDBGraphMemoryImbalance` (single graph >70% total) | `observability/rules/falkordb.rules.yml` | DONE |
 
 ### Phase 3: After Engine Features (blocked on core team)
 
