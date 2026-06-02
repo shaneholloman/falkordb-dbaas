@@ -20,7 +20,7 @@ spec:
         echo "ContainerKilledBySIGABRT Alert Triggered"
         echo "Cluster: ${CLUSTER}"
         echo "Pod: ${POD_NAME}"
-        echo "Container: service"
+        echo "Container: ${CONTAINER}"
         echo "Namespace: ${NAMESPACE}"
         echo "=========================================="
 
@@ -38,7 +38,7 @@ spec:
             --arg pod "${POD_NAME}" \
             --arg namespace "${NAMESPACE}" \
             --arg cluster "${CLUSTER}" \
-            --arg container "service" \
+            --arg container "${CONTAINER}" \
             --arg grafana_url "${GRAFANA_URL}" \
             --arg vmauth_url "${VMAUTH_URL}" \
             --arg env "dev" \
