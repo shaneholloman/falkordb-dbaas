@@ -559,6 +559,50 @@ class GitHubIssueManager:
         self._add_issue_to_project(data['node_id'])
         return issue_number
 
+    def add_dump_paths_comment(self, issue_number: int, oom_dump_urls: str,
+                              namespace: str, pod: str):
+        """Add a comment with OOM dump GCS paths, console links, and gs commands."""
+        urls = [u.strip() for u in oom_dump_urls.split(",") if u.strip()]
+        if not urls:
+            return
+
+        rows = ""
+        gs_commands = ""
+        for gcs_path in urls:
+            filename = gcs_path.rstrip("/").split("/")[-1]
+            console_url = f"https://storage.cloud.google.com/{gcs_path[len('gs://'):]}"
+            rows += f"| `{filename}` | `{gcs_path}` | [Open in GCP]({console_url}) |\n"
+            gs_commands += f"gsutil cp {gcs_path} .\n"
+
+        comment = f"""### 🧠 Pre-OOM Memory Dumps
+
+INFO ALL snapshots captured at cgroup memory thresholds.
+
+| File | GCS Path | Console |
+|------|----------|---------|
+{rows}
+**Pod:** `{pod}` &nbsp; **Namespace:** `{namespace}`
+
+---
+<details>
+<summary>⬇️ How to download via CLI</summary>
+
+```bash
+# Humans — interactive login:
+gcloud auth login
+
+# Download files:
+{gs_commands}```
+</details>
+"""
+        resp = self.session.post(
+            f"{self.api_url}/repos/{self.repo}/issues/{issue_number}/comments",
+            json={'body': comment},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        print(f"✅ Added OOM dump paths comment to issue #{issue_number}")
+
     def add_comment(self, issue_number: int, pod: str, namespace: str,
                     cluster: str, container: str, timestamp: str,
                     report: str, grafana_memory_url: str,
@@ -1022,6 +1066,15 @@ def main():
                             report=report,
                             grafana_memory_url=grafana_memory_url,
                             grafana_pods_url=grafana_pods_url,
+                        )
+
+                    # Post OOM dump paths as a separate comment (if available)
+                    if issue_number and args.oom_dump_urls:
+                        github.add_dump_paths_comment(
+                            issue_number=issue_number,
+                            oom_dump_urls=args.oom_dump_urls,
+                            namespace=args.namespace,
+                            pod=args.pod,
                         )
                 except Exception as e:
                     print(f"⚠️  GitHub issue creation failed (non-fatal): {e}", file=sys.stderr)
