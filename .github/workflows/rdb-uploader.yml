@@ -231,6 +231,7 @@ jobs:
           FALKORDB_VERSION: ${{ steps.upload_gcs.outputs.falkordb_version }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SIGN_ONLY: ${{ inputs.sign_only }}
+          OOM_DUMP_URLS: ${{ steps.upload_gcs.outputs.oom_dump_urls }}
         run: |
           if [[ "${SIGN_ONLY,,}" == "true" ]]; then
             HEADER="## 📂 RDB GCS Paths"
@@ -265,6 +266,25 @@ jobs:
           > ⚠️ AOF upload failed after retries — \`appendonlydir.tar.gz\` is not available."
           fi
 
+          # Add OOM dump files to the table (if any were uploaded)
+          if [[ -n "$OOM_DUMP_URLS" ]]; then
+            IFS=',' read -ra DUMP_URLS <<< "$OOM_DUMP_URLS"
+            COMMENT+="
+
+          ### 🧠 Pre-OOM Memory Dumps
+
+          INFO ALL snapshots captured at cgroup memory thresholds.
+
+          | File | GCS Path | Console |
+          |------|----------|---------|" 
+            for DUMP_PATH in "${DUMP_URLS[@]}"; do
+              DUMP_FILE=$(basename "$DUMP_PATH")
+              DUMP_CONSOLE_URL="https://storage.cloud.google.com/${DUMP_PATH#gs://}"
+              COMMENT+="
+          | \`$DUMP_FILE\` | \`$DUMP_PATH\` | [Open in GCP]($DUMP_CONSOLE_URL) |"
+            done
+          fi
+
           COMMENT+="
 
           **Pod:** \`$POD\` &nbsp; **Namespace:** \`$NAMESPACE\`"
@@ -293,6 +313,17 @@ jobs:
           if [[ -n "$AOF_PATH" ]]; then
             COMMENT+="
           gsutil cp $AOF_PATH ."
+          fi
+
+          if [[ -n "$OOM_DUMP_URLS" ]]; then
+            COMMENT+="
+
+          # OOM memory dumps:"
+            IFS=',' read -ra DUMP_URLS_CLI <<< "$OOM_DUMP_URLS"
+            for DUMP_PATH in "${DUMP_URLS_CLI[@]}"; do
+              COMMENT+="
+          gsutil cp $DUMP_PATH ."
+            done
           fi
 
           COMMENT+="
