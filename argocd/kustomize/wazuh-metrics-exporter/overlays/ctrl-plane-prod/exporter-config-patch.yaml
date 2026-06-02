@@ -1,0 +1,45 @@
+# Exporter config patch — ctrl-plane-prod
+# Adds environment-specific query exclusions:
+#   Critical: only count Verified=true + exclude accepted third-party images
+#   High: requires ControlID to exist, excludes accepted controls
+#   Medium: exclude accepted-risk GCP hardening checks
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-metrics-exporter-config
+  namespace: security
+data:
+  exporter.cfg: |
+    [DEFAULT]
+    QueryIntervalSecs = 60
+    QueryTimeoutSecs = 30
+    QueryIndices = wazuh-alerts-*
+    QueryOnError = preserve
+    QueryOnMissing = zero
+
+    # Critical: TruffleHog verified secrets — only Verified=true, exclude accepted images
+    [query_soc2_critical_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_critical"}},{"term":{"data.Verified":"true"}},{"range":{"@timestamp":{"gte":"now-24h"}}}],"must_not":[{"terms":{"data.ImageName":["docker.io/n8nio/n8n:2.6.3","docker.io/wazuh/wazuh-manager:4.14.4","docker.io/wazuh/wazuh-dashboard:4.14.4","docker.io/nginx/nginx-ingress:3.6.2","docker.io/bitnamilegacy/kubectl:latest","ghcr.io/omnistrate/endpoint-monitor-agent:0.1.102"]}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.SourceFile"}}}}
+
+    # High: Kubescape high-severity controls — dedup by ControlID
+    # Requires data.ControlID to exist (excludes Prowler/kube-bench which use
+    # different field names — those are tracked by query_prowler_fail_24h).
+    # Excludes accepted-risk kubescape controls for infra.
+    [query_soc2_high_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"terms":{"data.Severity":["high","High"]}},{"exists":{"field":"data.ControlID"}},{"range":{"@timestamp":{"gte":"now-24h"}}}],"must_not":[{"terms":{"data.ControlID":["C-0012","C-0057","C-0048","C-0045","C-0015","C-0038","C-0041","C-0046"]}},{"terms":{"data.CheckTitle":["Ensure VM Disks for Critical VMs Are Encrypted With Customer-Supplied Encryption Keys (CSEK)","Check for Virtual Machine Instances with Public IP Addresses","Ensure Service Account does not have admin privileges"]}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.ControlID"}}}}
+
+    # Medium: exclude accepted-risk GCP hardening checks
+    [query_soc2_medium_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"terms":{"data.Severity":["medium","Medium"]}},{"range":{"@timestamp":{"gte":"now-24h"}}}],"must_not":[{"terms":{"data.CheckTitle":["Ensure Compute Instances Have Confidential Computing Enabled","Ensure VM Disks for Critical VMs Are Encrypted With Customer-Supplied Encryption","Ensure \"Block Project-Wide SSH Keys\" Is Enabled for VM Instances","Enable VPC Flow Logs for VPC Subnets","Enable Cloud DNS Logging for VPC Networks","Ensure Os Login Is Enabled for a Project","Ensure Log Metric Filter and Alerts Exist for Project Ownership Assignments/Changes.","Ensure That the Log Metric Filter and Alerts Exist for Audit Configuration Changes.","Ensure That the Log Metric Filter and Alerts Exist for Cloud Storage IAM Permission Changes.","Ensure That the Log Metric Filter and Alerts Exist for Custom Role Changes.","Ensure That the Log Metric Filter and Alerts Exist for SQL Instance Configuration Changes.","Ensure That the Log Metric Filter and Alerts Exist for VPC Network Changes.","Ensure That the Log Metric Filter and Alerts Exist for VPC Network Firewall Rule Changes.","Ensure That the Log Metric Filter and Alerts Exist for VPC Network Route Changes.","Configure Google Cloud Audit Logs to Track All Activities","Ensure That IAM Users Are Not Assigned the Service Account User or Service Account Token Creator Roles at Project Level","Enforce Separation of Duties for Service-Account Related Roles","Ensure That There Are Only GCP-Managed Service Account Keys for Each Service Account"]}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.CheckTitle"}}}}
+
+    # Low: dedup by CheckTitle
+    [query_soc2_low_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"terms":{"data.Severity":["low","Low"]}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.CheckTitle"}}}}
+
+    # Prowler FAIL alerts — dedup by CheckTitle (unique failing checks)
+    [query_prowler_fail_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"prowler_compliance"}},{"term":{"data.Status":"FAIL"}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.CheckTitle"}}}}
+
+    # Total SOC 2 failure volume (any severity) — raw count for dashboards
+    [query_soc2_fail_total_24h]
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"range":{"@timestamp":{"gte":"now-24h"}}}]}}}

@@ -14,12 +14,14 @@ spec:
     helm:
       values: |
         # Expose Wazuh Manager API (TCP/55000) and Wazuh Indexer / OpenSearch
-        # (TCP/9200) on the nginx ingress LB. Both speak HTTPS with self-signed
+        # (TCP/9443 externally → 9200 internally) on the nginx ingress LB.
+        # Port 9443 avoids ISP/network filtering of port 9200 (well-known
+        # Elasticsearch port often blocked). Both speak HTTPS with self-signed
         # certs; nginx just passes the TCP stream through. Used by the AI
         # Security Triage script.
         tcp:
           "55000": "security/wazuh:55000"
-          "9200": "security/wazuh-indexer:9200"
+          "9443": "security/wazuh-indexer:9200"
         controller:
           replicaCount: 2
           allowSnippetAnnotations: true

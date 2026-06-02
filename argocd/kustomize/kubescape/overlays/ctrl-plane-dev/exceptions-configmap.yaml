@@ -195,5 +195,81 @@ data:
             "controlID": "C-0015"
           }
         ]
+      },
+      {
+        "name": "C-0038/C-0041: Infra DaemonSets requiring host PID/IPC/Network",
+        "policyType": "postureExceptionPolicy",
+        "actions": ["alertOnly"],
+        "resources": [
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "security",
+              "name": "wazuh-agent"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "security",
+              "name": "kube-bench-cis-scan"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "node-exporter",
+              "name": "node-exporter"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "security",
+              "name": "falco"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "gke-managed-networking-dra-driver",
+              "name": "networking-dra-driver"
+            }
+          },
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "kube-system",
+              "name": "efficiency-daemon"
+            }
+          }
+        ],
+        "posturePolicies": [
+          {
+            "controlID": "C-0038"
+          },
+          {
+            "controlID": "C-0041"
+          }
+        ]
+      },
+      {
+        "name": "C-0046: Wazuh agent requires NET_RAW for host monitoring",
+        "policyType": "postureExceptionPolicy",
+        "actions": ["alertOnly"],
+        "resources": [
+          {
+            "designatorType": "Attributes",
+            "attributes": {
+              "namespace": "security",
+              "name": "wazuh-agent"
+            }
+          }
+        ],
+        "posturePolicies": [
+          {
+            "controlID": "C-0046"
+          }
+        ]
       }
     ]

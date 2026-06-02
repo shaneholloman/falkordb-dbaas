@@ -40,6 +40,41 @@ describe('OmnistrateRepository', () => {
       await expect(repository.getInstance('')).rejects.toThrow();
     });
 
+    it('should use launch input params when result params are empty', async () => {
+      jest.spyOn(omnistrateClient.client, 'get').mockResolvedValue({
+        data: {
+          deploymentCellID: 'hc-123',
+          cloudProvider: 'gcp',
+          serviceId: 'service-id',
+          environmentId: 'environment-id',
+          productTierId: 'tier-id',
+          tierVersion: '1',
+          productTierName: 'Dedicated',
+          subscriptionId: 'subscription-id',
+          consumptionResourceInstanceResult: {
+            id: 'instance-id',
+            region: 'us-central1',
+            createdByUserId: 'user-id',
+            created_at: '2026-05-26T00:00:00Z',
+            status: 'RUNNING',
+            detailedNetworkTopology: {},
+            launch_input_params: {
+              FALKORDB_HOST: 'cluster-mz-0',
+              FALKORDB_PASSWORD: 'password',
+            },
+            result_params: {},
+          },
+        },
+      });
+
+      const result = await repository.getInstance('instance-id');
+
+      expect(result.params).toEqual({
+        FALKORDB_HOST: 'cluster-mz-0',
+        FALKORDB_PASSWORD: 'password',
+      });
+    });
+
     // Add more tests with real instance IDs in integration tests
   });
 

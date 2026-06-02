@@ -2,6 +2,7 @@ import { Cluster } from '../../types';
 import logger from '../../logger';
 import { createContainerServiceClient, getResourceGroupForCluster } from './client';
 import { AZURE } from '../../constants';
+import { forceDeleteNodePoolPods } from '../../services/ForceDeleteNodePoolPods';
 
 const OBSERVABILITY_POOL_NAME = 'obsrv';
 const SECURITY_POOL_NAME = 'security';
@@ -24,6 +25,8 @@ export async function deleteObservabilityNodePool(cluster: Cluster): Promise<voi
       }
       throw error;
     }
+
+    await forceDeleteNodePoolPods(cluster, OBSERVABILITY_POOL_NAME);
 
     await client.agentPools.beginDeleteAndWait(resourceGroup, cluster.name, OBSERVABILITY_POOL_NAME);
 
@@ -54,6 +57,8 @@ export async function deleteSecurityNodePool(cluster: Cluster): Promise<void> {
       throw error;
     }
 
+    await forceDeleteNodePoolPods(cluster, SECURITY_POOL_NAME);
+
     await client.agentPools.beginDeleteAndWait(resourceGroup, cluster.name, SECURITY_POOL_NAME);
 
     logger.info({ cluster: cluster.name }, 'Security node pool deleted.');
@@ -82,6 +87,8 @@ export async function deleteSecurityInfraNodePool(cluster: Cluster): Promise<voi
       }
       throw error;
     }
+
+    await forceDeleteNodePoolPods(cluster, SECURITY_INFRA_POOL_NAME);
 
     await client.agentPools.beginDeleteAndWait(resourceGroup, cluster.name, SECURITY_INFRA_POOL_NAME);
 

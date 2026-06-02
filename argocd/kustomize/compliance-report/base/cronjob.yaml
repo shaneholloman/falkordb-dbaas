@@ -3,7 +3,7 @@
 # Collects Prowler reports from GCS, exports Wazuh API data (agents, CVEs,
 # FIM events), and uploads the evidence bundle to the GCS evidence locker.
 #
-# Schedule: Every Sunday at 02:00 UTC
+# Schedule: Every Sunday at 08:30 UTC
 # Retention: Reports kept in GCS bucket under compliance-reports/YYYY/MM/DD/
 apiVersion: batch/v1
 kind: CronJob
@@ -14,7 +14,7 @@ metadata:
     app: compliance-report
     component: soc2-evidence
 spec:
-  schedule: "0 2 * * 0"
+  schedule: "30 8 * * 0"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 1

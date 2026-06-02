@@ -5,3 +5,5 @@ resources:
   - ../../base
 # Reuses the wazuh-indexer-cred SealedSecret already provisioned by the
 # wazuh-manager overlay in this overlay's destination (ctrl-plane-prod).
+patches:
+  - path: exporter-config-patch.yaml

@@ -18,12 +18,14 @@ data:
 
     # Critical: TruffleHog verified secrets — only Verified=true, exclude accepted images
     [query_soc2_critical_24h]
-    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_critical"}},{"term":{"data.Verified":"true"}},{"range":{"@timestamp":{"gte":"now-24h"}}}],"must_not":[{"terms":{"data.ImageName":["docker.io/n8nio/n8n:2.6.3","docker.io/wazuh/wazuh-manager:4.14.1","docker.io/wazuh/wazuh-dashboard:4.14.1","docker.io/nginx/nginx-ingress:3.6.2","docker.io/bitnamilegacy/kubectl:latest","ghcr.io/omnistrate/endpoint-monitor-agent:0.1.102"]}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.SourceFile"}}}}
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_critical"}},{"term":{"data.Verified":"true"}},{"range":{"@timestamp":{"gte":"now-24h"}}}],"must_not":[{"terms":{"data.ImageName":["docker.io/n8nio/n8n:2.6.3","docker.io/wazuh/wazuh-manager:4.14.4","docker.io/wazuh/wazuh-dashboard:4.14.4","docker.io/nginx/nginx-ingress:3.6.2","docker.io/bitnamilegacy/kubectl:latest","ghcr.io/omnistrate/endpoint-monitor-agent:0.1.102"]}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.SourceFile"}}}}
 
-    # High: Prowler/Kubescape high-severity controls — dedup by ControlID
-    # Excludes accepted-risk kubescape controls and Prowler checks for dev infra.
+    # High: Kubescape high-severity controls — dedup by ControlID
+    # Requires data.ControlID to exist (excludes Prowler/kube-bench which use
+    # different field names — those are tracked by query_prowler_fail_24h).
+    # Excludes accepted-risk kubescape controls for dev infra.
     [query_soc2_high_24h]
-    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"terms":{"data.Severity":["high","High"]}},{"range":{"@timestamp":{"gte":"now-24h"}}}],"must_not":[{"terms":{"data.ControlID":["C-0012","C-0057","C-0048","C-0045","C-0015"]}},{"terms":{"data.CheckTitle":["Ensure VM Disks for Critical VMs Are Encrypted With Customer-Supplied Encryption Keys (CSEK)","Check for Virtual Machine Instances with Public IP Addresses","Ensure Service Account does not have admin privileges"]}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.ControlID"}}}}
+    QueryJson = {"size":0,"query":{"bool":{"must":[{"term":{"rule.groups":"soc2_fail"}},{"terms":{"data.Severity":["high","High"]}},{"exists":{"field":"data.ControlID"}},{"range":{"@timestamp":{"gte":"now-24h"}}}],"must_not":[{"terms":{"data.ControlID":["C-0012","C-0057","C-0048","C-0045","C-0015","C-0038","C-0041","C-0046"]}},{"terms":{"data.CheckTitle":["Ensure VM Disks for Critical VMs Are Encrypted With Customer-Supplied Encryption Keys (CSEK)","Check for Virtual Machine Instances with Public IP Addresses","Ensure Service Account does not have admin privileges"]}}]}},"aggs":{"unique_findings":{"cardinality":{"field":"data.ControlID"}}}}
 
     # Medium: exclude accepted-risk GCP hardening checks
     [query_soc2_medium_24h]

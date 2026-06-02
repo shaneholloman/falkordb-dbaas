@@ -1,0 +1,195 @@
+# Alert exceptions — alerts matching any rule here are silently dropped
+# and NOT forwarded to Google Chat.
+#
+# Each exception is a JSON object with field matchers. ALL fields in an
+# exception must match for the alert to be suppressed (AND logic).
+# Multiple exceptions use OR logic (match any → suppress).
+#
+# Supported match fields:
+#   rule_id       — exact match on rule.id (string)
+#   level_below   — suppress if alert level < this value (int)
+#   field         — dot-notation path into the alert JSON (e.g. "data.ResourceId")
+#   pattern       — substring or regex to match against the field value
+#   is_regex      — if true, treat pattern as regex (default: false, substring)
+#   comment       — human-readable reason (ignored by code)
+#
+# The ConfigMap is mounted at /var/ossec/etc/alert-exceptions.json
+# and read by the custom-google-chat integration on each invocation.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-alert-exceptions
+  namespace: security
+  labels:
+    app: wazuh
+    component: alert-exceptions
+data:
+  alert-exceptions.json: |
+    {
+      "exceptions": [
+        {
+          "comment": "Google Groups cannot have MFA — false positive",
+          "rule_id": "100103",
+          "field": "data.ResourceId",
+          "pattern": "admin@falkordb.cloud",
+          "is_regex": false
+        },
+        {
+          "comment": "Google Groups cannot have MFA — false positive",
+          "rule_id": "100103",
+          "field": "data.ResourceId",
+          "pattern": "devops@falkordb.cloud",
+          "is_regex": false
+        },
+        {
+          "comment": "GKE PD CSI driver mounting PVs — normal kubelet operation, not container escape",
+          "rule_id": "100510",
+          "field": "data.output",
+          "pattern": "/var/lib/kubelet/plugins/kubernetes.io/csi/",
+          "is_regex": false
+        },
+        {
+          "comment": "GKE CSI driver unmounting pod PVC volume — normal kubelet volume lifecycle, not container escape",
+          "rule_id": "100510",
+          "field": "data.output",
+          "pattern": "/volumes/kubernetes.io~csi/",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubelet umount safety self-test — normal GKE operation, not container escape",
+          "rule_id": "100510",
+          "field": "data.output",
+          "pattern": "kubelet-detect-safe-umount",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubelet kernel module unload via nsenter (container=<NA>, image=<NA>) — host-level kubelet operation, not a container escape",
+          "rule_id": "100510",
+          "field": "data.output",
+          "pattern": "nsenter -t 1 -p -m -- rmmod",
+          "is_regex": false
+        },
+        {
+          "comment": "Unverified trufflehog correlation — trufflehog could not validate the secret live, treat as informational only (false-positive prone, especially URI detector on container images)",
+          "rule_id": "109002",
+          "field": "data.Verified",
+          "pattern": "false",
+          "is_regex": false
+        },
+        {
+          "comment": "Prowler self-test alert from in-cluster LB probe — synthetic test, not a real compliance finding",
+          "rule_id": "100101",
+          "field": "rule.description",
+          "pattern": "App-plane LB Test",
+          "is_regex": false
+        },
+        {
+          "comment": "Prowler self-test alert from localhost probe — synthetic test, not a real compliance finding",
+          "rule_id": "100101",
+          "field": "rule.description",
+          "pattern": "Localhost Test",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubescape MITRE ATT&CK C-0015 (List Kubernetes secrets) — controllers and operators routinely list secrets; not actionable on its own",
+          "rule_id": "100810",
+          "field": "data.ControlID",
+          "pattern": "C-0015",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubescape MITRE ATT&CK C-0012 (Credentials in configuration files) — noisy static heuristic; real secret exposure is handled by verified TruffleHog findings and weekly triage",
+          "rule_id": "100810",
+          "field": "data.ControlID",
+          "pattern": "C-0012",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubescape MITRE ATT&CK C-0045 (Writable hostPath mount) — required by GKE/node-level agents and tracked as accepted infrastructure risk",
+          "rule_id": "100810",
+          "field": "data.ControlID",
+          "pattern": "C-0045",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubescape MITRE ATT&CK C-0048 (HostPath mount) — required by node-level agents (Falco, Wazuh, Fluent-bit, kube-state-metrics) by design; not actionable on its own",
+          "rule_id": "100810",
+          "field": "data.ControlID",
+          "pattern": "C-0048",
+          "is_regex": false
+        },
+        {
+          "comment": "Kubescape MITRE ATT&CK C-0057 (Privileged container) — common for GKE system/node-level agents; tracked as accepted infrastructure risk unless paired with runtime evidence",
+          "rule_id": "100810",
+          "field": "data.ControlID",
+          "pattern": "C-0057",
+          "is_regex": false
+        },
+        {
+          "comment": "Prowler CSEK (Customer-Supplied Encryption Keys) check — we use Google-managed encryption keys by policy, CSEK not adopted; tracked as an accepted compliance gap",
+          "rule_id": "100103",
+          "field": "rule.description",
+          "pattern": "Customer-Supplied Encryption Keys",
+          "is_regex": false
+        },
+        {
+          "comment": "Falco container-escape via bind-mount on /var/lib/kubelet/plugins/kubernetes.io/csi/ — GKE PD CSI driver host mount, not container escape (container=<NA>, image=<NA>)",
+          "rule_id": "109001",
+          "field": "data.output",
+          "pattern": "/var/lib/kubelet/plugins/kubernetes.io/csi/",
+          "is_regex": false
+        },
+        {
+          "comment": "Trufflehog PrivateKey false positive — ssh2 npm test fixtures (publicly distributed RSA keys shipped with ssh2 library, e.g. inside n8n image); suppresses 100601 and any downstream correlations",
+          "field": "data.SourceFile",
+          "pattern": "ssh2/test/fixtures",
+          "is_regex": false
+        },
+        {
+          "comment": "Trufflehog stale/synthetic finding on bare 'backend:v1' image name — no such image is deployed (real images are us-central1-docker.pkg.dev/.../backend/<svc>:<ver>); likely a legacy test injection",
+          "field": "data.ImageName",
+          "pattern": "backend:v1",
+          "is_regex": false
+        },
+        {
+          "comment": "Rootcheck 'Process hidden from /proc' — false positive on cloud VMs (AWS EC2/GKE) where kernel threads and container-runtime processes are transient and appear hidden during rootcheck scan",
+          "rule_id": "521"
+        },
+        {
+          "comment": "Rootcheck 'Excessive number of hidden processes' — companion false positive to rule 521 on cloud VMs with many kernel threads",
+          "rule_id": "510"
+        },
+        {
+          "comment": "Falco 'Read Sensitive K8s Files' from host-level processes (kubelet, containerd) — container=<NA> means no container context; these are normal GKE node operations reading SA certs/tokens, not container credential theft",
+          "rule_id": "100501",
+          "field": "data.output",
+          "pattern": "container=<NA>",
+          "is_regex": false
+        },
+        {
+          "comment": "Log file size reduced — normal logrotate/truncation on GKE nodes, not evidence of log tampering",
+          "rule_id": "592"
+        },
+        {
+          "comment": "File integrity change on GKE system config — GKE auto-updates containerd and crictl configs during node maintenance",
+          "rule_id": "550",
+          "field": "full_log",
+          "pattern": "/host/etc/(containerd|crictl)",
+          "is_regex": true
+        },
+        {
+          "comment": "Prowler 'Block Project-Wide SSH Keys' — GKE manages node SSH keys at project level by design; cannot disable without breaking GKE node access",
+          "rule_id": "100101",
+          "field": "data.CheckTitle",
+          "pattern": "Block Project-Wide SSH Keys",
+          "is_regex": false
+        },
+        {
+          "comment": "Prowler CSEK check on VM disks — we use Google-managed encryption keys by policy; CSEK not adopted; tracked as accepted compliance gap",
+          "rule_id": "100103",
+          "field": "data.CheckTitle",
+          "pattern": "Customer-Supplied Encryption",
+          "is_regex": false
+        }
+      ]
+    }

@@ -1,10 +1,31 @@
 # IAM role for Prowler to perform read-only SOC 2 compliance scanning
-# in the AWS app-plane account. Assumed by Prowler CronJobs running
-# in EKS spoke clusters via IRSA (IAM Roles for Service Accounts).
+# in the AWS org account. Assumed from the ctrl-plane GKE cluster using
+# GCP Workload Identity Federation (no long-lived AWS credentials).
+#
+# Trust model: The prowler-uploader GCP service account on the ctrl-plane
+# cluster obtains a Google ID token via GKE Workload Identity. AWS trusts
+# accounts.google.com as an OIDC provider and allows AssumeRoleWithWebIdentity
+# when the token's `sub` matches the GCP SA unique ID.
 #
 # Attached policies:
 #   - SecurityAudit (AWS managed) — read-only access to most AWS services
 #   - ViewOnlyAccess (AWS managed) — additional read access for console resources
+
+data "aws_caller_identity" "current" {}
+
+# OIDC provider trusting Google — allows GCP service accounts to assume
+# AWS roles via AssumeRoleWithWebIdentity.
+# NOTE: For Google tokens, AWS maps `accounts.google.com:aud` to the `azp`
+# claim (the GCP SA unique ID), not the token's `aud`. The client_id_list
+# must include the GCP SA unique ID for AWS to accept the token.
+resource "aws_iam_openid_connect_provider" "google" {
+  url            = "https://accounts.google.com"
+  client_id_list = concat([var.prowler_gcp_sa_id], var.prowler_additional_gcp_sa_ids, var.google_oidc_additional_audiences)
+}
+
+locals {
+  all_prowler_sa_ids = concat([var.prowler_gcp_sa_id], var.prowler_additional_gcp_sa_ids)
+}
 
 resource "aws_iam_role" "prowler_scanner" {
   name = "prowler-soc2-scanner"
@@ -16,16 +37,14 @@ resource "aws_iam_role" "prowler_scanner" {
       {
         Effect = "Allow"
         Principal = {
-          Federated = "arn:aws:iam::${aws_organizations_account.account.id}:oidc-provider/${var.eks_oidc_issuer}"
+          Federated = aws_iam_openid_connect_provider.google.arn
         }
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringEquals = {
-            "${var.eks_oidc_issuer}:sub" = [
-              "system:serviceaccount:security:prowler",
-              "system:serviceaccount:security:grype",
-            ]
-            "${var.eks_oidc_issuer}:aud" = "sts.amazonaws.com"
+            "accounts.google.com:aud"  = local.all_prowler_sa_ids
+            "accounts.google.com:oaud" = "sts.amazonaws.com"
+            "accounts.google.com:sub"  = local.all_prowler_sa_ids
           }
         }
       }
@@ -33,9 +52,8 @@ resource "aws_iam_role" "prowler_scanner" {
   })
 
   tags = {
-    Purpose     = "soc2-compliance-scanning"
-    ManagedBy   = "tofu"
-    Environment = var.environment
+    Purpose   = "soc2-compliance-scanning"
+    ManagedBy = "tofu"
   }
 }
 
@@ -93,5 +111,5 @@ resource "aws_iam_role_policy" "prowler_additional" {
 
 output "prowler_role_arn" {
   value       = aws_iam_role.prowler_scanner.arn
-  description = "ARN of the Prowler IAM role for IRSA binding"
+  description = "ARN of the Prowler IAM role to assume for scanning"
 }

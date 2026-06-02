@@ -1,6 +1,6 @@
 import { Cluster } from '../../types';
 import logger from '../../logger';
-import { EKSClient, DescribeClusterCommand, CreateNodegroupCommand, DescribeNodegroupCommand, UpdateNodegroupConfigCommand } from '@aws-sdk/client-eks';
+import { EKSClient, DescribeClusterCommand, CreateNodegroupCommand, DescribeNodegroupCommand, UpdateNodegroupConfigCommand, ListNodegroupsCommand } from '@aws-sdk/client-eks';
 import { getAWSCredentials } from './client';
 import { AWS } from '../../constants';
 
@@ -18,7 +18,9 @@ export async function createObservabilityNodePool(cluster: Cluster): Promise<voi
       })
     );
 
-    const nodePools = awsCluster?.computeConfig?.nodePools;
+    const { nodegroups: nodePools } = await eksClient.send(
+      new ListNodegroupsCommand({ clusterName: cluster.name })
+    );
 
     if (nodePools?.includes("observability")) {
       // Node pool exists - check if scaling config needs updating
@@ -106,6 +108,10 @@ export async function createObservabilityNodePool(cluster: Cluster): Promise<voi
 
     logger.info({ cluster: cluster.name }, 'Observability node pool created.');
   } catch (error) {
+    if ((error as any)?.name === 'ResourceInUseException') {
+      logger.info({ cluster: cluster.name }, 'Observability node pool already exists.');
+      return;
+    }
     logger.error({ cluster: cluster.name, error, errorName: (error as any)?.name, errorMessage: (error as any)?.message }, 'Failed to ensure observability node pool');
   }
 }
@@ -119,7 +125,9 @@ export async function createSecurityNodePool(cluster: Cluster): Promise<void> {
       new DescribeClusterCommand({ name: cluster.name }),
     );
 
-    const nodePools = awsCluster?.computeConfig?.nodePools;
+    const { nodegroups: nodePools } = await eksClient.send(
+      new ListNodegroupsCommand({ clusterName: cluster.name }),
+    );
 
     if (nodePools?.includes('security')) {
       // Node pool exists - check if scaling config needs updating
@@ -207,6 +215,10 @@ export async function createSecurityNodePool(cluster: Cluster): Promise<void> {
 
     logger.info({ cluster: cluster.name }, 'Security node pool created (spot).');
   } catch (error) {
+    if ((error as any)?.name === 'ResourceInUseException') {
+      logger.info({ cluster: cluster.name }, 'Security node pool already exists.');
+      return;
+    }
     logger.error({ cluster: cluster.name, error, errorName: (error as any)?.name, errorMessage: (error as any)?.message }, 'Failed to ensure security node pool');
   }
 }
@@ -220,7 +232,9 @@ export async function createSecurityInfraNodePool(cluster: Cluster): Promise<voi
       new DescribeClusterCommand({ name: cluster.name }),
     );
 
-    const nodePools = awsCluster?.computeConfig?.nodePools;
+    const { nodegroups: nodePools } = await eksClient.send(
+      new ListNodegroupsCommand({ clusterName: cluster.name }),
+    );
 
     if (nodePools?.includes('security-infra')) {
       logger.info({ cluster: cluster.name }, 'Security-infra node pool already exists.');
@@ -257,6 +271,10 @@ export async function createSecurityInfraNodePool(cluster: Cluster): Promise<voi
 
     logger.info({ cluster: cluster.name }, 'Security-infra node pool created.');
   } catch (error) {
+    if ((error as any)?.name === 'ResourceInUseException') {
+      logger.info({ cluster: cluster.name }, 'Security-infra node pool already exists.');
+      return;
+    }
     logger.error({ cluster: cluster.name, error, errorName: (error as any)?.name, errorMessage: (error as any)?.message }, 'Failed to ensure security-infra node pool');
   }
 }

@@ -22,3 +22,8 @@ variable "cluster_user_role_audience" {
   description = "The audience for the cluster user role"
   type        = string
 }
+
+variable "cluster_user_role_audiences" {
+  description = "List of audiences for the cluster user role trust policy"
+  type        = list(string)
+}

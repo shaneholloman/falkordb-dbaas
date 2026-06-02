@@ -28,6 +28,9 @@ spec:
       nodeSelector:
         node_pool: security
       securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
@@ -47,9 +50,10 @@ spec:
           emptyDir: {}
       containers:
         - name: securityadmin
-          image: "wazuh/wazuh-indexer:4.14.1"
+          image: "wazuh/wazuh-indexer:4.14.4"
           imagePullPolicy: IfNotPresent
           securityContext:
+            runAsUser: 1000
             runAsNonRoot: true
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

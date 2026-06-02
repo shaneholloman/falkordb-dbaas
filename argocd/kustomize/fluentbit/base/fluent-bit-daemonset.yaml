@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  namespace: fluent-bit
+  labels:
+    app.kubernetes.io/name: fluent-bit
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fluent-bit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fluent-bit
+      annotations:
+        configmap.reloader.stakater.com/reload: "fluent-bit-config,fluent-bit-lua-scripts"
+        fluentbit.falkordb.com/config-revision: "2026-05-25-workload-inference"
+    spec:
+      serviceAccountName: fluent-bit
+      containers:
+        - name: fluent-bit
+          image: docker.io/fluent/fluent-bit:4.0.6
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+          env:
+            - name: HOST_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CLUSTER_NAME
+              value: unknown
+            - name: CLOUD_PROVIDER
+              value: unknown
+            - name: CLOUD_REGION
+              value: unknown
+            - name: NODE_POOL
+              value: unknown
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: varlogjournal
+              mountPath: /var/log/journal
+              readOnly: true
+            - name: runlogjournal
+              mountPath: /run/log/journal
+              readOnly: true
+            - name: fluent-bit-config
+              mountPath: /fluent-bit/etc/
+            - name: fluent-bit-lua-scripts
+              mountPath: /fluent-bit/config/victoria-logs-filter.lua
+              subPath: victoria-logs-filter.lua
+            - name: fluent-bit-lua-scripts
+              mountPath: /fluent-bit/config/victoria-logs-error-label.lua
+              subPath: victoria-logs-error-label.lua
+            - name: fluent-bit-lua-scripts
+              mountPath: /fluent-bit/config/victoria-logs-label-normalizer.lua
+              subPath: victoria-logs-label-normalizer.lua
+      # Mount the ConfigMap with the Fluent Bit configuration.
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+        - name: varlogjournal
+          hostPath:
+            path: /var/log/journal
+            type: DirectoryOrCreate
+        - name: runlogjournal
+          hostPath:
+            path: /run/log/journal
+            type: DirectoryOrCreate
+        - name: fluent-bit-config
+          configMap:
+            name: fluent-bit-config
+        - name: fluent-bit-lua-scripts
+          configMap:
+            name: fluent-bit-lua-scripts
+      # Tolerations are important for the DaemonSet to run on all nodes,
+      # including control plane nodes.
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+        - operator: Exists
+          effect: NoExecute

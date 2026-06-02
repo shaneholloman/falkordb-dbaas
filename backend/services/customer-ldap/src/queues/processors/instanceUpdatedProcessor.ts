@@ -46,13 +46,13 @@ export async function processInstanceUpdated(
       throw new Error(`Instance ${instanceId} not found in Omnistrate - will retry`);
     }
 
-    const resultParams = instance.resultParams || {};
-    const falkordbUsername = resultParams.falkordbUser;
-    const falkordbPassword = resultParams.falkordbPassword;
+    const params = instance.params || {};
+    const falkordbUsername = params.falkordbUser;
+    const falkordbPassword = params.falkordbPassword;
 
     if (!falkordbUsername || !falkordbPassword) {
-      logger.error({ hasResultParams: !!instance.resultParams }, 'Missing FalkorDB credentials in resultParams');
-      throw new Error('Missing falkordbUser or falkordbPassword in instance resultParams - will retry');
+      logger.error({ hasParams: !!instance.params }, 'Missing FalkorDB credentials in params');
+      throw new Error('Missing falkordbUser or falkordbPassword in instance params - will retry');
     }
 
     const cloudProvider = instance.cloudProvider;

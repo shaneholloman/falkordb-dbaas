@@ -10,7 +10,7 @@ metadata:
   name: kube-bench-cis-scan
   namespace: security
 spec:
-  schedule: "0 3 * * 0"
+  schedule: "0 7 * * 0"
   timeZone: "Etc/UTC"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1

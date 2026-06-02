@@ -8,8 +8,10 @@ module "project" {
   folder_id       = var.project_parent_id
   billing_account = var.billing_account_id
   lien            = true
+  deletion_policy = "PREVENT"
 
   create_project_sa = false
+
 
   activate_apis = [
     "container.googleapis.com",
@@ -143,6 +145,13 @@ resource "google_project_iam_member" "argocd_sa_k8s_dev" {
   project = module.project.project_id
   role    = "roles/container.clusterAdmin"
   member  = "serviceAccount:${var.argocd_sa_email}"
+}
+
+# Allow argocd-sa to act as the default compute SA when creating node pools
+resource "google_service_account_iam_member" "argocd_sa_compute_sa_user" {
+  service_account_id = "projects/${module.project.project_id}/serviceAccounts/${module.project.project_number}-compute@developer.gserviceaccount.com"
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${var.argocd_sa_email}"
 }
 
 # Dedicated SA for RDB bucket access (upload/download via rdb-uploader workflow)

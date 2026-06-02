@@ -5,7 +5,7 @@
 # This runs in-cluster with Workload Identity, so the GitHub Action does NOT
 # need gcloud/aws CLI access — it reads everything from GCS.
 #
-# Schedule: Every Sunday at 01:00 UTC (before compliance-report at 02:00)
+# Schedule: Every Sunday at 06:30 UTC (before compliance-report at 08:30)
 # Results: gs://BUCKET/cloud-evidence/YYYY/MM/DD/<cloud-provider>/
 apiVersion: batch/v1
 kind: CronJob
@@ -16,7 +16,7 @@ metadata:
     app: cloud-evidence
     component: soc2-evidence
 spec:
-  schedule: "0 1 * * 0"
+  schedule: "30 6 * * 0"
   timeZone: "Etc/UTC"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
