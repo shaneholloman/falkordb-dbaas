@@ -9,6 +9,12 @@ export const TaskTypesSchema = Type.Union([
 ]);
 export type TaskTypesType = Static<typeof TaskTypesSchema>;
 
+export const RDBExportTaskTypesSchema = Type.Union([
+  Type.Literal('SingleShardRDBExport'),
+  Type.Literal('MultiShardRDBExport'),
+]);
+export type RDBExportTaskTypesType = Static<typeof RDBExportTaskTypesSchema>;
+
 export const RDBExportDefaultTargetSchema = Type.Object({
   type: Type.Optional(Type.Literal('default')),
 }, { additionalProperties: false });
@@ -192,7 +198,7 @@ export type TaskStatusType = Static<typeof TaskStatusSchema>;
 
 export const ExportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
-  type: TaskTypesSchema,
+  type: RDBExportTaskTypesSchema,
   createdAt: Type.String(),
   updatedAt: Type.String(),
   status: TaskStatusSchema,
@@ -208,7 +214,7 @@ export type ExportRDBTaskType = Static<typeof ExportRDBTaskSchema>;
 
 export const PublicExportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
-  type: TaskTypesSchema,
+  type: RDBExportTaskTypesSchema,
   createdAt: Type.String(),
   updatedAt: Type.String(),
   status: TaskStatusSchema,

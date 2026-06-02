@@ -13,6 +13,7 @@ import {
   TaskTypesType,
 } from '@falkordb/schemas/global';
 import assert from 'assert';
+import { randomUUID } from 'crypto';
 import { ApiError } from '@falkordb/errors';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 
@@ -108,7 +109,7 @@ export class ExportRDBController {
   }
 
   private _resolveDestinationFileName(instanceId: string, target: RDBExportTargetType): string {
-    const defaultFileName = `exports/${instanceId}/${crypto.randomUUID()}.rdb`;
+    const defaultFileName = `exports/${instanceId}/${randomUUID()}.rdb`;
 
     switch (target.type) {
       case 'gcs':

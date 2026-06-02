@@ -1,6 +1,7 @@
 import { FlowJob } from 'bullmq';
-import { ExportRDBTaskType } from '@falkordb/schemas/global';
-import { RdbExportTaskNames } from '@falkordb/schemas/services/db-importer-worker/v1';
+import { ExportRDBTaskType, PublicExportRDBTaskSchema } from '@falkordb/schemas/global';
+import { RdbExportCopyRDBToBucketProcessorDataSchema, RdbExportTaskNames } from '@falkordb/schemas/services/db-importer-worker/v1';
+import { Value } from '@sinclair/typebox/value';
 import { TaskQueueBullMQRepository } from '../repositories/tasksQueue/TaskQueueBullMQRepository';
 
 jest.mock('bullmq', () => ({
@@ -12,6 +13,15 @@ jest.mock('bullmq', () => ({
 const logger = {
   debug: jest.fn(),
 };
+
+const envKeys = [
+  'CTRL_PLANE_PROJECT_ID',
+  'CTRL_PLANE_CLUSTER_ID',
+  'CTRL_PLANE_REGION',
+  'NAMESPACE',
+] as const;
+
+const previousEnv: Partial<Record<typeof envKeys[number], string>> = {};
 
 const serviceAccountCredentials = {
   type: 'service_account' as const,
@@ -92,10 +102,24 @@ const makeMultiShardTask = (target?: ExportRDBTaskType['payload']['destination']
 
 describe('export target flow', () => {
   beforeAll(() => {
+    for (const key of envKeys) {
+      previousEnv[key] = process.env[key];
+    }
+
     process.env.CTRL_PLANE_PROJECT_ID = 'ctrl-project';
     process.env.CTRL_PLANE_CLUSTER_ID = 'ctrl-cluster';
     process.env.CTRL_PLANE_REGION = 'us-central1';
     process.env.NAMESPACE = 'db-importer-worker';
+  });
+
+  afterAll(() => {
+    for (const key of envKeys) {
+      if (previousEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previousEnv[key];
+      }
+    }
   });
 
   beforeEach(() => {
@@ -123,10 +147,8 @@ describe('export target flow', () => {
 
     expect(flow.name).toBe(RdbExportTaskNames.RdbExportCopyRdbToBucket);
     expect(findJob(flow, RdbExportTaskNames.RdbExportRequestReadSignedURL)).toBeUndefined();
-    expect(flow.data.target).toEqual(expect.objectContaining({
-      type: 'gcs',
-      bucketName: 'customer-bucket',
-    }));
+    expect(flow.data).not.toHaveProperty('target');
+    expect(JSON.stringify(flow)).not.toContain(serviceAccountCredentials.private_key);
   });
 
   it('uses copy RDB as the root job after merge for customer S3 multi shard exports', () => {
@@ -148,9 +170,10 @@ describe('export target flow', () => {
       taskId: 'task-multi',
       bucketName: 'falkordb-export-bucket',
       fileName: 'exports/instance-id/export.rdb',
-      target: expect.objectContaining({ type: 's3' }),
     }));
     expect(flow.data).not.toHaveProperty('podId');
+    expect(flow.data).not.toHaveProperty('target');
+    expect(JSON.stringify(flow)).not.toContain('secret-key');
   });
 
   it('uses read signed URL as the root job after merge for default multi shard exports', () => {
@@ -160,5 +183,34 @@ describe('export target flow', () => {
 
     expect(flow.name).toBe(RdbExportTaskNames.RdbExportRequestReadSignedURL);
     expect(findJob(flow, RdbExportTaskNames.RdbExportMonitorRDBMerge)).toBeDefined();
+  });
+
+  it('does not allow import task types in the public export task schema', () => {
+    expect(Value.Check(PublicExportRDBTaskSchema, {
+      ...makeSingleShardTask(),
+      type: 'RDBImport',
+    })).toBe(false);
+  });
+
+  it('requires pod upload metadata only for copy jobs that include podId', () => {
+    const stagedCopyJob = {
+      taskId: 'task-id',
+      bucketName: 'falkordb-export-bucket',
+      fileName: 'exports/instance-id/export.rdb',
+    };
+
+    expect(Value.Check(RdbExportCopyRDBToBucketProcessorDataSchema, stagedCopyJob)).toBe(true);
+    expect(Value.Check(RdbExportCopyRDBToBucketProcessorDataSchema, {
+      ...stagedCopyJob,
+      podId: 'node-s-0',
+    })).toBe(false);
+    expect(Value.Check(RdbExportCopyRDBToBucketProcessorDataSchema, {
+      ...stagedCopyJob,
+      cloudProvider: 'gcp',
+      clusterId: 'cluster-id',
+      region: 'us-central1',
+      instanceId: 'instance-id',
+      podId: 'node-s-0',
+    })).toBe(true);
   });
 });

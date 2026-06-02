@@ -1,4 +1,4 @@
-import { ExportRDBTaskType, ImportRDBTaskType, MultiShardRDBExportPayloadType } from "@falkordb/schemas/global";
+import { ExportRDBTaskType, ImportRDBTaskType, MultiShardRDBExportPayloadType, sanitizeForLogging } from "@falkordb/schemas/global";
 import { FastifyBaseLogger } from "fastify";
 import { FlowChildJob, FlowJob, FlowProducer, JobsOptions } from 'bullmq';
 import { Static, TSchema } from "@sinclair/typebox";
@@ -30,7 +30,7 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
     opts: JobsOptions = { failParentOnFailure: true },
     children?: FlowChildJob[],
   ): FlowJob {
-    this._opts.logger.debug(`Creating job node ${name}`);
+    this._opts.logger.debug({ name, data: sanitizeForLogging(data) }, 'Creating job node');
     Value.Assert(schema, data);
     return {
       name: name,
@@ -61,7 +61,6 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
         podId: task.payload.podId,
         bucketName: task.payload.destination.bucketName,
         fileName: task.payload.destination.fileName,
-        target: task.payload.destination.target,
       },
       {
         failParentOnFailure: true,
@@ -230,7 +229,6 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
           taskId: task.taskId,
           bucketName: task.payload.destination.bucketName,
           fileName: task.payload.destination.fileName,
-          target: task.payload.destination.target,
         },
         {
           failParentOnFailure: true,
@@ -496,7 +494,7 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
     assert(process.env.CTRL_PLANE_REGION, 'CTRL_PLANE_REGION is not set');
     assert(process.env.NAMESPACE, 'NAMESPACE is not set');
     const flow = this._createExportRDBFlow(task)
-    this._opts.logger.debug(`Submitting export RDB task ${task.taskId} to queue: ${JSON.stringify(flow, null, 2)}`);
+    this._opts.logger.debug({ taskId: task.taskId, flow: sanitizeForLogging(flow) }, 'Submitting export RDB task to queue');
     await this._producer.add(
       flow,
     )
@@ -511,7 +509,7 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
     assert(process.env.CTRL_PLANE_REGION, 'CTRL_PLANE_REGION is not set');
     assert(process.env.NAMESPACE, 'NAMESPACE is not set');
     const flow = this._createImportRDBFlow(task)
-    this._opts.logger.debug(`Submitting import RDB task ${task.taskId} to queue: ${JSON.stringify(flow, null, 2)}`);
+    this._opts.logger.debug({ taskId: task.taskId, flow }, 'Submitting import RDB task to queue');
     await this._producer.add(
       flow,
     )

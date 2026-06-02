@@ -18,6 +18,7 @@ export const getExportTargetWriteUrl = async (
   }
 
   if (target.type === 'gcs') {
+    const targetFileName = target.fileName ?? fileName;
     const storage = new Storage({
       projectId: target.credentials.project_id as string | undefined,
       credentials: target.credentials,
@@ -25,7 +26,7 @@ export const getExportTargetWriteUrl = async (
 
     const [writeUrl] = await storage
       .bucket(target.bucketName)
-      .file(fileName)
+      .file(targetFileName)
       .getSignedUrl({
         version: 'v4',
         action: 'write',
@@ -35,6 +36,8 @@ export const getExportTargetWriteUrl = async (
 
     return writeUrl;
   }
+
+  const targetKey = target.key ?? fileName;
 
   const s3Client = new S3Client({
     region: target.region,
@@ -49,7 +52,7 @@ export const getExportTargetWriteUrl = async (
     s3Client,
     new PutObjectCommand({
       Bucket: target.bucketName,
-      Key: fileName,
+      Key: targetKey,
       ContentType: contentType,
     }),
     { expiresIn: Math.floor(expiresIn / 1000) },
@@ -65,19 +68,22 @@ export const makeExportOutputTarget = (
   }
 
   if (target.type === 'gcs') {
+    const targetFileName = target.fileName ?? fileName;
     return {
       type: 'gcs',
       bucketName: target.bucketName,
-      fileName,
-      path: `gs://${target.bucketName}/${fileName}`,
+      fileName: targetFileName,
+      path: `gs://${target.bucketName}/${targetFileName}`,
     };
   }
+
+  const targetKey = target.key ?? fileName;
 
   return {
     type: 's3',
     bucketName: target.bucketName,
-    key: fileName,
+    key: targetKey,
     region: target.region,
-    path: `s3://${target.bucketName}/${fileName}`,
+    path: `s3://${target.bucketName}/${targetKey}`,
   };
 };

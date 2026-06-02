@@ -4,6 +4,7 @@ import { MongoClient } from 'mongodb';
 import { RDBTask, RDBTaskType } from "../../schemas/rdb-task";
 import { Logger } from "pino";
 import { flatten } from "../../utils/flatten";
+import { sanitizeForLogging } from "@falkordb/schemas/global";
 
 export class TasksDBMongoRepository implements ITasksDBRepository {
 
@@ -25,7 +26,7 @@ export class TasksDBMongoRepository implements ITasksDBRepository {
   async getTaskById(taskId: string) {
     const db = this._client.db(this._db);
     const task = await db.collection(this._collection).findOne({ taskId });
-    this._options.logger.info({ taskId, task }, 'getTaskById');
+    this._options.logger.info({ taskId, task: sanitizeForLogging(task) }, 'getTaskById');
     if (!task) {
       return null;
     }
