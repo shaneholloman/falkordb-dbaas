@@ -7,6 +7,49 @@ import { ITasksDBRepository } from '../../../repositories/tasks';
 import { ApiError } from '@falkordb/errors';
 import { decode, JwtPayload } from 'jsonwebtoken';
 import { OmnistrateRepository } from '../../../repositories/omnistrate/OmnistrateRepository';
+import { ExportRDBTaskType, PublicTaskDocumentType, RDBExportPublicTargetType, RDBExportTargetType, TaskDocumentType } from '@falkordb/schemas/global';
+
+const sanitizeExportTarget = (target?: RDBExportTargetType): RDBExportPublicTargetType | undefined => {
+  switch (target?.type) {
+    case 'gcs':
+      return {
+        type: 'gcs',
+        bucketName: target.bucketName,
+        fileName: target.fileName,
+      };
+    case 's3':
+      return {
+        type: 's3',
+        bucketName: target.bucketName,
+        key: target.key,
+        region: target.region,
+      };
+    case 'default':
+      return { type: 'default' };
+    default:
+      return undefined;
+  }
+};
+
+const sanitizeTaskDocument = (task: TaskDocumentType): PublicTaskDocumentType => {
+  if (task.type !== 'SingleShardRDBExport' && task.type !== 'MultiShardRDBExport') {
+    return task;
+  }
+
+  const exportTask = task as ExportRDBTaskType;
+  const target = sanitizeExportTarget(exportTask.payload.destination.target);
+
+  return {
+    ...exportTask,
+    payload: {
+      ...exportTask.payload,
+      destination: {
+        ...exportTask.payload.destination,
+        target,
+      },
+    },
+  };
+};
 
 export const listTasksHandler: RouteHandlerMethod<
   undefined,
@@ -50,7 +93,10 @@ export const listTasksHandler: RouteHandlerMethod<
       pageSize,
     });
 
-    reply.send(data);
+    reply.send({
+      ...data,
+      data: data.data.map(sanitizeTaskDocument),
+    });
   } catch (error) {
     logger.error(error, 'Error listing tasks');
 

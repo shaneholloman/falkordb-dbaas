@@ -1,15 +1,16 @@
 import { type Static, Type } from '@sinclair/typebox';
-import { SupportedCloudProviderSchema } from '../../../../global';
+import { RDBExportTargetSchema, SupportedCloudProviderSchema } from '../../../../global';
 
 export const RdbExportCopyRDBToBucketProcessorDataSchema = Type.Object({
   taskId: Type.String(),
-  instanceId: Type.String(),
-  podId: Type.String(),
-  region: Type.String(),
-  cloudProvider: SupportedCloudProviderSchema,
-  clusterId: Type.String(),
+  instanceId: Type.Optional(Type.String()),
+  podId: Type.Optional(Type.String()),
+  region: Type.Optional(Type.String()),
+  cloudProvider: Type.Optional(SupportedCloudProviderSchema),
+  clusterId: Type.Optional(Type.String()),
   bucketName: Type.String(),
   fileName: Type.String(),
+  target: Type.Optional(RDBExportTargetSchema),
 });
 export type RdbExportCopyRDBToBucketProcessorData = Static<typeof RdbExportCopyRDBToBucketProcessorDataSchema>;
 
