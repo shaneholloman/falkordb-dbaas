@@ -161,3 +161,50 @@ spec:
               is in a crash loop. It has crashed {{ $value }} times in the last 10 minutes.
               This requires immediate attention to prevent service disruption.
             view_logs: 'https://grafana.observability{{ if eq $labels.environment "dev" }}.dev{{ end }}.internal.falkordb.cloud/explore?orgId=1&left=%7B%22datasource%22%3A%22VictoriaLogs%22%2C%22queries%22%3A%5B%7B%22expr%22%3A%22pod%3A%5C%22{{ $labels.pod }}%5C%22%20AND%20namespace%3A%5C%22{{ $labels.namespace }}%5C%22%20AND%20container%3A%5C%22service%5C%22%22%7D%5D%7D'
+
+        - alert: ContainerKilledBySIGABRT
+          # LogsQL: Detect intentional SIGABRT (signal 6) sent by our OOM handling automation.
+          # When cgroup memory reaches 90%, we send SIGABRT via external kill to get a core dump.
+          # This is NOT a Redis bug — suppress RedisCrashed/RedisCrashLoop via inhibit rules.
+          # Matching "si_code: 0" (SI_USER) ensures we only catch externally-sent SIGABRT.
+          # Redis internal abort() (assertion failure) produces si_code: -6 (SI_TKILL) and
+          # will NOT match this alert, correctly falling through to RedisCrashed instead.
+          expr: |
+            ~"crashed by signal: 6, si_code: 0" and -pod:~"vmalert.*" | 
+            stats by (pod, namespace, cluster, environment) count() as crash_count    
+          for: 0m
+          keep_firing_for: 5m
+          labels:
+            severity: warning
+            cluster: "{{ $labels.cluster }}"
+            environment: "{{ $labels.environment }}"
+          annotations:
+            summary: "Container killed by SIGABRT (OOM automation) in {{ $labels.pod }} ({{ $labels.namespace }})"
+            description: |
+              [cluster={{ $labels.cluster }}] Container in pod '{{ $labels.pod }}' in namespace '{{ $labels.namespace }}' 
+              was killed by SIGABRT (signal 6) as part of automated OOM handling. This is an intentional kill 
+              triggered when cgroup memory reached 90% to capture diagnostic data (core dump).
+              The RedisCrashed alert is suppressed for this event.
+            view_logs: 'https://grafana.observability{{ if eq $labels.environment "dev" }}.dev{{ end }}.internal.falkordb.cloud/explore?orgId=1&left=%7B%22datasource%22%3A%22VictoriaLogs%22%2C%22queries%22%3A%5B%7B%22expr%22%3A%22pod%3A%5C%22{{ $labels.pod }}%5C%22%20AND%20namespace%3A%5C%22{{ $labels.namespace }}%5C%22%20AND%20container%3A%5C%22service%5C%22%22%7D%5D%7D'
+
+        - alert: ContainerKilledBySIGABRTLoop
+          # LogsQL: Detect repeated external SIGABRT kills (2+ in 10 minutes) — indicates the pod
+          # is stuck in an OOM → SIGABRT → restart → OOM cycle and needs manual intervention.
+          # Uses si_code: 0 (SI_USER) to only match externally-sent SIGABRT from OOM automation,
+          # not internal abort() from genuine Redis/FalkorDB assertion failures.
+          expr: |
+            ~"crashed by signal: 6, si_code: 0" and -pod:~"vmalert.*" and _time:10m | 
+            stats by (pod, namespace, cluster, environment) count() as crash_count | 
+            filter crash_count :>= 2
+          for: 1m
+          labels:
+            severity: critical
+            cluster: "{{ $labels.cluster }}"
+            environment: "{{ $labels.environment }}"
+          annotations:
+            summary: "CRITICAL: Repeated SIGABRT kills (OOM loop) in {{ $labels.pod }} ({{ $labels.namespace }})"
+            description: |
+              [cluster={{ $labels.cluster }}] CRITICAL: Pod '{{ $labels.pod }}' in namespace '{{ $labels.namespace }}' 
+              has been killed by SIGABRT {{ $value }} times in the last 10 minutes. The instance is stuck in an 
+              OOM → SIGABRT → restart → OOM loop and requires immediate attention (likely needs a memory scale-up).
+            view_logs: 'https://grafana.observability{{ if eq $labels.environment "dev" }}.dev{{ end }}.internal.falkordb.cloud/explore?orgId=1&left=%7B%22datasource%22%3A%22VictoriaLogs%22%2C%22queries%22%3A%5B%7B%22expr%22%3A%22pod%3A%5C%22{{ $labels.pod }}%5C%22%20AND%20namespace%3A%5C%22{{ $labels.namespace }}%5C%22%20AND%20container%3A%5C%22service%5C%22%22%7D%5D%7D'
