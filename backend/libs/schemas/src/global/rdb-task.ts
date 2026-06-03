@@ -50,9 +50,9 @@ export const RDBExportS3TargetSchema = Type.Object({
 }, { additionalProperties: false });
 
 export const RDBExportTargetSchema = Type.Union([
-  RDBExportDefaultTargetSchema,
   RDBExportGCSTargetSchema,
   RDBExportS3TargetSchema,
+  RDBExportDefaultTargetSchema,
 ]);
 export type RDBExportTargetType = Static<typeof RDBExportTargetSchema>;
 
@@ -68,9 +68,9 @@ export const RDBExportPublicS3TargetSchema = Type.Object({
 }, { additionalProperties: false });
 
 export const RDBExportPublicTargetSchema = Type.Union([
-  RDBExportDefaultTargetSchema,
   RDBExportPublicGCSTargetSchema,
   RDBExportPublicS3TargetSchema,
+  RDBExportDefaultTargetSchema,
 ]);
 export type RDBExportPublicTargetType = Static<typeof RDBExportPublicTargetSchema>;
 
