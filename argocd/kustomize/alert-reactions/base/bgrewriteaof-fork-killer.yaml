@@ -20,7 +20,7 @@ spec:
         echo "Namespace: ${NAMESPACE}"
         echo "=========================================="
 
-        echo "Executing stuck_bgrewriteaof_fork_killer on pod ${POD_NAME} in namespace ${NAMESPACE}..."
+        echo "Executing fork-killer logic on pod ${POD_NAME} in namespace ${NAMESPACE}..."
 
         kubectl exec -n "${NAMESPACE}" "${POD_NAME}" -c service -- bash -c '
         set -u

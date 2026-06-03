@@ -232,4 +232,4 @@ spec:
               automated remediation of a stuck AOF rewrite. The FalkorDBAOFPendingRewriteCritical alert
               triggered this reaction but the fork could not be killed.
               Failure count: {{ $value }}. Manual intervention is required.
-            view_logs: 'https://grafana.observability{{ if eq $labels.environment "dev" }}.dev{{ end }}.internal.falkordb.cloud/explore?orgId=1&left=%7B%22datasource%22%3A%22VictoriaLogs%22%2C%22queries%22%3A%5B%7B%22expr%22%3A%22%5C%22FORK_KILL_FAILED%3A%5C%22%20AND%20namespace%3A%5C%22observability%5C%22%22%7D%5D%7D'
+            view_logs: 'https://grafana.observability{{ if eq $labels.environment "dev" }}.dev{{ end }}.internal.falkordb.cloud/explore?orgId=1&left=%7B%22datasource%22%3A%22VictoriaLogs%22%2C%22queries%22%3A%5B%7B%22expr%22%3A%22pod%3A%5C%22{{ $labels.pod }}%5C%22%20AND%20namespace%3A%5C%22{{ $labels.namespace }}%5C%22%22%7D%5D%7D'
