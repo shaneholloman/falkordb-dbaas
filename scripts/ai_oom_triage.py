@@ -39,8 +39,7 @@ from urllib.parse import urlencode, quote
 from zoneinfo import ZoneInfo
 
 import requests
-from copilot import CopilotClient, SubprocessConfig
-from copilot.session import PermissionHandler
+from copilot import CopilotClient, PermissionHandler
 
 from oom_triage_tools import ALL_TOOLS, cleanup
 from oom_handler import CHAT_MENTIONS
@@ -807,68 +806,69 @@ async def run_triage(args):
     """Run the AI OOM triage session."""
     triage_report = None
 
-    github_token = os.environ.get("GITHUB_TOKEN", "")
-
-    async with CopilotClient(SubprocessConfig(github_token=github_token)) as client:
-        async with await client.create_session(
-            on_permission_request=PermissionHandler.approve_all,
-            model="claude-opus-4.6",
-            streaming=True,
-            tools=ALL_TOOLS,
-            system_message={
+    client = CopilotClient()
+    await client.start()
+    try:
+        session = await client.create_session({
+            "on_permission_request": PermissionHandler.approve_all,
+            "model": "claude-opus-4.6",
+            "streaming": True,
+            "tools": ALL_TOOLS,
+            "system_message": {
                 "mode": "append",
                 "content": SYSTEM_MESSAGE,
             },
-        ) as session:
-            done = asyncio.Event()
-            messages = []
-            streamed_chunks = []
-            turn_active = False
+        })
+        done = asyncio.Event()
+        messages = []
+        streamed_chunks = []
+        turn_active = False
 
-            def on_event(event):
-                nonlocal turn_active
-                t = event.type.value
-                print(f"  [{t}]", file=sys.stderr, flush=True)
-                if t in ("assistant.message_delta", "assistant.streaming_delta"):
-                    delta = event.data.delta_content or ""
-                    streamed_chunks.append(delta)
-                    print(delta, end="", flush=True)
-                elif t == "assistant.message":
-                    messages.append(event.data.content)
-                    print()
-                elif t == "assistant.turn_start":
-                    turn_active = True
-                elif t == "assistant.turn_end":
-                    turn_active = False
-                elif t == "tool.execution_start":
-                    name = getattr(event.data, 'tool_name', '') or getattr(event.data, 'name', '') or ''
-                    print(f"🔧 Running tool: {name}", flush=True)
-                elif t == "tool.execution_complete":
-                    name = getattr(event.data, 'tool_name', '') or getattr(event.data, 'name', '') or ''
-                    print(f"✅ Tool complete: {name}", flush=True)
-                elif t == "session.idle":
-                    if not turn_active:
-                        done.set()
-                elif t == "session.error":
-                    print(f"Session error: {getattr(event.data, 'message', event.data)}", file=sys.stderr, flush=True)
+        def on_event(event):
+            nonlocal turn_active
+            t = event.type.value
+            print(f"  [{t}]", file=sys.stderr, flush=True)
+            if t in ("assistant.message_delta", "assistant.streaming_delta"):
+                delta = event.data.delta_content or ""
+                streamed_chunks.append(delta)
+                print(delta, end="", flush=True)
+            elif t == "assistant.message":
+                messages.append(event.data.content)
+                print()
+            elif t == "assistant.turn_start":
+                turn_active = True
+            elif t == "assistant.turn_end":
+                turn_active = False
+            elif t == "tool.execution_start":
+                name = getattr(event.data, 'tool_name', '') or getattr(event.data, 'name', '') or ''
+                print(f"🔧 Running tool: {name}", flush=True)
+            elif t == "tool.execution_complete":
+                name = getattr(event.data, 'tool_name', '') or getattr(event.data, 'name', '') or ''
+                print(f"✅ Tool complete: {name}", flush=True)
+            elif t == "session.idle":
+                if not turn_active:
                     done.set()
+            elif t == "session.error":
+                print(f"Session error: {getattr(event.data, 'message', event.data)}", file=sys.stderr, flush=True)
+                done.set()
 
-            session.on(on_event)
-            prompt = _build_initial_prompt(args)
-            print(f"Sending OOM triage request for {args.pod} in {args.namespace}...")
-            await session.send(prompt)
-            await done.wait()
+        session.on(on_event)
+        prompt = _build_initial_prompt(args)
+        print(f"Sending OOM triage request for {args.pod} in {args.namespace}...")
+        await session.send_and_wait({"prompt": prompt})
 
-            REPORT_HEADER = "## 🤖 AI OOM Triage Report"
-            if messages:
-                for msg in reversed(messages):
-                    if REPORT_HEADER in msg:
-                        triage_report = msg
-                        break
-                else:
-                    triage_report = messages[-1]
-            elif streamed_chunks:
-                triage_report = "".join(streamed_chunks)
+        REPORT_HEADER = "## 🤖 AI OOM Triage Report"
+        if messages:
+            for msg in reversed(messages):
+                if REPORT_HEADER in msg:
+                    triage_report = msg
+                    break
+            else:
+                triage_report = messages[-1]
+        elif streamed_chunks:
+            triage_report = "".join(streamed_chunks)
+    finally:
+        await client.stop()
 
     return triage_report
 
