@@ -1,7 +1,7 @@
 import assert from "assert";
 import { ITasksDBRepository } from "./ITasksDBRepository";
 import { MongoClient } from 'mongodb';
-import { TaskDocumentType, TaskDocumentSchema, RDBExportTaskPayloadType, TaskStatusType, TaskTypesType, RDBImportTaskPayloadType } from "@falkordb/schemas/global";
+import { TaskDocumentType, TaskDocumentSchema, RDBExportTaskPayloadType, TaskStatusType, TaskTypesType, RDBImportTaskPayloadType, sanitizeForLogging } from "@falkordb/schemas/global";
 import { Value } from "@sinclair/typebox/value";
 import { FastifyBaseLogger } from "fastify";
 
@@ -24,7 +24,7 @@ export class TasksDBMongoRepository implements ITasksDBRepository {
   }
 
   async createTask(type: TaskTypesType, payload: RDBExportTaskPayloadType | RDBImportTaskPayloadType): Promise<TaskDocumentType> {
-    this._options.logger.info({ type, payload }, 'Creating task');
+    this._options.logger.info({ type, payload: sanitizeForLogging(payload) }, 'Creating task');
     return await this._client.db(this._db).collection<TaskDocumentType>(this._collection).findOneAndUpdate({
       type,
       payload,
@@ -74,7 +74,7 @@ export class TasksDBMongoRepository implements ITasksDBRepository {
   }
 
   async updateTask(task: Partial<TaskDocumentType> & { taskId: string; errors?: string[] }): Promise<TaskDocumentType> {
-    this._options.logger.info({ task }, 'Updating task');
+    this._options.logger.info({ task: sanitizeForLogging(task) }, 'Updating task');
     const { taskId, errors, ...update } = task;
     const result = await this._client.db(this._db).collection<TaskDocumentType>(this._collection).findOneAndUpdate({
       taskId,

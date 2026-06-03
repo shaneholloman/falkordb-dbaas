@@ -1,6 +1,6 @@
 {
   "name": "db-importer-worker",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,9 @@
   "dependencies": {
     "@autotelic/fastify-opentelemetry": "^0.23.0",
     "@aws-sdk/client-eks": "^3.1030.0",
+    "@aws-sdk/client-s3": "^3.1030.0",
     "@aws-sdk/client-sts": "^3.1030.0",
+    "@aws-sdk/s3-request-presigner": "^3.1030.0",
     "@falkordb/configs": "workspace:*",
     "@falkordb/errors": "workspace:*",
     "@falkordb/plugins": "workspace:*",
