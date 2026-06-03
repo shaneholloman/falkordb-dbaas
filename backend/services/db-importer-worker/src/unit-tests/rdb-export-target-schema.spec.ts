@@ -40,7 +40,6 @@ describe('RDB export target task schema', () => {
     expect(() => RDBTask.validateSync(makeTask({
       type: 'gcs',
       bucketName: 'customer-bucket',
-      fileName: 'exports/customer.rdb',
       credentials: serviceAccountCredentials,
     }))).not.toThrow();
   });
@@ -60,7 +59,6 @@ describe('RDB export target task schema', () => {
       ...makeTask({
         type: 's3',
         bucketName: 'customer-bucket',
-        key: 'exports/customer.rdb',
         region: 'us-east-1',
         accessKeyId: 'access-key',
         secretAccessKey: 'secret-key',
@@ -75,5 +73,67 @@ describe('RDB export target task schema', () => {
         },
       },
     })).not.toThrow();
+  });
+
+  it('rejects unknown export output targets', () => {
+    expect(() => RDBTask.validateSync({
+      ...makeTask({
+        type: 'gcs',
+        bucketName: 'customer-bucket',
+        credentials: serviceAccountCredentials,
+      }),
+      output: {
+        target: {
+          bucketName: 'customer-bucket',
+          path: 'gs://customer-bucket/exports/customer.rdb',
+        },
+      },
+    })).toThrow();
+
+    expect(() => RDBTask.validateSync({
+      ...makeTask({
+        type: 'gcs',
+        bucketName: 'customer-bucket',
+        credentials: serviceAccountCredentials,
+      }),
+      output: {
+        target: {
+          type: 'azure',
+          bucketName: 'customer-bucket',
+          path: 'azure://customer-bucket/exports/customer.rdb',
+        },
+      },
+    })).toThrow();
+  });
+
+  it('allows export output without a target', () => {
+    expect(() => RDBTask.validateSync({
+      ...makeTask({
+        type: 'gcs',
+        bucketName: 'customer-bucket',
+        credentials: serviceAccountCredentials,
+      }),
+      output: {
+        readUrl: 'https://example.com/export.rdb',
+      },
+    })).not.toThrow();
+  });
+
+  it('rejects customer-supplied object names on export targets', () => {
+    expect(() => RDBTask.validateSync(makeTask({
+      type: 'gcs',
+      bucketName: 'customer-bucket',
+      fileName: 'exports/customer.rdb',
+      credentials: serviceAccountCredentials,
+    }))).toThrow();
+
+    expect(() => RDBTask.validateSync(makeTask({
+      type: 's3',
+      bucketName: 'customer-bucket',
+      key: 'exports/customer.rdb',
+      region: 'us-east-1',
+      accessKeyId: 'access-key',
+      secretAccessKey: 'secret-key',
+    }))).toThrow();
   });
 });

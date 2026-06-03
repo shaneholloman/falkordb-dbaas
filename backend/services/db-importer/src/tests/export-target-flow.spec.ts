@@ -141,7 +141,6 @@ describe('export target flow', () => {
     const flow = repository._createExportRDBFlow(makeSingleShardTask({
       type: 'gcs',
       bucketName: 'customer-bucket',
-      fileName: 'exports/customer.rdb',
       credentials: serviceAccountCredentials,
     }));
 
@@ -157,7 +156,6 @@ describe('export target flow', () => {
     const flow = repository._createExportRDBFlow(makeMultiShardTask({
       type: 's3',
       bucketName: 'customer-bucket',
-      key: 'exports/customer.rdb',
       region: 'us-east-1',
       accessKeyId: 'access-key',
       secretAccessKey: 'secret-key',

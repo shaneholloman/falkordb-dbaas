@@ -26,14 +26,12 @@ const RDBExportTarget = Yup.lazy((value) => {
       return Yup.object({
         type: Yup.string().oneOf(['gcs']).required(),
         bucketName: Yup.string().required(),
-        fileName: Yup.string().optional(),
         credentials: GCPServiceAccountKey,
       }).strict().noUnknown().required();
     case 's3':
       return Yup.object({
         type: Yup.string().oneOf(['s3']).required(),
         bucketName: Yup.string().required(),
-        key: Yup.string().optional(),
         region: Yup.string().required(),
         accessKeyId: Yup.string().required(),
         secretAccessKey: Yup.string().required(),
@@ -64,7 +62,7 @@ const RDBExportOutputTarget = Yup.lazy((value) => {
         path: Yup.string().required(),
       }).strict().noUnknown().required();
     default:
-      return Yup.mixed().optional();
+      return Yup.mixed().oneOf([]).required();
   }
 });
 

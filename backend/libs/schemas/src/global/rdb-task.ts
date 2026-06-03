@@ -37,14 +37,12 @@ export type GCPServiceAccountKeyType = Static<typeof GCPServiceAccountKeySchema>
 export const RDBExportGCSTargetSchema = Type.Object({
   type: Type.Literal('gcs'),
   bucketName: Type.String(),
-  fileName: Type.Optional(Type.String()),
   credentials: GCPServiceAccountKeySchema,
 }, { additionalProperties: false });
 
 export const RDBExportS3TargetSchema = Type.Object({
   type: Type.Literal('s3'),
   bucketName: Type.String(),
-  key: Type.Optional(Type.String()),
   region: Type.String(),
   accessKeyId: Type.String(),
   secretAccessKey: Type.String(),
@@ -61,13 +59,11 @@ export type RDBExportTargetType = Static<typeof RDBExportTargetSchema>;
 export const RDBExportPublicGCSTargetSchema = Type.Object({
   type: Type.Literal('gcs'),
   bucketName: Type.String(),
-  fileName: Type.Optional(Type.String()),
 }, { additionalProperties: false });
 
 export const RDBExportPublicS3TargetSchema = Type.Object({
   type: Type.Literal('s3'),
   bucketName: Type.String(),
-  key: Type.Optional(Type.String()),
   region: Type.String(),
 }, { additionalProperties: false });
 

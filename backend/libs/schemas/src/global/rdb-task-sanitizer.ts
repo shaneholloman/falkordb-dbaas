@@ -22,13 +22,11 @@ export const sanitizeRDBExportTarget = (target?: RDBExportTargetType): RDBExport
       return {
         type: 'gcs',
         bucketName: target.bucketName,
-        fileName: target.fileName,
       };
     case 's3':
       return {
         type: 's3',
         bucketName: target.bucketName,
-        key: target.key,
         region: target.region,
       };
     case 'default':

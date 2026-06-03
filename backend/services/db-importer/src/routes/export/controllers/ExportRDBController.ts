@@ -68,7 +68,7 @@ export class ExportRDBController {
     podId: string,
     target: RDBExportTargetType,
   ): RDBExportTaskPayloadType {
-    const destinationFileName = this._resolveDestinationFileName(instance.id, target);
+    const destinationFileName = this._resolveDestinationFileName(instance.id);
 
     if (taskType === 'SingleShardRDBExport') {
       return {
@@ -108,17 +108,8 @@ export class ExportRDBController {
     }
   }
 
-  private _resolveDestinationFileName(instanceId: string, target: RDBExportTargetType): string {
-    const defaultFileName = `exports/${instanceId}/${randomUUID()}.rdb`;
-
-    switch (target.type) {
-      case 'gcs':
-        return target.fileName ?? defaultFileName;
-      case 's3':
-        return target.key ?? defaultFileName;
-      default:
-        return defaultFileName;
-    }
+  private _resolveDestinationFileName(instanceId: string): string {
+    return `exports/${instanceId}/${randomUUID()}.rdb`;
   }
 
   async _getPendingExportTasks(instanceId: string): Promise<TaskDocumentType[]> {
