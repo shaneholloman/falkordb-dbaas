@@ -64,6 +64,11 @@ const copyStagedRDBToTarget = async (
     jobData.fileName,
     'application/octet-stream',
     60 * 60 * 1000 // 1 hour
+  ) ?? await blobRepository.getWriteUrl(
+    jobData.bucketName,
+    jobData.fileName,
+    'application/octet-stream',
+    60 * 60 * 1000 // 1 hour
   )
 
   const sourceResponse = await fetchWithDeadline(sourceReadUrl, undefined, 'Reading exported RDB from staging bucket');
@@ -133,15 +138,15 @@ const processor: Processor<RdbExportCopyRDBToBucketProcessorData> = async (job, 
 
     const outputTarget = makeExportOutputTarget(target, job.data.fileName);
 
-    if (outputTarget) {
-      await tasksRepository.updateTask({
-        taskId: job.data.taskId,
-        status: 'completed',
+    await tasksRepository.updateTask({
+      taskId: job.data.taskId,
+      status: 'completed',
+      ...(outputTarget ? {
         output: {
           target: outputTarget,
         },
-      });
-    }
+      } : {}),
+    });
 
     return {
       success: true,
