@@ -6,6 +6,66 @@ export enum TaskTypes {
   RDBImport = 'RDBImport',
 }
 
+const GCPServiceAccountKey = Yup.object({
+  type: Yup.string().oneOf(['service_account']).required(),
+  project_id: Yup.string().required(),
+  private_key_id: Yup.string().required(),
+  private_key: Yup.string().required(),
+  client_email: Yup.string().email().required(),
+  client_id: Yup.string().required(),
+  auth_uri: Yup.string().required(),
+  token_uri: Yup.string().required(),
+  auth_provider_x509_cert_url: Yup.string().required(),
+  client_x509_cert_url: Yup.string().required(),
+  universe_domain: Yup.string().optional(),
+}).strict().noUnknown().required();
+
+const RDBExportTarget = Yup.lazy((value) => {
+  switch (value?.type) {
+    case 'gcs':
+      return Yup.object({
+        type: Yup.string().oneOf(['gcs']).required(),
+        bucketName: Yup.string().required(),
+        credentials: GCPServiceAccountKey,
+      }).strict().noUnknown().required();
+    case 's3':
+      return Yup.object({
+        type: Yup.string().oneOf(['s3']).required(),
+        bucketName: Yup.string().required(),
+        region: Yup.string().required(),
+        accessKeyId: Yup.string().required(),
+        secretAccessKey: Yup.string().required(),
+        sessionToken: Yup.string().optional(),
+      }).strict().noUnknown().required();
+    default:
+      return Yup.object({
+        type: Yup.string().oneOf(['default']).optional(),
+      }).strict().noUnknown().required();
+  }
+});
+
+const RDBExportOutputTarget = Yup.lazy((value) => {
+  switch (value?.type) {
+    case 'gcs':
+      return Yup.object({
+        type: Yup.string().oneOf(['gcs']).required(),
+        bucketName: Yup.string().required(),
+        fileName: Yup.string().required(),
+        path: Yup.string().required(),
+      }).strict().noUnknown().required();
+    case 's3':
+      return Yup.object({
+        type: Yup.string().oneOf(['s3']).required(),
+        bucketName: Yup.string().required(),
+        key: Yup.string().required(),
+        region: Yup.string().required(),
+        path: Yup.string().required(),
+      }).strict().noUnknown().required();
+    default:
+      return Yup.mixed().oneOf([]).required();
+  }
+});
+
 export const SingleShardRDBExportPayload = Yup.object({
   cloudProvider: Yup.string().oneOf(['gcp', 'aws']).required(),
   region: Yup.string().required(),
@@ -17,6 +77,7 @@ export const SingleShardRDBExportPayload = Yup.object({
     bucketName: Yup.string().required(),
     fileName: Yup.string().required(),
     expiresIn: Yup.number().required(),
+    target: RDBExportTarget.optional(),
   }).required(),
 }).strict().noUnknown().required();
 
@@ -24,6 +85,7 @@ export type SingleShardRDBExportPayloadType = Yup.InferType<typeof SingleShardRD
 
 export const RDBExportOutput = Yup.object({
   readUrl: Yup.string().optional(),
+  target: RDBExportOutputTarget.optional(),
 }).strict().noUnknown().optional();
 export type RDBExportOutputType = Yup.InferType<typeof RDBExportOutput>;
 
@@ -38,6 +100,7 @@ export const MultiShardRDBExportPayload = Yup.object({
     bucketName: Yup.string().required(),
     expiresIn: Yup.number().required(),
     fileName: Yup.string().required(),
+    target: RDBExportTarget.optional(),
   }).required(),
   nodes: Yup.array().of(
     Yup.object({
