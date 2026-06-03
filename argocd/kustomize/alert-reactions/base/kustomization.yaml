@@ -6,3 +6,4 @@ resources:
   - falkordb-oom.yaml
   - oom-killed.yaml
   - redis-crash.yaml
+  - sigabrt-oom.yaml

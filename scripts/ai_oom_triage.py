@@ -23,7 +23,8 @@ Usage:
         --subscription-id "sub-123" \
         [--rdb-url gs://bucket/path/dump.rdb] \
         [--aof-url gs://bucket/path/appendonlydir.tar.gz] \
-        [--falkordb-version v4.18.0]
+        [--falkordb-version v4.18.0] \
+        [--oom-dump-urls gs://bucket/ns/oom_dump_70.log,gs://bucket/ns/oom_dump_90.log]
 """
 
 import os
@@ -39,8 +40,7 @@ from urllib.parse import urlencode, quote
 from zoneinfo import ZoneInfo
 
 import requests
-from copilot import CopilotClient, SubprocessConfig
-from copilot.session import PermissionHandler
+from copilot import CopilotClient, PermissionHandler
 
 from oom_triage_tools import ALL_TOOLS, cleanup
 from oom_handler import CHAT_MENTIONS
@@ -136,7 +136,29 @@ Use `fetch_logs` to get the last 30 minutes of logs. Look for:
 - Eviction warnings
 - AOF rewrite or BGSAVE activity (these cause memory spikes due to fork)
 
-### Step 7: Database Inspection (if RDB/AOF available)
+### Step 7: Pre-OOM Memory Snapshots (if available)
+Use `read_oom_dumps` to read the INFO ALL snapshots captured at cgroup memory thresholds. \
+These are captured automatically by our OOM automation:
+- **70% threshold** (oom_dump_70.log): Overwritten each time — contains latest INFO ALL snapshot
+- **80% threshold** (oom_dump_80.log): Overwritten each time — contains latest INFO ALL snapshot
+- **90% threshold** (oom_dump_90.log): Appended — may contain multiple snapshots over time. \
+At 90% the automation also sends SIGABRT to capture a core dump.
+
+**How to analyze:** Compare key fields across the 70% → 80% → 90% snapshots:
+- `used_memory` / `used_memory_rss` — how much did memory grow between thresholds?
+- `connected_clients` — did client count spike?
+- `instantaneous_ops_per_sec` — was command rate increasing?
+- `mem_fragmentation_ratio` — is fragmentation worsening?
+- `total_commands_processed` — how many commands ran between snapshots?
+- `used_memory_peak` — was this an all-time peak or recurring?
+- Graph-specific fields (if FalkorDB) — check graph count, node/edge counts
+
+This gives you a **progressive timeline** of the pod's state as it approached OOM, \
+which is far more valuable than a single post-mortem snapshot.
+
+If `read_oom_dumps` returns "No OOM dump files available", skip this step.
+
+### Step 8: Database Inspection (if RDB/AOF available)
 If RDB or AOF URLs are provided:
 - Use `run_falkordb_local` to start a local instance with the dump
 - Use `execute_query` to run:
@@ -174,7 +196,7 @@ but as the parent modifies pages during writes, CoW duplicates them. Peak RSS ca
 reach up to 2x used_memory during active writes + fork. This is the most common \
 hidden cause of OOMs when redis_memory_used_bytes shows plenty of headroom.
 
-### Step 8: Produce Diagnosis
+### Step 9: Produce Diagnosis
 After completing your analysis, output EXACTLY this structured report:
 
 ```
@@ -199,6 +221,17 @@ After completing your analysis, output EXACTLY this structured report:
 ### Log Analysis
 [Summary of any relevant findings from logs — errors, large queries, \
 slow operations, AOF/BGSAVE activity]
+
+### Pre-OOM Memory Snapshots
+If OOM dump files were available, summarize the progressive state:
+- **70% snapshot:** used_memory=[X MB], RSS=[X MB], clients=[X], ops/sec=[X]
+- **80% snapshot:** used_memory=[X MB], RSS=[X MB], clients=[X], ops/sec=[X]
+- **90% snapshot:** used_memory=[X MB], RSS=[X MB], clients=[X], ops/sec=[X]
+- **Key delta (70% → 90%):** [What changed — e.g. "memory grew 200MB, clients doubled, \
+fragmentation ratio increased from 1.2 to 1.8"]
+
+If no OOM dumps were available, state: "Pre-OOM snapshots unavailable (thresholds not reached \
+or dumps not captured)."
 
 ### Memory Breakdown
 If GRAPH.MEMORY USAGE was run, include a table showing where memory is allocated. \
@@ -525,6 +558,50 @@ class GitHubIssueManager:
         self._add_issue_to_project(data['node_id'])
         return issue_number
 
+    def add_dump_paths_comment(self, issue_number: int, oom_dump_urls: str,
+                              namespace: str, pod: str):
+        """Add a comment with OOM dump GCS paths, console links, and gs commands."""
+        urls = [u.strip() for u in oom_dump_urls.split(",") if u.strip()]
+        if not urls:
+            return
+
+        rows = ""
+        gs_commands = ""
+        for gcs_path in urls:
+            filename = gcs_path.rstrip("/").split("/")[-1]
+            console_url = f"https://storage.cloud.google.com/{gcs_path[len('gs://'):]}"
+            rows += f"| `{filename}` | `{gcs_path}` | [Open in GCP]({console_url}) |\n"
+            gs_commands += f"gsutil cp {gcs_path} .\n"
+
+        comment = f"""### 🧠 Pre-OOM Memory Dumps
+
+INFO ALL snapshots captured at cgroup memory thresholds.
+
+| File | GCS Path | Console |
+|------|----------|---------|
+{rows}
+**Pod:** `{pod}` &nbsp; **Namespace:** `{namespace}`
+
+---
+<details>
+<summary>⬇️ How to download via CLI</summary>
+
+```bash
+# Humans — interactive login:
+gcloud auth login
+
+# Download files:
+{gs_commands}```
+</details>
+"""
+        resp = self.session.post(
+            f"{self.api_url}/repos/{self.repo}/issues/{issue_number}/comments",
+            json={'body': comment},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        print(f"✅ Added OOM dump paths comment to issue #{issue_number}")
+
     def add_comment(self, issue_number: int, pod: str, namespace: str,
                     cluster: str, container: str, timestamp: str,
                     report: str, grafana_memory_url: str,
@@ -596,6 +673,16 @@ A ContainerOOMKilled event has been detected. Please perform a full OOM triage.
     if args.aof_url:
         prompt += f"- AOF directory available: yes\n"
         prompt += f"  AOF URL: {args.aof_url}\n"
+    if args.oom_dump_urls:
+        from urllib.parse import urlparse
+        dump_files = [
+            os.path.basename(urlparse(u.strip()).path) if u.strip().startswith("https://")
+            else u.strip().split("/")[-1]
+            for u in args.oom_dump_urls.split(",") if u.strip()
+        ]
+        thresholds = [f.replace("oom_dump_", "").replace(".log", "%") for f in dump_files]
+        prompt += f"- OOM memory dumps available: {', '.join(thresholds)} thresholds\n"
+        prompt += f"  Use `read_oom_dumps` tool in Step 7 to read them.\n"
 
     prompt += f"""
 **Topology Note:** {topology_note}
@@ -807,68 +894,69 @@ async def run_triage(args):
     """Run the AI OOM triage session."""
     triage_report = None
 
-    github_token = os.environ.get("GITHUB_TOKEN", "")
-
-    async with CopilotClient(SubprocessConfig(github_token=github_token)) as client:
-        async with await client.create_session(
-            on_permission_request=PermissionHandler.approve_all,
-            model="claude-opus-4.6",
-            streaming=True,
-            tools=ALL_TOOLS,
-            system_message={
+    client = CopilotClient()
+    await client.start()
+    try:
+        session = await client.create_session({
+            "on_permission_request": PermissionHandler.approve_all,
+            "model": "claude-opus-4.6",
+            "streaming": True,
+            "tools": ALL_TOOLS,
+            "system_message": {
                 "mode": "append",
                 "content": SYSTEM_MESSAGE,
             },
-        ) as session:
-            done = asyncio.Event()
-            messages = []
-            streamed_chunks = []
-            turn_active = False
+        })
+        done = asyncio.Event()
+        messages = []
+        streamed_chunks = []
+        turn_active = False
 
-            def on_event(event):
-                nonlocal turn_active
-                t = event.type.value
-                print(f"  [{t}]", file=sys.stderr, flush=True)
-                if t in ("assistant.message_delta", "assistant.streaming_delta"):
-                    delta = event.data.delta_content or ""
-                    streamed_chunks.append(delta)
-                    print(delta, end="", flush=True)
-                elif t == "assistant.message":
-                    messages.append(event.data.content)
-                    print()
-                elif t == "assistant.turn_start":
-                    turn_active = True
-                elif t == "assistant.turn_end":
-                    turn_active = False
-                elif t == "tool.execution_start":
-                    name = getattr(event.data, 'tool_name', '') or getattr(event.data, 'name', '') or ''
-                    print(f"🔧 Running tool: {name}", flush=True)
-                elif t == "tool.execution_complete":
-                    name = getattr(event.data, 'tool_name', '') or getattr(event.data, 'name', '') or ''
-                    print(f"✅ Tool complete: {name}", flush=True)
-                elif t == "session.idle":
-                    if not turn_active:
-                        done.set()
-                elif t == "session.error":
-                    print(f"Session error: {getattr(event.data, 'message', event.data)}", file=sys.stderr, flush=True)
+        def on_event(event):
+            nonlocal turn_active
+            t = event.type.value
+            print(f"  [{t}]", file=sys.stderr, flush=True)
+            if t in ("assistant.message_delta", "assistant.streaming_delta"):
+                delta = event.data.delta_content or ""
+                streamed_chunks.append(delta)
+                print(delta, end="", flush=True)
+            elif t == "assistant.message":
+                messages.append(event.data.content)
+                print()
+            elif t == "assistant.turn_start":
+                turn_active = True
+            elif t == "assistant.turn_end":
+                turn_active = False
+            elif t == "tool.execution_start":
+                name = getattr(event.data, 'tool_name', '') or getattr(event.data, 'name', '') or ''
+                print(f"🔧 Running tool: {name}", flush=True)
+            elif t == "tool.execution_complete":
+                name = getattr(event.data, 'tool_name', '') or getattr(event.data, 'name', '') or ''
+                print(f"✅ Tool complete: {name}", flush=True)
+            elif t == "session.idle":
+                if not turn_active:
                     done.set()
+            elif t == "session.error":
+                print(f"Session error: {getattr(event.data, 'message', event.data)}", file=sys.stderr, flush=True)
+                done.set()
 
-            session.on(on_event)
-            prompt = _build_initial_prompt(args)
-            print(f"Sending OOM triage request for {args.pod} in {args.namespace}...")
-            await session.send(prompt)
-            await done.wait()
+        session.on(on_event)
+        prompt = _build_initial_prompt(args)
+        print(f"Sending OOM triage request for {args.pod} in {args.namespace}...")
+        await session.send_and_wait({"prompt": prompt})
 
-            REPORT_HEADER = "## 🤖 AI OOM Triage Report"
-            if messages:
-                for msg in reversed(messages):
-                    if REPORT_HEADER in msg:
-                        triage_report = msg
-                        break
-                else:
-                    triage_report = messages[-1]
-            elif streamed_chunks:
-                triage_report = "".join(streamed_chunks)
+        REPORT_HEADER = "## 🤖 AI OOM Triage Report"
+        if messages:
+            for msg in reversed(messages):
+                if REPORT_HEADER in msg:
+                    triage_report = msg
+                    break
+            else:
+                triage_report = messages[-1]
+        elif streamed_chunks:
+            triage_report = "".join(streamed_chunks)
+    finally:
+        await client.stop()
 
     return triage_report
 
@@ -889,10 +977,15 @@ def main():
     parser.add_argument("--falkordb-version", default="", help="FalkorDB version")
     parser.add_argument("--alert-timestamp", default="", help="ISO timestamp of the OOM event (fallback: now)")
     parser.add_argument("--topology", default="", choices=["", "standalone", "replicated", "cluster"], help="Instance topology: standalone, replicated, or cluster")
+    parser.add_argument("--oom-dump-urls", default="", help="Comma-separated GCS paths for OOM dump files (oom_dump_70/80/90.log)")
     args = parser.parse_args()
 
     # Pass vmauth-url to tools via env
     os.environ.setdefault("VMAUTH_URL", args.vmauth_url)
+
+    # Pass OOM dump URLs to tools via env
+    if args.oom_dump_urls:
+        os.environ["OOM_DUMP_URLS"] = args.oom_dump_urls
 
     # Configure SSL
     environment = os.environ.get("ENVIRONMENT", "prod").lower()
@@ -973,6 +1066,15 @@ def main():
                             report=report,
                             grafana_memory_url=grafana_memory_url,
                             grafana_pods_url=grafana_pods_url,
+                        )
+
+                    # Post OOM dump paths as a separate comment (if available)
+                    if issue_number and args.oom_dump_urls:
+                        github.add_dump_paths_comment(
+                            issue_number=issue_number,
+                            oom_dump_urls=args.oom_dump_urls,
+                            namespace=args.namespace,
+                            pod=args.pod,
                         )
                 except Exception as e:
                     print(f"⚠️  GitHub issue creation failed (non-fatal): {e}", file=sys.stderr)
