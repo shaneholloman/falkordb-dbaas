@@ -44,6 +44,17 @@ describe('RDB export target task schema', () => {
     }))).not.toThrow();
   });
 
+  it('accepts created export tasks from the db-importer API', () => {
+    expect(() => RDBTask.validateSync({
+      ...makeTask({
+        type: 'gcs',
+        bucketName: 'customer-bucket',
+        credentials: serviceAccountCredentials,
+      }),
+      status: 'created',
+    })).not.toThrow();
+  });
+
   it('rejects a GCS target when the service account JSON key is incomplete', () => {
     const { private_key, ...incompleteCredentials } = serviceAccountCredentials;
 

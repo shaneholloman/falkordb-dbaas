@@ -141,7 +141,7 @@ export interface IExportRDBTask {
   type: TaskTypes;
   createdAt: string;
   updatedAt: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  status: 'created' | 'pending' | 'in_progress' | 'completed' | 'failed';
   error?: string;
   errors?: string[];
   payload: SingleShardRDBExportPayloadType | MultiShardRDBExportPayloadType | RDBImportPayloadType;
@@ -154,6 +154,7 @@ export const RDBTask: Yup.ObjectSchema<IExportRDBTask> = Yup.object({
   createdAt: Yup.string().required(),
   updatedAt: Yup.string().required(),
   status: Yup.string().oneOf([
+    'created',
     'pending',
     'in_progress',
     'completed',

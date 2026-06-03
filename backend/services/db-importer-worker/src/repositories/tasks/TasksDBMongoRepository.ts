@@ -31,9 +31,18 @@ export class TasksDBMongoRepository implements ITasksDBRepository {
       return null;
     }
     delete task._id; // Remove MongoDB's default _id field
-    return RDBTask.validateSync(task, {
-      stripUnknown: true,
-    }) as RDBTaskType;
+    try {
+      return RDBTask.validateSync(task, {
+        stripUnknown: true,
+      }) as RDBTaskType;
+    } catch (error) {
+      if (error && typeof error === 'object') {
+        const validationError = error as { value?: unknown; params?: unknown };
+        validationError.value = sanitizeForLogging(validationError.value);
+        validationError.params = sanitizeForLogging(validationError.params);
+      }
+      throw error;
+    }
   }
 
   async updateTask(task: RDBTaskType) {
