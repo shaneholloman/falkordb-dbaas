@@ -6,12 +6,14 @@ import { OmnistrateInstanceSchemaType } from '../../../schemas/omnistrate-instan
 import {
   ExportRDBTaskType,
   MultiShardRDBExportPayloadType,
+  RDBExportTargetType,
   RDBExportTaskPayloadType,
   SingleShardRDBExportPayloadType,
   TaskDocumentType,
   TaskTypesType,
 } from '@falkordb/schemas/global';
 import assert from 'assert';
+import { randomUUID } from 'crypto';
 import { ApiError } from '@falkordb/errors';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 
@@ -64,7 +66,10 @@ export class ExportRDBController {
     taskType: TaskTypesType,
     instance: OmnistrateInstanceSchemaType,
     podId: string,
+    target: RDBExportTargetType,
   ): RDBExportTaskPayloadType {
+    const destinationFileName = this._resolveDestinationFileName(instance.id);
+
     if (taskType === 'SingleShardRDBExport') {
       return {
         instanceId: instance.id,
@@ -75,8 +80,9 @@ export class ExportRDBController {
         hasTLS: instance.tls,
         destination: {
           bucketName: this._exportBucketName,
-          fileName: `exports/${instance.id}/${crypto.randomUUID()}.rdb`,
+          fileName: destinationFileName,
           expiresIn: 60 * 60 * 1000, // 1 hour
+          target,
         },
       } as SingleShardRDBExportPayloadType;
     }
@@ -93,12 +99,17 @@ export class ExportRDBController {
             podId,
             partFileName: `exports/${instance.id}/${podId}.rdb`,
           })),
-          fileName: `exports/${instance.id}/${crypto.randomUUID()}.rdb`,
+          fileName: destinationFileName,
           bucketName: this._exportBucketName,
           expiresIn: 60 * 60 * 1000, // 1 hour
+          target,
         },
       } as MultiShardRDBExportPayloadType;
     }
+  }
+
+  private _resolveDestinationFileName(instanceId: string): string {
+    return `exports/${instanceId}/${randomUUID()}.rdb`;
   }
 
   async _getPendingExportTasks(instanceId: string): Promise<TaskDocumentType[]> {
@@ -128,11 +139,13 @@ export class ExportRDBController {
     instanceId,
     username,
     password,
+    target = {},
   }: {
     requestorId: string;
     instanceId: string;
     username: string;
     password: string;
+    target?: RDBExportTargetType;
   }): Promise<{ taskId: string }> {
     // Get instance details from omnistrate
     let instance: OmnistrateInstanceSchemaType | undefined;
@@ -204,7 +217,7 @@ export class ExportRDBController {
     try {
       task = (await this.tasksRepository.createTask(
         taskType,
-        this._createTaskPayload(taskType, instance, podId),
+        this._createTaskPayload(taskType, instance, podId, target),
       )) as ExportRDBTaskType;
     } catch (error) {
       this._opts.logger.error({ error }, 'Error creating task');
