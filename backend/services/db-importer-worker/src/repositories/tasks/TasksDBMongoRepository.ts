@@ -45,7 +45,7 @@ export class TasksDBMongoRepository implements ITasksDBRepository {
     }
   }
 
-  async updateTask(task: RDBTaskType) {
+  async updateTask(task: Partial<RDBTaskType> & { taskId: string; errors?: string[] }) {
     const db = this._client.db(this._db);
     task.updatedAt = new Date().toISOString();
     // separate `errors` field handling to avoid overwriting

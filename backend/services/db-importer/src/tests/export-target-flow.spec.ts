@@ -3,6 +3,27 @@ import { ExportRDBTaskType, PublicExportRDBTaskSchema } from '@falkordb/schemas/
 import { RdbExportCopyRDBToBucketProcessorDataSchema, RdbExportTaskNames } from '@falkordb/schemas/services/db-importer-worker/v1';
 import { Value } from '@sinclair/typebox/value';
 import { TaskQueueBullMQRepository } from '../repositories/tasksQueue/TaskQueueBullMQRepository';
+import { ExportRDBController } from '../routes/export/controllers/ExportRDBController';
+
+const gcsSaveMock = jest.fn();
+const s3SendMock = jest.fn();
+
+jest.mock('@google-cloud/storage', () => ({
+  Storage: jest.fn().mockImplementation(() => ({
+    bucket: jest.fn().mockReturnValue({
+      file: jest.fn().mockReturnValue({
+        save: gcsSaveMock,
+      }),
+    }),
+  })),
+}));
+
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn().mockImplementation(() => ({
+    send: s3SendMock,
+  })),
+  PutObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
+}));
 
 jest.mock('bullmq', () => ({
   FlowProducer: jest.fn().mockImplementation(() => ({
@@ -12,6 +33,9 @@ jest.mock('bullmq', () => ({
 
 const logger = {
   debug: jest.fn(),
+  error: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
 };
 
 const envKeys = [
@@ -100,6 +124,46 @@ const makeMultiShardTask = (target?: ExportRDBTaskType['payload']['destination']
   },
 });
 
+const makeController = (createdTask: ExportRDBTaskType) => {
+  const tasksRepository = {
+    listTasks: jest.fn().mockResolvedValue({ data: [] }),
+    createTask: jest.fn().mockResolvedValue(createdTask),
+    updateTask: jest.fn().mockResolvedValue({ ...createdTask, status: 'pending' }),
+  };
+  const omnistrateRepository = {
+    getInstance: jest.fn().mockResolvedValue({
+      id: 'instance-id',
+      cloudProvider: 'gcp',
+      clusterId: 'cluster-id',
+      region: 'us-central1',
+      tls: false,
+      status: 'RUNNING',
+      productTierName: 'FalkorDB Free',
+      deploymentType: 'Free',
+      subscriptionId: 'subscription-id',
+    }),
+    checkIfUserHasAccessToInstance: jest.fn().mockResolvedValue(true),
+  };
+  const k8sRepository = {
+    isUserAdmin: jest.fn().mockResolvedValue(true),
+  };
+  const taskQueueRepository = {
+    submitExportRDBTask: jest.fn().mockResolvedValue(undefined),
+  };
+
+  return {
+    controller: new ExportRDBController(
+      tasksRepository as never,
+      omnistrateRepository as never,
+      k8sRepository as never,
+      taskQueueRepository as never,
+      'falkordb-export-bucket',
+      { logger: logger as never },
+    ),
+    tasksRepository,
+  };
+};
+
 describe('export target flow', () => {
   beforeAll(() => {
     for (const key of envKeys) {
@@ -124,6 +188,63 @@ describe('export target flow', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('verifies GCS target write access before creating an export task', async () => {
+    gcsSaveMock.mockResolvedValue(undefined);
+    const target = {
+      type: 'gcs' as const,
+      bucketName: 'customer-bucket',
+      credentials: serviceAccountCredentials,
+    };
+    const { controller, tasksRepository } = makeController(makeSingleShardTask(target));
+
+    await controller.exportRDB({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      target,
+    });
+
+    expect(gcsSaveMock).toHaveBeenCalledWith(Buffer.alloc(0), {
+      contentType: 'application/octet-stream',
+      resumable: false,
+    });
+    const createdPayload = tasksRepository.createTask.mock.calls[0][1];
+    expect(createdPayload.destination.fileName).toMatch(/^exports\/instance-id\/.+\.rdb$/);
+    expect(gcsSaveMock.mock.invocationCallOrder[0]).toBeLessThan(tasksRepository.createTask.mock.invocationCallOrder[0]);
+  });
+
+  it('verifies S3 target write access before creating an export task', async () => {
+    s3SendMock.mockResolvedValue(undefined);
+    const target = {
+      type: 's3' as const,
+      bucketName: 'customer-bucket',
+      region: 'us-east-1',
+      accessKeyId: 'access-key',
+      secretAccessKey: 'secret-key',
+    };
+    const { controller, tasksRepository } = makeController(makeSingleShardTask(target));
+
+    await controller.exportRDB({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      target,
+    });
+
+    const command = s3SendMock.mock.calls[0][0];
+    const createdPayload = tasksRepository.createTask.mock.calls[0][1];
+    expect(command.input).toEqual(expect.objectContaining({
+      Bucket: 'customer-bucket',
+      Key: createdPayload.destination.fileName,
+      Body: new Uint8Array(),
+      ContentType: 'application/octet-stream',
+    }));
+    expect(createdPayload.destination.fileName).toMatch(/^exports\/instance-id\/.+\.rdb$/);
+    expect(s3SendMock.mock.invocationCallOrder[0]).toBeLessThan(tasksRepository.createTask.mock.invocationCallOrder[0]);
   });
 
   it('uses read signed URL as the root job for default single shard exports', () => {

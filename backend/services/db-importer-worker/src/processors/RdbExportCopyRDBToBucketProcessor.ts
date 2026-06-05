@@ -76,10 +76,6 @@ const copyStagedRDBToTarget = async (
     throw new Error(`Failed to read exported RDB from staging bucket: ${sourceResponse.status} ${sourceResponse.statusText}`);
   }
 
-  if (!targetWriteUrl) {
-    throw new Error('Failed to resolve target write URL for exported RDB');
-  }
-
   const targetResponse = await fetchWithDeadline(targetWriteUrl, {
     method: 'PUT',
     headers: {
@@ -152,10 +148,11 @@ const processor: Processor<RdbExportCopyRDBToBucketProcessorData> = async (job, 
       success: true,
     }
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(error, `Error processing job ${job.id}: ${error}`);
     await tasksRepository.updateTask({
       taskId: job.data.taskId,
-      errors: [error.message ?? error.toString()],
+      errors: [errorMessage],
       status: 'failed',
     });
     throw error;
