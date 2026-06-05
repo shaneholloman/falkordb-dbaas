@@ -91,6 +91,7 @@ export class ExportRDBController {
       const pods = [0, 2, 4].map((i) => `${this._resolvePodPrefix(instance)}-${i}`);
       return {
         instanceId: instance.id,
+        podId,
         cloudProvider: instance.cloudProvider,
         clusterId: instance.clusterId,
         region: instance.region,
@@ -107,6 +108,8 @@ export class ExportRDBController {
         },
       } as MultiShardRDBExportPayloadType;
     }
+
+    throw new Error(`Unsupported RDB export task type: ${taskType}`);
   }
 
   private _resolveDestinationFileName(instanceId: string): string {

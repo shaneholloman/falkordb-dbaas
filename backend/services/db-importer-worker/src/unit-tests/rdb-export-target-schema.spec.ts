@@ -1,3 +1,5 @@
+import { ExportRDBTaskType, TaskDocumentSchema } from '@falkordb/schemas/global';
+import { Value } from '@sinclair/typebox/value';
 import { RDBTask, TaskTypes } from '../schemas/rdb-task';
 
 const serviceAccountCredentials = {
@@ -35,7 +37,44 @@ const makeTask = (target: Record<string, unknown>) => ({
   },
 });
 
+const makeSharedSingleShardExportTask = (): ExportRDBTaskType => makeTask({
+  type: 'default',
+}) as ExportRDBTaskType;
+
+const makeSharedMultiShardExportTask = (): ExportRDBTaskType => ({
+  taskId: 'task-id',
+  type: 'MultiShardRDBExport',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  status: 'created',
+  payload: {
+    cloudProvider: 'gcp',
+    clusterId: 'cluster-id',
+    region: 'us-central1',
+    instanceId: 'instance-id',
+    podId: 'cluster-mz-0',
+    hasTLS: false,
+    destination: {
+      bucketName: 'falkordb-export-bucket',
+      fileName: 'exports/instance-id/export.rdb',
+      expiresIn: 60 * 60 * 1000,
+      nodes: [
+        { podId: 'cluster-mz-0', partFileName: 'exports/instance-id/cluster-mz-0.rdb' },
+        { podId: 'cluster-mz-2', partFileName: 'exports/instance-id/cluster-mz-2.rdb' },
+        { podId: 'cluster-mz-4', partFileName: 'exports/instance-id/cluster-mz-4.rdb' },
+      ],
+    },
+  },
+});
+
 describe('RDB export target task schema', () => {
+  it('keeps worker export task validation aligned with shared schemas', () => {
+    for (const task of [makeSharedSingleShardExportTask(), makeSharedMultiShardExportTask()]) {
+      expect(Value.Check(TaskDocumentSchema, task)).toBe(true);
+      expect(() => RDBTask.validateSync(task)).not.toThrow();
+    }
+  });
+
   it('accepts a GCS target with a service account JSON key', () => {
     expect(() => RDBTask.validateSync(makeTask({
       type: 'gcs',

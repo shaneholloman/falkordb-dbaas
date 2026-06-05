@@ -95,19 +95,20 @@ export const MultiShardRDBExportPayload = Yup.object({
   region: Yup.string().required(),
   clusterId: Yup.string().required(),
   instanceId: Yup.string().required(),
+  podId: Yup.string().required(),
   hasTLS: Yup.boolean().required(),
   destination: Yup.object({
     bucketName: Yup.string().required(),
     expiresIn: Yup.number().required(),
     fileName: Yup.string().required(),
     target: RDBExportTarget.optional(),
+    nodes: Yup.array().of(
+      Yup.object({
+        podId: Yup.string().required(),
+        partFileName: Yup.string().required(),
+      }).required()
+    ).required(),
   }).required(),
-  nodes: Yup.array().of(
-    Yup.object({
-      podId: Yup.string().required(),
-      partFileName: Yup.string().required(),
-    }).required()
-  ).required(),
 }).strict().noUnknown().required();
 export type MultiShardRDBExportPayloadType = Yup.InferType<typeof MultiShardRDBExportPayload>;
 
@@ -148,7 +149,7 @@ export interface IExportRDBTask {
   output?: RDBExportOutputType | RDBImportOutputType;
 }
 
-export const RDBTask: Yup.ObjectSchema<IExportRDBTask> = Yup.object({
+export const RDBTask = Yup.object({
   taskId: Yup.string().required(),
   type: Yup.string().oneOf(Object.values(TaskTypes)).required(),
   createdAt: Yup.string().required(),
@@ -164,7 +165,7 @@ export const RDBTask: Yup.ObjectSchema<IExportRDBTask> = Yup.object({
    * @deprecated Use 'errors' field instead
    */
   error: Yup.string().optional(),
-  errors: Yup.array(Yup.string()).optional(),
+  errors: Yup.array().of(Yup.string().required()).optional(),
   payload: Yup.lazy((_, opt) => {
     switch (opt.parent.type) {
       case TaskTypes.SingleShardRDBExport:
