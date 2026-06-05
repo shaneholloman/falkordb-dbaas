@@ -44,6 +44,19 @@ export const sanitizeTaskDocument = (task: TaskDocumentType): PublicTaskDocument
   const exportTask = task as ExportRDBTaskType;
   const target = sanitizeRDBExportTarget(exportTask.payload.destination.target);
 
+  if (exportTask.type === 'SingleShardRDBExport') {
+    return {
+      ...exportTask,
+      payload: {
+        ...exportTask.payload,
+        destination: {
+          ...exportTask.payload.destination,
+          target,
+        },
+      },
+    } as PublicTaskDocumentType;
+  }
+
   return {
     ...exportTask,
     payload: {
@@ -53,7 +66,7 @@ export const sanitizeTaskDocument = (task: TaskDocumentType): PublicTaskDocument
         target,
       },
     },
-  };
+  } as PublicTaskDocumentType;
 };
 
 export const sanitizeForLogging = <T>(value: T): T => {

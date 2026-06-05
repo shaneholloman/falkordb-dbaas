@@ -1,5 +1,5 @@
 import { FlowJob } from 'bullmq';
-import { ExportRDBTaskType, PublicExportRDBTaskSchema } from '@falkordb/schemas/global';
+import { ExportRDBTaskType, PublicExportRDBTaskSchema, PublicTaskDocumentSchema, sanitizeTaskDocument, TaskDocumentSchema } from '@falkordb/schemas/global';
 import { RdbExportCopyRDBToBucketProcessorDataSchema, RdbExportTaskNames } from '@falkordb/schemas/services/db-importer-worker/v1';
 import { Value } from '@sinclair/typebox/value';
 import { TaskQueueBullMQRepository } from '../repositories/tasksQueue/TaskQueueBullMQRepository';
@@ -309,6 +309,30 @@ describe('export target flow', () => {
       ...makeSingleShardTask(),
       type: 'RDBImport',
     })).toBe(false);
+  });
+
+  it('preserves multi-shard nodes and read URL when casting public task responses', () => {
+    const task = {
+      ...makeMultiShardTask({ type: 'default' }),
+      status: 'completed' as const,
+      output: {
+        readUrl: 'https://example.com/export.rdb',
+      },
+    };
+
+    const storedTask = Value.Cast(TaskDocumentSchema, task) as ExportRDBTaskType;
+    const publicTask = Value.Cast(PublicTaskDocumentSchema, sanitizeTaskDocument(storedTask));
+
+    expect(publicTask.type).toBe('MultiShardRDBExport');
+    if (publicTask.type !== 'MultiShardRDBExport') {
+      throw new Error(`Expected MultiShardRDBExport, got ${publicTask.type}`);
+    }
+    const multiShardPublicTask = publicTask as {
+      payload: { destination: { nodes: unknown[] } };
+      output?: { readUrl?: string };
+    };
+    expect(multiShardPublicTask.payload.destination.nodes).toHaveLength(3);
+    expect(multiShardPublicTask.output?.readUrl).toBe('https://example.com/export.rdb');
   });
 
   it('requires pod upload metadata only for copy jobs that include podId', () => {

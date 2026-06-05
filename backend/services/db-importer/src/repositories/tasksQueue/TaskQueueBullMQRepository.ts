@@ -262,7 +262,7 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
       case 'MultiShardRDBExport':
         return this._createMultiShardRDBExportFlow(task);
       default:
-        throw new Error(`Unknown task type: ${task.type}`);
+        throw new Error('Unknown RDB export task type');
     }
   }
 
