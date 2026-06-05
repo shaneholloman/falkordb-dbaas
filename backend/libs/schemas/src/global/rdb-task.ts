@@ -192,9 +192,9 @@ export const TaskStatusSchema = Type.Union([
 ]);
 export type TaskStatusType = Static<typeof TaskStatusSchema>;
 
-export const ExportRDBTaskSchema = Type.Object({
+export const SingleShardExportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
-  type: RDBExportTaskTypesSchema,
+  type: Type.Literal('SingleShardRDBExport'),
   createdAt: Type.String(),
   updatedAt: Type.String(),
   status: TaskStatusSchema,
@@ -203,14 +203,34 @@ export const ExportRDBTaskSchema = Type.Object({
    */
   error: Type.Optional(Type.String()),
   errors: Type.Optional(Type.Array(Type.String())),
-  payload: RDBExportTaskPayloadSchema,
+  payload: SingleShardRDBExportPayloadSchema,
   output: Type.Optional(RDBExportOutputSchema),
 });
+
+export const MultiShardExportRDBTaskSchema = Type.Object({
+  taskId: Type.String(),
+  type: Type.Literal('MultiShardRDBExport'),
+  createdAt: Type.String(),
+  updatedAt: Type.String(),
+  status: TaskStatusSchema,
+  /**
+   * @deprecated Use 'errors' field instead
+   */
+  error: Type.Optional(Type.String()),
+  errors: Type.Optional(Type.Array(Type.String())),
+  payload: MultiShardRDBExportPayloadSchema,
+  output: Type.Optional(RDBExportOutputSchema),
+});
+
+export const ExportRDBTaskSchema = Type.Union([
+  SingleShardExportRDBTaskSchema,
+  MultiShardExportRDBTaskSchema,
+]);
 export type ExportRDBTaskType = Static<typeof ExportRDBTaskSchema>;
 
-export const PublicExportRDBTaskSchema = Type.Object({
+export const PublicSingleShardExportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
-  type: RDBExportTaskTypesSchema,
+  type: Type.Literal('SingleShardRDBExport'),
   createdAt: Type.String(),
   updatedAt: Type.String(),
   status: TaskStatusSchema,
@@ -219,9 +239,29 @@ export const PublicExportRDBTaskSchema = Type.Object({
    */
   error: Type.Optional(Type.String()),
   errors: Type.Optional(Type.Array(Type.String())),
-  payload: RDBExportPublicTaskPayloadSchema,
+  payload: SingleShardRDBExportPublicPayloadSchema,
   output: Type.Optional(RDBExportOutputSchema),
 });
+
+export const PublicMultiShardExportRDBTaskSchema = Type.Object({
+  taskId: Type.String(),
+  type: Type.Literal('MultiShardRDBExport'),
+  createdAt: Type.String(),
+  updatedAt: Type.String(),
+  status: TaskStatusSchema,
+  /**
+   * @deprecated Use 'errors' field instead
+   */
+  error: Type.Optional(Type.String()),
+  errors: Type.Optional(Type.Array(Type.String())),
+  payload: MultiShardRDBExportPublicPayloadSchema,
+  output: Type.Optional(RDBExportOutputSchema),
+});
+
+export const PublicExportRDBTaskSchema = Type.Union([
+  PublicSingleShardExportRDBTaskSchema,
+  PublicMultiShardExportRDBTaskSchema,
+]);
 export type PublicExportRDBTaskType = Static<typeof PublicExportRDBTaskSchema>;
 
 export const RDBImportOutputSchema = Type.Object({
@@ -249,7 +289,7 @@ export type RDBImportTaskPayloadType = Static<typeof RDBImportTaskPayloadSchema>
 
 export const ImportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
-  type: TaskTypesSchema,
+  type: Type.Literal('RDBImport'),
   createdAt: Type.String(),
   updatedAt: Type.String(),
   status: TaskStatusSchema,

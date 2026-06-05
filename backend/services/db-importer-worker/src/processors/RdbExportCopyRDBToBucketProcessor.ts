@@ -134,15 +134,17 @@ const processor: Processor<RdbExportCopyRDBToBucketProcessorData> = async (job, 
 
     const outputTarget = makeExportOutputTarget(target, job.data.fileName);
 
-    await tasksRepository.updateTask({
-      taskId: job.data.taskId,
-      status: 'completed',
-      ...(outputTarget ? {
-        output: {
-          target: outputTarget,
-        },
-      } : {}),
-    });
+    if (outputTarget || !isPodUploadData(job.data)) {
+      await tasksRepository.updateTask({
+        taskId: job.data.taskId,
+        status: 'completed',
+        ...(outputTarget ? {
+          output: {
+            target: outputTarget,
+          },
+        } : {}),
+      });
+    }
 
     return {
       success: true,

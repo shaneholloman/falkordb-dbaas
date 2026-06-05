@@ -144,21 +144,26 @@ export class ExportRDBController {
         },
       });
 
-      await s3Client.send(new PutObjectCommand({
-        Bucket: target.bucketName,
-        Key: fileName,
-        Body: new Uint8Array(),
-        ContentType: 'application/octet-stream',
-      }));
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket: target.bucketName,
+          Key: fileName,
+          Body: new Uint8Array(),
+          ContentType: 'application/octet-stream',
+        }),
+      );
     } catch (error) {
-      this._opts.logger.warn({
-        error: error instanceof Error ? error.message : String(error),
-        target: {
-          type: target.type,
-          bucketName: target.bucketName,
-          region: target.type === 's3' ? target.region : undefined,
+      this._opts.logger.warn(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          target: {
+            type: target.type,
+            bucketName: target.bucketName,
+            region: target.type === 's3' ? target.region : undefined,
+          },
         },
-      }, 'Error validating export target write access');
+        'Error validating export target write access',
+      );
       throw ApiError.badRequest('Invalid export target credentials', 'INVALID_EXPORT_TARGET_CREDENTIALS');
     }
   }
@@ -262,9 +267,9 @@ export class ExportRDBController {
     }
 
     const taskType = this._getTaskType(instance);
-  const destinationFileName = this._resolveDestinationFileName(instance.id);
+    const destinationFileName = this._resolveDestinationFileName(instance.id);
 
-  await this._verifyTargetWriteAccess(target, destinationFileName);
+    await this._verifyTargetWriteAccess(target, destinationFileName);
 
     // Create a task in the tasks repository
     let task: ExportRDBTaskType | undefined;
