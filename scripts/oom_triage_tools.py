@@ -490,6 +490,115 @@ async def execute_query(params: ExecuteQueryParams) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Tool: read_oom_dumps
+# ---------------------------------------------------------------------------
+
+class ReadOomDumpsParams(BaseModel):
+    pass
+
+
+@define_tool(
+    name="read_oom_dumps",
+    description=(
+        "Read OOM memory dump files captured at different cgroup memory thresholds. "
+        "These files contain the output of Redis 'INFO ALL' command captured by the "
+        "OOM automation when memory usage reached 70%, 80%, and 90% of the cgroup limit.\n\n"
+        "Semantics:\n"
+        "- oom_dump_70.log: INFO ALL at 70% memory — OVERWRITTEN each time (latest snapshot only)\n"
+        "- oom_dump_80.log: INFO ALL at 80% memory — OVERWRITTEN each time (latest snapshot only)\n"
+        "- oom_dump_90.log: INFO ALL at 90% memory — APPENDED (may contain multiple snapshots)\n\n"
+        "Compare across thresholds to identify what changed as memory grew: "
+        "client count, command rates, memory fragmentation, connected clients, etc.\n"
+        "At 90% the SIGABRT is also sent (core dump capture attempt)."
+    ),
+    skip_permission=True,
+)
+async def read_oom_dumps(params: ReadOomDumpsParams) -> str:
+    oom_dump_urls_raw = os.environ.get("OOM_DUMP_URLS", "")
+    if not oom_dump_urls_raw:
+        return "No OOM dump files available for this event (OOM_DUMP_URLS not set)."
+
+    urls = [u.strip() for u in oom_dump_urls_raw.split(",") if u.strip()]
+    if not urls:
+        return "No OOM dump files available (empty OOM_DUMP_URLS)."
+
+    work_dir = tempfile.mkdtemp(prefix="oom_dumps_")
+    output_parts = []
+
+    # Map threshold labels based on filename
+    threshold_labels = {
+        "oom_dump_70.log": "70% cgroup memory (overwritten — latest snapshot only)",
+        "oom_dump_80.log": "80% cgroup memory (overwritten — latest snapshot only)",
+        "oom_dump_90.log": "90% cgroup memory (appended — may contain multiple snapshots)",
+    }
+
+    for url in urls:
+        # Extract filename from URL path, stripping query strings to avoid
+        # leaking signed-URL parameters in labels or local filesystem paths.
+        if url.startswith("https://"):
+            from urllib.parse import urlparse
+            filename = os.path.basename(urlparse(url).path)
+        else:
+            filename = url.rstrip("/").split("/")[-1]
+        label = threshold_labels.get(filename, filename)
+        dest = os.path.join(work_dir, filename)
+
+        err = _download_gcs_or_url(url, dest)
+        if err:
+            output_parts.append(f"### {label}\n{err}\n")
+            continue
+
+        try:
+            with open(dest, "r", errors="replace") as f:
+                content = f.read()
+        except OSError as exc:
+            output_parts.append(f"### {label}\nERROR: Could not read file: {exc}\n")
+            continue
+
+        if not content.strip():
+            output_parts.append(f"### {label}\n(empty file)\n")
+            continue
+
+        # Scrub emails from dump content
+        content = _EMAIL_RE.sub(
+            lambda m: m.group(0)[0] + "****@" + m.group(0).split("@")[1], content
+        )
+
+        # Cap individual file output to prevent context overflow.
+        # For oom_dump_90.log (appended), keep the TAIL since the most recent
+        # snapshot nearest to the OOM kill is at the end of the file.
+        MAX_DUMP_BYTES = 80_000
+        if len(content) > MAX_DUMP_BYTES:
+            if filename == "oom_dump_90.log":
+                content = content[-MAX_DUMP_BYTES:]
+                output_parts.append(
+                    f"### {label} (last {MAX_DUMP_BYTES // 1000}KB — most recent snapshots)\n\n{content}\n"
+                )
+            else:
+                content = content[:MAX_DUMP_BYTES]
+                output_parts.append(
+                    f"### {label} (TRUNCATED to {MAX_DUMP_BYTES // 1000}KB)\n\n{content}\n"
+                )
+        else:
+            output_parts.append(f"### {label}\n\n{content}\n")
+
+    # Cleanup temp files
+    import shutil
+    shutil.rmtree(work_dir, ignore_errors=True)
+
+    if not output_parts:
+        return "No OOM dump files could be read."
+
+    header = (
+        "=== OOM Memory Dumps (INFO ALL at cgroup thresholds) ===\n\n"
+        "Compare values across thresholds to identify what changed as memory grew.\n"
+        "Key fields to compare: used_memory, used_memory_rss, connected_clients, "
+        "instantaneous_ops_per_sec, mem_fragmentation_ratio, total_commands_processed.\n\n"
+    )
+    return header + "\n---\n\n".join(output_parts)
+
+
+# ---------------------------------------------------------------------------
 # Collect all tools + cleanup
 # ---------------------------------------------------------------------------
 
@@ -498,6 +607,7 @@ ALL_TOOLS = [
     fetch_logs,
     run_falkordb_local,
     execute_query,
+    read_oom_dumps,
 ]
 
 

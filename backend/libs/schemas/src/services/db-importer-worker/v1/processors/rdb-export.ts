@@ -1,16 +1,31 @@
 import { type Static, Type } from '@sinclair/typebox';
 import { SupportedCloudProviderSchema } from '../../../../global';
 
-export const RdbExportCopyRDBToBucketProcessorDataSchema = Type.Object({
+const RdbExportCopyRDBToBucketBaseProcessorDataSchema = {
   taskId: Type.String(),
+  bucketName: Type.String(),
+  fileName: Type.String(),
+};
+
+export const RdbExportCopyRDBToBucketPodUploadProcessorDataSchema = Type.Object({
+  ...RdbExportCopyRDBToBucketBaseProcessorDataSchema,
   instanceId: Type.String(),
   podId: Type.String(),
   region: Type.String(),
   cloudProvider: SupportedCloudProviderSchema,
   clusterId: Type.String(),
-  bucketName: Type.String(),
-  fileName: Type.String(),
-});
+}, { additionalProperties: false });
+
+export const RdbExportCopyRDBToBucketStagedCopyProcessorDataSchema = Type.Object({
+  ...RdbExportCopyRDBToBucketBaseProcessorDataSchema,
+}, { additionalProperties: false });
+
+export const RdbExportCopyRDBToBucketProcessorDataSchema = Type.Union([
+  RdbExportCopyRDBToBucketPodUploadProcessorDataSchema,
+  RdbExportCopyRDBToBucketStagedCopyProcessorDataSchema,
+]);
+export type RdbExportCopyRDBToBucketPodUploadProcessorData = Static<typeof RdbExportCopyRDBToBucketPodUploadProcessorDataSchema>;
+export type RdbExportCopyRDBToBucketStagedCopyProcessorData = Static<typeof RdbExportCopyRDBToBucketStagedCopyProcessorDataSchema>;
 export type RdbExportCopyRDBToBucketProcessorData = Static<typeof RdbExportCopyRDBToBucketProcessorDataSchema>;
 
 export const RdbExportMonitorRDBMergeProcessorDataSchema = Type.Object({
