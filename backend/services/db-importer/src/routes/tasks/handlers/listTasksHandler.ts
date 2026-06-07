@@ -7,6 +7,7 @@ import { ITasksDBRepository } from '../../../repositories/tasks';
 import { ApiError } from '@falkordb/errors';
 import { decode, JwtPayload } from 'jsonwebtoken';
 import { OmnistrateRepository } from '../../../repositories/omnistrate/OmnistrateRepository';
+import { sanitizeTaskDocument } from '@falkordb/schemas/global';
 
 export const listTasksHandler: RouteHandlerMethod<
   undefined,
@@ -50,7 +51,10 @@ export const listTasksHandler: RouteHandlerMethod<
       pageSize,
     });
 
-    reply.send(data);
+    reply.send({
+      ...data,
+      data: data.data.map(sanitizeTaskDocument),
+    });
   } catch (error) {
     logger.error(error, 'Error listing tasks');
 

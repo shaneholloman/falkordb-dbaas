@@ -44,6 +44,8 @@
             Your FalkorDB instance with ID <b>{{ instanceId }}</b> has been stopped due to inactivity. 
             <br>
             You can start it again from the FalkorDB Cloud Dashboard.
+            <br>
+            If the instance remains stopped for 7 days, it will be deleted and all data will be lost.
           </mj-text>
         
           <mj-button background-color="#7466FF" align="center" color="#ffffff" font-size="17px" font-weight="bold" href="{{ link }}" width="300px">

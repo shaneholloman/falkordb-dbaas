@@ -15,7 +15,8 @@ export const exportRDBHandler: RouteHandlerMethod<undefined, undefined, undefine
   const {
     instanceId,
     username,
-    password
+    password,
+    target,
   } = request.body;
 
   const logger = request.log;
@@ -42,7 +43,8 @@ export const exportRDBHandler: RouteHandlerMethod<undefined, undefined, undefine
       requestorId: userID,
       instanceId,
       username,
-      password
+      password,
+      target,
     });
 
     reply.status(202).send({

@@ -6,14 +6,18 @@ import { OmnistrateInstanceSchemaType } from '../../../schemas/omnistrate-instan
 import {
   ExportRDBTaskType,
   MultiShardRDBExportPayloadType,
+  RDBExportTargetType,
   RDBExportTaskPayloadType,
   SingleShardRDBExportPayloadType,
   TaskDocumentType,
   TaskTypesType,
 } from '@falkordb/schemas/global';
-import assert from 'assert';
+import assert = require('assert');
+import { randomUUID } from 'crypto';
 import { ApiError } from '@falkordb/errors';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
+import { Storage } from '@google-cloud/storage';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 export class ExportRDBController {
   constructor(
@@ -64,6 +68,8 @@ export class ExportRDBController {
     taskType: TaskTypesType,
     instance: OmnistrateInstanceSchemaType,
     podId: string,
+    target: RDBExportTargetType,
+    destinationFileName: string,
   ): RDBExportTaskPayloadType {
     if (taskType === 'SingleShardRDBExport') {
       return {
@@ -75,8 +81,9 @@ export class ExportRDBController {
         hasTLS: instance.tls,
         destination: {
           bucketName: this._exportBucketName,
-          fileName: `exports/${instance.id}/${crypto.randomUUID()}.rdb`,
+          fileName: destinationFileName,
           expiresIn: 60 * 60 * 1000, // 1 hour
+          target,
         },
       } as SingleShardRDBExportPayloadType;
     }
@@ -84,6 +91,7 @@ export class ExportRDBController {
       const pods = [0, 2, 4].map((i) => `${this._resolvePodPrefix(instance)}-${i}`);
       return {
         instanceId: instance.id,
+        podId,
         cloudProvider: instance.cloudProvider,
         clusterId: instance.clusterId,
         region: instance.region,
@@ -93,11 +101,70 @@ export class ExportRDBController {
             podId,
             partFileName: `exports/${instance.id}/${podId}.rdb`,
           })),
-          fileName: `exports/${instance.id}/${crypto.randomUUID()}.rdb`,
+          fileName: destinationFileName,
           bucketName: this._exportBucketName,
           expiresIn: 60 * 60 * 1000, // 1 hour
+          target,
         },
       } as MultiShardRDBExportPayloadType;
+    }
+
+    throw new Error(`Unsupported RDB export task type: ${taskType}`);
+  }
+
+  private _resolveDestinationFileName(instanceId: string): string {
+    return `exports/${instanceId}/${randomUUID()}.rdb`;
+  }
+
+  private async _verifyTargetWriteAccess(target: RDBExportTargetType | undefined, fileName: string): Promise<void> {
+    if (target?.type !== 'gcs' && target?.type !== 's3') {
+      return;
+    }
+
+    try {
+      if (target.type === 'gcs') {
+        const storage = new Storage({
+          projectId: target.credentials.project_id,
+          credentials: target.credentials,
+        });
+
+        await storage.bucket(target.bucketName).file(fileName).save(Buffer.alloc(0), {
+          contentType: 'application/octet-stream',
+          resumable: false,
+        });
+        return;
+      }
+
+      const s3Client = new S3Client({
+        region: target.region,
+        credentials: {
+          accessKeyId: target.accessKeyId,
+          secretAccessKey: target.secretAccessKey,
+          sessionToken: target.sessionToken,
+        },
+      });
+
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket: target.bucketName,
+          Key: fileName,
+          Body: new Uint8Array(),
+          ContentType: 'application/octet-stream',
+        }),
+      );
+    } catch (error) {
+      this._opts.logger.warn(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          target: {
+            type: target.type,
+            bucketName: target.bucketName,
+            region: target.type === 's3' ? target.region : undefined,
+          },
+        },
+        'Error validating export target write access',
+      );
+      throw ApiError.badRequest('Invalid export target credentials', 'INVALID_EXPORT_TARGET_CREDENTIALS');
     }
   }
 
@@ -128,11 +195,13 @@ export class ExportRDBController {
     instanceId,
     username,
     password,
+    target = {},
   }: {
     requestorId: string;
     instanceId: string;
     username: string;
     password: string;
+    target?: RDBExportTargetType;
   }): Promise<{ taskId: string }> {
     // Get instance details from omnistrate
     let instance: OmnistrateInstanceSchemaType | undefined;
@@ -198,13 +267,16 @@ export class ExportRDBController {
     }
 
     const taskType = this._getTaskType(instance);
+    const destinationFileName = this._resolveDestinationFileName(instance.id);
+
+    await this._verifyTargetWriteAccess(target, destinationFileName);
 
     // Create a task in the tasks repository
     let task: ExportRDBTaskType | undefined;
     try {
       task = (await this.tasksRepository.createTask(
         taskType,
-        this._createTaskPayload(taskType, instance, podId),
+        this._createTaskPayload(taskType, instance, podId, target, destinationFileName),
       )) as ExportRDBTaskType;
     } catch (error) {
       this._opts.logger.error({ error }, 'Error creating task');
