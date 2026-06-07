@@ -147,16 +147,19 @@ async def query_metrics(params: QueryMetricsParams) -> str:
     if not all([vmauth_url, username, password]):
         return "ERROR: VMAUTH_URL, VMAUTH_METRICS_USERNAME, and VMAUTH_METRICS_PASSWORD env vars required"
 
-    if params.start_minutes_ago <= params.end_minutes_ago:
+    start_minutes_ago = params.start_minutes_ago
+    end_minutes_ago = params.end_minutes_ago
+
+    if start_minutes_ago <= end_minutes_ago:
         return "ERROR: start_minutes_ago must be greater than end_minutes_ago (start is further in the past)."
-    if params.end_minutes_ago < 0 or params.start_minutes_ago < 0:
+    if end_minutes_ago < 0 or start_minutes_ago < 0:
         return "ERROR: minutes values must be non-negative."
 
     verify_ssl = _verify_ssl()
 
     now = datetime.now(timezone.utc)
-    start = now - timedelta(minutes=params.start_minutes_ago)
-    end = now - timedelta(minutes=params.end_minutes_ago)
+    start = now - timedelta(minutes=start_minutes_ago)
+    end = now - timedelta(minutes=end_minutes_ago)
 
     try:
         resp = requests.get(

@@ -600,8 +600,8 @@ async def fetch_compliance_failures(params: FetchComplianceFailuresParams) -> st
 
 class SearchRepoCodeParams(BaseModel):
     pattern: str = Field(description="Regex pattern to search for.")
-    path_glob: Optional[str] = Field(
-        default=None,
+    path_glob: str = Field(
+        default="",
         description="Optional path glob to scope the search (e.g. argocd/**).",
     )
 
