@@ -349,7 +349,7 @@ async def run_triage(args):
         session.on(on_event)
         prompt = _build_initial_prompt(args)
         print(f"Sending triage request for {args.pod} in {args.namespace}...")
-        await session.send_and_wait({"prompt": prompt})
+        await session.send_and_wait(prompt)
 
         # Prefer the message containing the structured report header;
         # fall back to the last message if no structured report is found.

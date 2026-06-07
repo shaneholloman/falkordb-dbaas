@@ -855,7 +855,7 @@ async def run_triage(args):
         session.on(on_event)
         prompt = _build_initial_prompt(args)
         print(f"Sending OOM triage request for {args.pod} in {args.namespace}...")
-        await session.send_and_wait({"prompt": prompt})
+        await session.send_and_wait(prompt)
 
         REPORT_HEADER = "## 🤖 AI OOM Triage Report"
         if messages:

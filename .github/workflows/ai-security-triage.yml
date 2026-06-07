@@ -60,14 +60,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Copilot CLI and Python deps
+      - name: Install Python deps
         run: |
-          npm install -g @github/copilot
           pip install github-copilot-sdk requests pydantic
 
       - name: Resolve environment-scoped URLs
