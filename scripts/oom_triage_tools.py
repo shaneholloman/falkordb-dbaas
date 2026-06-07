@@ -22,7 +22,7 @@ from typing import Optional
 
 import requests
 from pydantic import BaseModel, Field
-from copilot import define_tool
+from copilot.tools import define_tool
 from google.cloud import storage as gcs_storage
 
 
@@ -123,7 +123,6 @@ class QueryMetricsParams(BaseModel):
 
 
 @define_tool(
-    name="query_metrics",
     description=(
         "Query VictoriaMetrics with a PromQL range query. Returns time-series data "
         "points for the given expression and time window. Use this to analyze memory "
@@ -140,7 +139,6 @@ class QueryMetricsParams(BaseModel):
         "- redis_falkordb_total_graph_count (graph count)\n"
         "- kube_pod_container_resource_limits, kube_pod_container_resource_requests (K8s resources)"
     ),
-    skip_permission=True,
 )
 async def query_metrics(params: QueryMetricsParams) -> str:
     vmauth_url = os.environ.get("VMAUTH_URL", "").rstrip("/")
@@ -262,13 +260,11 @@ class FetchLogsParams(BaseModel):
 
 
 @define_tool(
-    name="fetch_logs",
     description=(
         "Fetch logs from VictoriaLogs for a specific pod. Returns cleaned log lines "
         "with timestamps stripped. Use this to look for errors, large queries, "
         "slow operations, or any suspicious activity before the OOM event."
     ),
-    skip_permission=True,
 )
 async def fetch_logs(params: FetchLogsParams) -> str:
     vmauth_url = os.environ.get("VMAUTH_URL", "").rstrip("/")
@@ -355,7 +351,6 @@ class RunFalkorDBLocalParams(BaseModel):
 
 
 @define_tool(
-    name="run_falkordb_local",
     description=(
         "Start a local FalkorDB Docker container, optionally loading an RDB dump "
         "and/or AOF directory from GCS paths (gs://...). Use this to inspect the "
@@ -465,7 +460,6 @@ class ExecuteQueryParams(BaseModel):
 
 
 @define_tool(
-    name="execute_query",
     description=(
         "Execute a Redis or FalkorDB command on the local Docker instance. "
         "Use this to inspect the database state: INFO ALL, INFO memory, DBSIZE, "
