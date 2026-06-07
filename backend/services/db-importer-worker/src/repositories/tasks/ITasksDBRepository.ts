@@ -4,6 +4,6 @@ export abstract class ITasksDBRepository {
 
   abstract getTaskById(taskId: string): Promise<RDBTaskType>;
 
-  abstract updateTask(task: RDBTaskType): Promise<void>;
+  abstract updateTask(task: Partial<RDBTaskType> & { taskId: string; errors?: string[] }): Promise<void>;
 
 }
