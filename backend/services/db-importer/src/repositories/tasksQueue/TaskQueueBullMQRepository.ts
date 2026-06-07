@@ -270,6 +270,22 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
     task: ImportRDBTaskType,
   ): FlowJob {
     this._opts.logger.debug(`Creating import RDB flow for task: ${task.taskId}`);
+    const copySourceToBucketChildren = task.payload.source ? [
+      this._makeJobNode(
+        RdbImportTaskNames.RdbImportCopySourceToBucket,
+        ProcessorsSchemaMap[RdbImportTaskNames.RdbImportCopySourceToBucket],
+        {
+          taskId: task.taskId,
+          bucketName: task.payload.bucketName,
+          fileName: task.payload.fileName,
+        },
+        {
+          failParentOnFailure: true,
+          jobId: `${task.taskId}-copy-source-to-bucket`,
+        },
+      ),
+    ] : undefined;
+
     return this._makeJobNode(
       RdbImportTaskNames.RdbImportValidateImportKeyNumber,
       ProcessorsSchemaMap[RdbImportTaskNames.RdbImportValidateImportKeyNumber],
@@ -429,6 +445,7 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
                                       {
                                         failParentOnFailure: true,
                                       },
+                                      copySourceToBucketChildren,
                                     ),
                                   ],
                                 ),
@@ -467,6 +484,7 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
                                       {
                                         failParentOnFailure: true,
                                       },
+                                      copySourceToBucketChildren,
                                     ),
                                   ],
                                 ),

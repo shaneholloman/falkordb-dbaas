@@ -16,7 +16,8 @@ export const importRDBRequestUrlHandler: RouteHandlerMethod<undefined, undefined
   const {
     instanceId,
     username,
-    password
+    password,
+    source,
   } = request.body;
 
   const logger = request.log;
@@ -45,12 +46,13 @@ export const importRDBRequestUrlHandler: RouteHandlerMethod<undefined, undefined
       requestorId: userID,
       instanceId,
       username,
-      password
+      password,
+      source,
     });
 
     reply.status(202).send({
-      uploadUrl,
       taskId,
+      ...(uploadUrl ? { uploadUrl } : {}),
     });
   } catch (error) {
     logger.error(error, "Error requesting RDB upload URL");
