@@ -1,9 +1,11 @@
 import { ALLOWED_ACL } from '../constants';
 
+const DEFAULT_ACL_PREFIX = '~* ';
+
 /**
  * Parse ACL string into a set of allowed commands
  */
-function parseAcl(acl: string): Set<string> {
+export function parseAcl(acl: string): Set<string> {
   const commands = new Set<string>();
 
   // Split by spaces, handling quoted commands
@@ -63,4 +65,35 @@ export function validateAcl(userAcl: string): { valid: boolean; invalidCommands:
     valid: invalidCommands.length === 0,
     invalidCommands,
   };
+}
+
+/**
+ * Check if a user's ACL looks like an outdated default user ACL.
+ * A default user has `~* ` prefix (all-key access) and their commands are
+ * a strict subset of the current ALLOWED_ACL (i.e., missing newly added commands).
+ */
+export function isDefaultUserAclOutdated(userAcl: string): boolean {
+  if (!userAcl.startsWith(DEFAULT_ACL_PREFIX)) {
+    return false;
+  }
+
+  const expectedAcl = `${DEFAULT_ACL_PREFIX}${ALLOWED_ACL}`;
+  if (userAcl === expectedAcl) {
+    return false;
+  }
+
+  // Extract the command portion (after `~* `)
+  const commandPortion = userAcl.substring(DEFAULT_ACL_PREFIX.length);
+  const userCommands = parseAcl(commandPortion);
+  const allowedCommands = parseAcl(ALLOWED_ACL);
+
+  // All existing user commands must be in the current allowed set
+  // (otherwise this is a custom user, not an outdated default)
+  for (const command of userCommands) {
+    if (!isCommandAllowed(command, allowedCommands)) {
+      return false;
+    }
+  }
+
+  return true;
 }
