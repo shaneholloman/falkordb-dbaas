@@ -20,6 +20,29 @@ spec:
         echo "Namespace: ${NAMESPACE}"
         echo "=========================================="
 
+        # Install omnistrate-ctl
+        curl -sL https://omnistrate-ctl.s3.amazonaws.com/stable/linux-amd64/omnistrate-ctl -o /usr/local/bin/omnistrate-ctl
+        chmod +x /usr/local/bin/omnistrate-ctl
+
+        # Normalize GCP cluster name to deployment cell ID
+        # GCP passes "c-hc<id>" but omnistrate-ctl expects "hc-<id>"
+        if echo "$CLUSTER" | grep -q "^c-hc"; then
+          DEPLOYMENT_CELL="hc-${CLUSTER#c-hc}"
+          echo "Normalized GCP cluster name: $CLUSTER -> $DEPLOYMENT_CELL"
+        else
+          DEPLOYMENT_CELL="$CLUSTER"
+        fi
+
+        # Authenticate to omnistrate using API key
+        echo "$OMNISTRATE_API_KEY" | omnistrate-ctl login --api-key-stdin
+
+        # Get kubeconfig for the target cluster
+        script -q -c \
+          "omnistrate-ctl deployment-cell update-kubeconfig \"$DEPLOYMENT_CELL\" --role cluster-admin --kubeconfig /tmp/kubeconfig" \
+          /dev/null
+
+        export KUBECONFIG=/tmp/kubeconfig
+
         echo "Executing fork-killer logic on pod ${POD_NAME} in namespace ${NAMESPACE}..."
 
         kubectl exec -n "${NAMESPACE}" "${POD_NAME}" -c service -- bash -c '
@@ -88,3 +111,8 @@ spec:
       valueFrom:
         alertRef:
           fieldPath: "labels.environment"
+    - name: OMNISTRATE_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: omnistrate-api-key
+          key: api-key
