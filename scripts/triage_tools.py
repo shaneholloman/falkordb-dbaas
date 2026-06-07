@@ -22,7 +22,7 @@ from typing import Optional
 
 import requests
 from pydantic import BaseModel, Field
-from copilot import define_tool
+from copilot.tools import define_tool
 from google.cloud import storage as gcs_storage
 
 
@@ -113,13 +113,11 @@ class FetchCrashLogsParams(BaseModel):
 
 
 @define_tool(
-    name="fetch_crash_logs",
     description=(
         "Fetch and clean crash logs from VictoriaLogs for a specific pod. "
         "Returns the logs with timestamps stripped and the REDIS BUG REPORT "
         "section isolated if present. Use this as your first step."
     ),
-    skip_permission=True,
 )
 async def fetch_crash_logs(params: FetchCrashLogsParams) -> str:
     from datetime import datetime, timedelta, timezone
@@ -201,13 +199,11 @@ class FetchPreviousCrashesParams(BaseModel):
 
 
 @define_tool(
-    name="fetch_previous_crashes",
     description=(
         "Fetch previous crash issues for the same namespace from GitHub. "
         "Returns issue titles, bodies, and comments including any prior "
         "AI triage reports. Use this for progressive/comparative analysis."
     ),
-    skip_permission=True,
 )
 async def fetch_previous_crashes(params: FetchPreviousCrashesParams) -> str:
     # Search for issues with crash + namespace labels
@@ -271,7 +267,6 @@ class SearchCrashesBySignatureParams(BaseModel):
 
 
 @define_tool(
-    name="search_crashes_by_signature",
     description=(
         "Search ALL crash issues across every instance for a specific crashing "
         "function or signature. Unlike fetch_previous_crashes (which is scoped to "
@@ -279,7 +274,6 @@ class SearchCrashesBySignatureParams(BaseModel):
         "version-related or instance-specific. Returns issues with their FalkorDB "
         "version, namespace, state, and fix status."
     ),
-    skip_permission=True,
 )
 async def search_crashes_by_signature(params: SearchCrashesBySignatureParams) -> str:
     import re as _re
@@ -377,13 +371,11 @@ class SearchFalkorDBIssuesParams(BaseModel):
 
 
 @define_tool(
-    name="search_falkordb_issues",
     description=(
         "Search GitHub issues in FalkorDB repos for function names, error patterns, "
         "or crash signatures. Use this to find known bugs, PRs, or workarounds "
         "related to the crash."
     ),
-    skip_permission=True,
 )
 async def search_falkordb_issues(params: SearchFalkorDBIssuesParams) -> str:
     resp = _github_get(
@@ -432,13 +424,11 @@ class ReadFalkorDBSourceParams(BaseModel):
 
 
 @define_tool(
-    name="read_falkordb_source",
     description=(
         "Read a source file from the FalkorDB/FalkorDB C engine repository. "
         "Use this to examine the code around a crashing function. "
         "Provide the file path relative to the repo root."
     ),
-    skip_permission=True,
 )
 async def read_falkordb_source(params: ReadFalkorDBSourceParams) -> str:
     resp = _github_get(
@@ -474,13 +464,11 @@ class SearchFalkorDBCodeParams(BaseModel):
 
 
 @define_tool(
-    name="search_falkordb_code",
     description=(
         "Search the FalkorDB/FalkorDB C codebase for function names, patterns, "
         "or identifiers. Returns matching file paths and code snippets. "
         "Use this to locate where a crashing function is defined."
     ),
-    skip_permission=True,
 )
 async def search_falkordb_code(params: SearchFalkorDBCodeParams) -> str:
     resp = _github_get(
@@ -520,12 +508,10 @@ class SearchGitCommitsParams(BaseModel):
 
 
 @define_tool(
-    name="search_git_commits",
     description=(
         "Search recent commits in FalkorDB/FalkorDB for changes related to the crash. "
         "Use this to check for regressions — recent changes to the crashing function."
     ),
-    skip_permission=True,
 )
 async def search_git_commits(params: SearchGitCommitsParams) -> str:
     api_params = {"per_page": 15}
@@ -577,13 +563,11 @@ class GetGitBlameParams(BaseModel):
 
 
 @define_tool(
-    name="get_git_blame",
     description=(
         "Get git blame info for specific lines in a FalkorDB source file. "
         "Shows who last modified each line and when. Use this to check "
         "if the crashing code was recently changed (regression indicator)."
     ),
-    skip_permission=True,
 )
 async def get_git_blame(params: GetGitBlameParams) -> str:
     # GitHub doesn't have a REST blame API with line ranges, use GraphQL
@@ -663,7 +647,6 @@ class RunFalkorDBLocalParams(BaseModel):
 
 
 @define_tool(
-    name="run_falkordb_local",
     description=(
         "Start a local FalkorDB Docker container, optionally loading an RDB dump "
         "and/or AOF directory from GCS paths (gs://...). Downloads use the "
@@ -736,7 +719,6 @@ class ExecuteQueryParams(BaseModel):
 
 
 @define_tool(
-    name="execute_query",
     description=(
         "Execute a Redis or FalkorDB command on the local Docker instance. "
         "Use this to reproduce the crashing command or inspect the graph state. "

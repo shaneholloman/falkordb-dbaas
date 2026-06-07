@@ -208,28 +208,3 @@ spec:
               has been killed by SIGABRT {{ $value }} times in the last 10 minutes. The instance is stuck in an 
               OOM → SIGABRT → restart → OOM loop and requires immediate attention (likely needs a memory scale-up).
             view_logs: 'https://grafana.observability{{ if eq $labels.environment "dev" }}.dev{{ end }}.internal.falkordb.cloud/explore?orgId=1&left=%7B%22datasource%22%3A%22VictoriaLogs%22%2C%22queries%22%3A%5B%7B%22expr%22%3A%22pod%3A%5C%22{{ $labels.pod }}%5C%22%20AND%20namespace%3A%5C%22{{ $labels.namespace }}%5C%22%20AND%20container%3A%5C%22service%5C%22%22%7D%5D%7D'
-
-        - alert: BgrewriteaofForkKillFailed
-          # LogsQL: Detect when the stuck_bgrewriteaof_fork_killer script fails.
-          # The script is executed by the bgrewriteaof-fork-killer AlertReaction via kubectl exec.
-          # Output (including stderr redirected to stdout) appears in the reaction pod's logs
-          # in the observability namespace. All failure modes emit "FORK_KILL_FAILED:" to identify
-          # that automated remediation of a stuck AOF rewrite did not succeed.
-          expr: |
-            "FORK_KILL_FAILED:" and namespace: "observability" and _time:5m |
-            stats by (pod, namespace, cluster, environment) count() as failure_count |
-            filter failure_count :> 0
-          for: 0m
-          keep_firing_for: 5m
-          labels:
-            severity: warning
-            cluster: "{{ $labels.cluster }}"
-            environment: "{{ $labels.environment }}"
-          annotations:
-            summary: "BgRewriteAOF fork kill failed ({{ $labels.pod }})"
-            description: |
-              [cluster={{ $labels.cluster }}] The stuck_bgrewriteaof_fork_killer script failed during
-              automated remediation of a stuck AOF rewrite. The FalkorDBAOFPendingRewriteCritical alert
-              triggered this reaction but the fork could not be killed.
-              Failure count: {{ $value }}. Manual intervention is required.
-            view_logs: 'https://grafana.observability{{ if eq $labels.environment "dev" }}.dev{{ end }}.internal.falkordb.cloud/explore?orgId=1&left=%7B%22datasource%22%3A%22VictoriaLogs%22%2C%22queries%22%3A%5B%7B%22expr%22%3A%22pod%3A%5C%22{{ $labels.pod }}%5C%22%20AND%20namespace%3A%5C%22{{ $labels.namespace }}%5C%22%22%7D%5D%7D'

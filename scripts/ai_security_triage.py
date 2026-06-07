@@ -531,13 +531,13 @@ async def run_triage(args: argparse.Namespace) -> str | None:
     client = CopilotClient()
     await client.start()
     try:
-        session = await client.create_session({
-            "on_permission_request": PermissionHandler.approve_all,
-            "model": "claude-opus-4.6",
-            "streaming": True,
-            "tools": INVESTIGATION_TOOLS,
-            "system_message": {"mode": "append", "content": SYSTEM_MESSAGE},
-        })
+        session = await client.create_session(
+            on_permission_request=PermissionHandler.approve_all,
+            model="claude-opus-4.6",
+            streaming=True,
+            tools=INVESTIGATION_TOOLS,
+            system_message={"mode": "append", "content": SYSTEM_MESSAGE},
+        )
         done = asyncio.Event()
         messages: list[str] = []
         streamed_chunks: list[str] = []
@@ -579,7 +579,7 @@ async def run_triage(args: argparse.Namespace) -> str | None:
         session.on(on_event)
         prompt = _build_initial_prompt(args, evidence)
         print(f"Starting security triage for {args.environment}...")
-        await session.send_and_wait({"prompt": prompt})
+        await session.send_and_wait(prompt, timeout=600)
 
         REPORT_HEADER = "## 🛡️ AI Security Triage"
         if messages:

@@ -302,16 +302,16 @@ async def run_triage(args):
     client = CopilotClient()
     await client.start()
     try:
-        session = await client.create_session({
-            "on_permission_request": PermissionHandler.approve_all,
-            "model": "claude-opus-4.6",
-            "streaming": True,
-            "tools": ALL_TOOLS,
-            "system_message": {
+        session = await client.create_session(
+            on_permission_request=PermissionHandler.approve_all,
+            model="claude-opus-4.6",
+            streaming=True,
+            tools=ALL_TOOLS,
+            system_message={
                 "mode": "append",
                 "content": SYSTEM_MESSAGE,
             },
-        })
+        )
         done = asyncio.Event()
         messages = []
         streamed_chunks = []  # collect streaming deltas as fallback
@@ -321,7 +321,7 @@ async def run_triage(args):
             nonlocal turn_active
             t = event.type.value
             print(f"  [{t}]", file=sys.stderr, flush=True)
-            if t in ("assistant.message_delta", "assistant.streaming_delta"):
+            if t == "assistant.message_delta":
                 delta = event.data.delta_content or ""
                 streamed_chunks.append(delta)
                 print(delta, end="", flush=True)
@@ -349,7 +349,7 @@ async def run_triage(args):
         session.on(on_event)
         prompt = _build_initial_prompt(args)
         print(f"Sending triage request for {args.pod} in {args.namespace}...")
-        await session.send_and_wait({"prompt": prompt})
+        await session.send_and_wait(prompt, timeout=600)
 
         # Prefer the message containing the structured report header;
         # fall back to the last message if no structured report is found.

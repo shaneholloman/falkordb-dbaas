@@ -22,7 +22,7 @@ from typing import Optional
 
 import requests
 from pydantic import BaseModel, Field
-from copilot import define_tool
+from copilot.tools import define_tool
 from google.cloud import storage as gcs_storage
 
 
@@ -123,7 +123,6 @@ class QueryMetricsParams(BaseModel):
 
 
 @define_tool(
-    name="query_metrics",
     description=(
         "Query VictoriaMetrics with a PromQL range query. Returns time-series data "
         "points for the given expression and time window. Use this to analyze memory "
@@ -140,7 +139,6 @@ class QueryMetricsParams(BaseModel):
         "- redis_falkordb_total_graph_count (graph count)\n"
         "- kube_pod_container_resource_limits, kube_pod_container_resource_requests (K8s resources)"
     ),
-    skip_permission=True,
 )
 async def query_metrics(params: QueryMetricsParams) -> str:
     vmauth_url = os.environ.get("VMAUTH_URL", "").rstrip("/")
@@ -149,16 +147,19 @@ async def query_metrics(params: QueryMetricsParams) -> str:
     if not all([vmauth_url, username, password]):
         return "ERROR: VMAUTH_URL, VMAUTH_METRICS_USERNAME, and VMAUTH_METRICS_PASSWORD env vars required"
 
-    if params.start_minutes_ago <= params.end_minutes_ago:
+    start_minutes_ago = params.start_minutes_ago
+    end_minutes_ago = params.end_minutes_ago
+
+    if start_minutes_ago <= end_minutes_ago:
         return "ERROR: start_minutes_ago must be greater than end_minutes_ago (start is further in the past)."
-    if params.end_minutes_ago < 0 or params.start_minutes_ago < 0:
+    if end_minutes_ago < 0 or start_minutes_ago < 0:
         return "ERROR: minutes values must be non-negative."
 
     verify_ssl = _verify_ssl()
 
     now = datetime.now(timezone.utc)
-    start = now - timedelta(minutes=params.start_minutes_ago)
-    end = now - timedelta(minutes=params.end_minutes_ago)
+    start = now - timedelta(minutes=start_minutes_ago)
+    end = now - timedelta(minutes=end_minutes_ago)
 
     try:
         resp = requests.get(
@@ -262,13 +263,11 @@ class FetchLogsParams(BaseModel):
 
 
 @define_tool(
-    name="fetch_logs",
     description=(
         "Fetch logs from VictoriaLogs for a specific pod. Returns cleaned log lines "
         "with timestamps stripped. Use this to look for errors, large queries, "
         "slow operations, or any suspicious activity before the OOM event."
     ),
-    skip_permission=True,
 )
 async def fetch_logs(params: FetchLogsParams) -> str:
     vmauth_url = os.environ.get("VMAUTH_URL", "").rstrip("/")
@@ -355,7 +354,6 @@ class RunFalkorDBLocalParams(BaseModel):
 
 
 @define_tool(
-    name="run_falkordb_local",
     description=(
         "Start a local FalkorDB Docker container, optionally loading an RDB dump "
         "and/or AOF directory from GCS paths (gs://...). Use this to inspect the "
@@ -465,7 +463,6 @@ class ExecuteQueryParams(BaseModel):
 
 
 @define_tool(
-    name="execute_query",
     description=(
         "Execute a Redis or FalkorDB command on the local Docker instance. "
         "Use this to inspect the database state: INFO ALL, INFO memory, DBSIZE, "

@@ -23,6 +23,7 @@ export interface ILdapRepository {
 export interface LdapUser {
   username: string;
   acl: string;
+  createdAt: string;
 }
 
 export interface CreateUserRequest {

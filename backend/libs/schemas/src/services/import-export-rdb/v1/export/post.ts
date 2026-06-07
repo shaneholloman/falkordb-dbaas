@@ -1,4 +1,5 @@
 import { type Static, Type } from '@sinclair/typebox';
+import { RDBExportTargetSchema } from '../../../../global';
 
 export const ExportRDBRequestBodySchema = Type.Object({
   instanceId: Type.String(),
@@ -8,6 +9,7 @@ export const ExportRDBRequestBodySchema = Type.Object({
   password: Type.Optional(Type.String({
     pattern: "^[a-zA-Z0-9._!\@\#\$\%\^\&\*-]+$"
   })),
+  target: Type.Optional(RDBExportTargetSchema),
 });
 
 export type ExportRDBRequestBody = Static<typeof ExportRDBRequestBodySchema>;
