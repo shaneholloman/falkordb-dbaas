@@ -600,8 +600,8 @@ async def fetch_compliance_failures(params: FetchComplianceFailuresParams) -> st
 
 class SearchRepoCodeParams(BaseModel):
     pattern: str = Field(description="Regex pattern to search for.")
-    path_glob: Optional[str] = Field(
-        default=None,
+    path_glob: str = Field(
+        default="",
         description="Optional path glob to scope the search (e.g. argocd/**).",
     )
 
@@ -639,8 +639,8 @@ async def search_repo_code(params: SearchRepoCodeParams) -> str:
 
 class ReadRepoFileParams(BaseModel):
     path: str = Field(description="Repo-relative file path.")
-    start_line: int = Field(default=1, description="1-indexed start line.")
-    end_line: int = Field(default=200, description="1-indexed end line (inclusive).")
+    start_line: str = Field(default="1", description="1-indexed start line.")
+    end_line: str = Field(default="200", description="1-indexed end line (inclusive).")
 
 
 @define_tool(
@@ -663,8 +663,8 @@ async def read_repo_file(params: ReadRepoFileParams) -> str:
             lines = f.readlines()
     except OSError as e:
         return json.dumps({"error": str(e)})
-    s = max(0, params.start_line - 1)
-    e = min(len(lines), params.end_line)
+    s = max(0, int(params.start_line) - 1)
+    e = min(len(lines), int(params.end_line))
     snippet = "".join(f"{i + 1:>5}: {ln}" for i, ln in enumerate(lines[s:e], start=s))
     return snippet[:30000]
 

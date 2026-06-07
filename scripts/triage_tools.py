@@ -109,7 +109,7 @@ class FetchCrashLogsParams(BaseModel):
     namespace: str = Field(description="Kubernetes namespace / instance ID")
     pod: str = Field(description="Pod name")
     container: str = Field(default="service", description="Container name")
-    minutes: int = Field(default=7, description="How many minutes of logs to fetch")
+    minutes: str = Field(default="7", description="How many minutes of logs to fetch")
 
 
 @define_tool(
@@ -129,7 +129,7 @@ async def fetch_crash_logs(params: FetchCrashLogsParams) -> str:
         return "ERROR: VMAUTH_URL, VMAUTH_USERNAME, and VMAUTH_PASSWORD env vars required"
 
     end = datetime.now(timezone.utc)
-    start = end - timedelta(minutes=params.minutes)
+    start = end - timedelta(minutes=int(params.minutes))
     query = f'{{namespace="{params.namespace}", pod="{params.pod}", container="{params.container}"}}'
     resp = requests.get(
         f"{vmauth_url}/select/logsql/query",
@@ -195,7 +195,7 @@ async def fetch_crash_logs(params: FetchCrashLogsParams) -> str:
 
 class FetchPreviousCrashesParams(BaseModel):
     namespace: str = Field(description="Namespace to search crashes for")
-    max_results: int = Field(default=10, description="Max issues to return")
+    max_results: str = Field(default="10", description="Max issues to return")
 
 
 @define_tool(
@@ -212,7 +212,7 @@ async def fetch_previous_crashes(params: FetchPreviousCrashesParams) -> str:
         params={
             "state": "all",
             "labels": "crash",
-            "per_page": params.max_results,
+            "per_page": int(params.max_results),
             "sort": "created",
             "direction": "desc",
         },
@@ -233,7 +233,7 @@ async def fetch_previous_crashes(params: FetchPreviousCrashesParams) -> str:
         return f"No previous crash issues found for namespace {params.namespace}"
 
     results = []
-    for issue in matching[:params.max_results]:
+    for issue in matching[:int(params.max_results)]:
         result = f"### Issue #{issue['number']}: {issue['title']}\n"
         result += f"State: {issue['state']} | Created: {issue['created_at']}\n"
         result += f"Labels: {', '.join(l['name'] for l in issue.get('labels', []))}\n\n"
@@ -263,7 +263,7 @@ async def fetch_previous_crashes(params: FetchPreviousCrashesParams) -> str:
 
 class SearchCrashesBySignatureParams(BaseModel):
     function_name: str = Field(description="Primary crashing function name (e.g. 'AlgebraicExpression_Dest')")
-    max_results: int = Field(default=20, description="Max issues to return")
+    max_results: str = Field(default="20", description="Max issues to return")
 
 
 @define_tool(
@@ -282,7 +282,7 @@ async def search_crashes_by_signature(params: SearchCrashesBySignatureParams) ->
         f"{GITHUB_API}/search/issues",
         params={
             "q": f"{params.function_name} repo:{PRIVATE_REPO} label:crash",
-            "per_page": params.max_results,
+            "per_page": int(params.max_results),
             "sort": "created",
             "order": "desc",
         },
@@ -558,8 +558,8 @@ async def search_git_commits(params: SearchGitCommitsParams) -> str:
 
 class GetGitBlameParams(BaseModel):
     path: str = Field(description="File path in the FalkorDB repo")
-    start_line: int = Field(description="Start line number (1-based)")
-    end_line: int = Field(description="End line number (1-based)")
+    start_line: str = Field(description="Start line number (1-based)")
+    end_line: str = Field(description="End line number (1-based)")
 
 
 @define_tool(
@@ -622,7 +622,7 @@ async def get_git_blame(params: GetGitBlameParams) -> str:
     results = []
     for r in ranges:
         s, e = r["startingLine"], r["endingLine"]
-        if e < params.start_line or s > params.end_line:
+        if e < int(params.start_line) or s > int(params.end_line):
             continue
         c = r["commit"]
         msg = c["message"].split("\n")[0][:80]
@@ -715,7 +715,7 @@ async def run_falkordb_local(params: RunFalkorDBLocalParams) -> str:
 
 class ExecuteQueryParams(BaseModel):
     command: str = Field(description="Redis/FalkorDB command to execute (e.g. 'GRAPH.QUERY g \"MATCH (n) RETURN n LIMIT 5\"')")
-    port: int = Field(default=6399, description="Redis port of local instance")
+    port: str = Field(default="6399", description="Redis port of local instance")
 
 
 @define_tool(

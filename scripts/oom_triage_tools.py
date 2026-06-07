@@ -117,8 +117,8 @@ class QueryMetricsParams(BaseModel):
         "'redis_memory_used_bytes{namespace=\"instance-abc\", pod=\"node-f-0\", container=\"service\"}', "
         "'rate(redis_commands_total{namespace=\"instance-abc\", pod=\"node-f-0\"}[5m])'"
     ))
-    start_minutes_ago: int = Field(default=60, description="Start of time range in minutes before now (e.g. 10080 for 7 days)")
-    end_minutes_ago: int = Field(default=0, description="End of time range in minutes before now (0 = now)")
+    start_minutes_ago: str = Field(default="60", description="Start of time range in minutes before now (e.g. 10080 for 7 days)")
+    end_minutes_ago: str = Field(default="0", description="End of time range in minutes before now (0 = now)")
     step: str = Field(default="60s", description="Query resolution step (e.g. '15s', '60s', '1h')")
 
 
@@ -147,16 +147,19 @@ async def query_metrics(params: QueryMetricsParams) -> str:
     if not all([vmauth_url, username, password]):
         return "ERROR: VMAUTH_URL, VMAUTH_METRICS_USERNAME, and VMAUTH_METRICS_PASSWORD env vars required"
 
-    if params.start_minutes_ago <= params.end_minutes_ago:
+    start_minutes_ago = int(params.start_minutes_ago)
+    end_minutes_ago = int(params.end_minutes_ago)
+
+    if start_minutes_ago <= end_minutes_ago:
         return "ERROR: start_minutes_ago must be greater than end_minutes_ago (start is further in the past)."
-    if params.end_minutes_ago < 0 or params.start_minutes_ago < 0:
+    if end_minutes_ago < 0 or start_minutes_ago < 0:
         return "ERROR: minutes values must be non-negative."
 
     verify_ssl = _verify_ssl()
 
     now = datetime.now(timezone.utc)
-    start = now - timedelta(minutes=params.start_minutes_ago)
-    end = now - timedelta(minutes=params.end_minutes_ago)
+    start = now - timedelta(minutes=start_minutes_ago)
+    end = now - timedelta(minutes=end_minutes_ago)
 
     try:
         resp = requests.get(
@@ -256,7 +259,7 @@ class FetchLogsParams(BaseModel):
     namespace: str = Field(description="Kubernetes namespace / instance ID")
     pod: str = Field(description="Pod name")
     container: str = Field(default="service", description="Container name")
-    minutes: int = Field(default=30, description="How many minutes of logs to fetch (default 30 for OOM investigation)")
+    minutes: str = Field(default="30", description="How many minutes of logs to fetch (default 30 for OOM investigation)")
 
 
 @define_tool(
@@ -276,7 +279,7 @@ async def fetch_logs(params: FetchLogsParams) -> str:
     verify_ssl = _verify_ssl()
 
     end = datetime.now(timezone.utc)
-    start = end - timedelta(minutes=params.minutes)
+    start = end - timedelta(minutes=int(params.minutes))
     query = f'{{namespace="{params.namespace}", pod="{params.pod}", container="{params.container}"}}'
 
     try:
@@ -456,7 +459,7 @@ async def run_falkordb_local(params: RunFalkorDBLocalParams) -> str:
 
 class ExecuteQueryParams(BaseModel):
     command: str = Field(description="Redis/FalkorDB command to execute (e.g. 'INFO memory', 'DBSIZE', 'GRAPH.LIST')")
-    port: int = Field(default=6399, description="Redis port of local instance")
+    port: str = Field(default="6399", description="Redis port of local instance")
 
 
 @define_tool(
