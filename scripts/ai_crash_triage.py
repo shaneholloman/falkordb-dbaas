@@ -302,16 +302,16 @@ async def run_triage(args):
     client = CopilotClient()
     await client.start()
     try:
-        session = await client.create_session({
-            "on_permission_request": PermissionHandler.approve_all,
-            "model": "claude-opus-4.6",
-            "streaming": True,
-            "tools": ALL_TOOLS,
-            "system_message": {
+        session = await client.create_session(
+            on_permission_request=PermissionHandler.approve_all,
+            model="claude-opus-4.6",
+            streaming=True,
+            tools=ALL_TOOLS,
+            system_message={
                 "mode": "append",
                 "content": SYSTEM_MESSAGE,
             },
-        })
+        )
         done = asyncio.Event()
         messages = []
         streamed_chunks = []  # collect streaming deltas as fallback

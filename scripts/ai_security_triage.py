@@ -531,13 +531,13 @@ async def run_triage(args: argparse.Namespace) -> str | None:
     client = CopilotClient()
     await client.start()
     try:
-        session = await client.create_session({
-            "on_permission_request": PermissionHandler.approve_all,
-            "model": "claude-opus-4.6",
-            "streaming": True,
-            "tools": INVESTIGATION_TOOLS,
-            "system_message": {"mode": "append", "content": SYSTEM_MESSAGE},
-        })
+        session = await client.create_session(
+            on_permission_request=PermissionHandler.approve_all,
+            model="claude-opus-4.6",
+            streaming=True,
+            tools=INVESTIGATION_TOOLS,
+            system_message={"mode": "append", "content": SYSTEM_MESSAGE},
+        )
         done = asyncio.Event()
         messages: list[str] = []
         streamed_chunks: list[str] = []
