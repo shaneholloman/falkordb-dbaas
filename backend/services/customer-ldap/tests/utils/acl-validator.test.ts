@@ -1,5 +1,5 @@
 import { ALLOWED_ACL } from '../../src/constants';
-import { validateAcl } from '../../src/utils/acl-validator';
+import { validateAcl, isDefaultUserAclOutdated } from '../../src/utils/acl-validator';
 
 describe('ACL Validator', () => {
   describe('validateAcl', () => {
@@ -96,6 +96,41 @@ describe('ACL Validator', () => {
       const result = validateAcl('+INFO +MONITOR +PING');
       expect(result.valid).toBe(true);
       expect(result.invalidCommands).toEqual([]);
+    });
+  });
+
+  describe('isDefaultUserAclOutdated', () => {
+    it('should return false when ACL matches current ALLOWED_ACL', () => {
+      const acl = `~* ${ALLOWED_ACL}`;
+      expect(isDefaultUserAclOutdated(acl)).toBe(false);
+    });
+
+    it('should return false when ACL does not start with ~* prefix', () => {
+      // Custom user with subset of commands
+      expect(isDefaultUserAclOutdated('+INFO +PING')).toBe(false);
+    });
+
+    it('should return true when ACL is an outdated subset of ALLOWED_ACL', () => {
+      // Simulate an older version of ALLOWED_ACL (missing some newer commands)
+      const outdatedAcl = '~* +INFO +CLIENT +DBSIZE +PING +HELLO +AUTH +GRAPH.QUERY +GRAPH.RO_QUERY';
+      expect(isDefaultUserAclOutdated(outdatedAcl)).toBe(true);
+    });
+
+    it('should return false when ACL contains commands not in ALLOWED_ACL', () => {
+      // This is a custom user, not an outdated default
+      const customAcl = '~* +INFO +SET +GET';
+      expect(isDefaultUserAclOutdated(customAcl)).toBe(false);
+    });
+
+    it('should return false for empty ACL', () => {
+      expect(isDefaultUserAclOutdated('')).toBe(false);
+    });
+
+    it('should return false for ~* prefix only with no commands', () => {
+      // ~* with empty commands is technically "~* " which differs from ALLOWED_ACL
+      // but has no commands so it's valid (all are in ALLOWED_ACL trivially)
+      // It should return true since it's outdated (missing all commands)
+      expect(isDefaultUserAclOutdated('~* ')).toBe(true);
     });
   });
 });
