@@ -149,9 +149,10 @@ export class LdapRepository implements ILdapRepository {
       });
 
       // Map users to include ACL from groups
-      const usersWithAcl = users.map((user: { username: string }) => ({
+      const usersWithAcl = users.map((user: { username: string; created_at: string }) => ({
         username: user.username,
         acl: aclMap.get(user.username) || '',
+        createdAt: user.created_at,
       }));
 
       return usersWithAcl;

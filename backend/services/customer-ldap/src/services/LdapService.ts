@@ -1,7 +1,8 @@
 import { FastifyBaseLogger } from 'fastify';
 import { ILdapRepository, LdapUser, CreateUserRequest, ModifyUserRequest } from '../repositories/ldap/ILdapRepository';
-import { validateAcl } from '../utils/acl-validator';
+import { validateAcl, isDefaultUserAclOutdated } from '../utils/acl-validator';
 import { ApiError } from '@falkordb/errors';
+import { ALLOWED_ACL } from '../constants';
 
 export interface LdapServiceOptions {
   logger: FastifyBaseLogger;
@@ -28,12 +29,16 @@ export class LdapService {
   }
 
   async listUsers(): Promise<LdapUser[]> {
-    return this._ldapRepository.listUsers(
+    const users = await this._ldapRepository.listUsers(
       this._localPort,
       this._org,
       this._bearerToken,
       this._caCert,
     );
+
+    await this._syncDefaultUsersAcl(users);
+
+    return users;
   }
 
   async createUser(user: CreateUserRequest): Promise<void> {
@@ -84,6 +89,59 @@ export class LdapService {
       this._bearerToken,
       this._caCert,
       username,
+    );
+  }
+
+  /**
+   * Sync the default user's ACL to the current ALLOWED_ACL.
+   * The default user is identified by: first checking for username "falkordb",
+   * then falling back to the oldest user by created_at.
+   * Only updates if the user's ACL is outdated.
+   */
+  private async _syncDefaultUsersAcl(users: LdapUser[]): Promise<void> {
+    const updatedAcl = `~* ${ALLOWED_ACL}`;
+
+    const defaultUser = this._findDefaultUser(users);
+    if (!defaultUser || !isDefaultUserAclOutdated(defaultUser.acl)) {
+      return;
+    }
+
+    this._options.logger.info({ username: defaultUser.username }, 'Syncing default user ACL to current ALLOWED_ACL');
+
+    try {
+      await this._ldapRepository.modifyUser(
+        this._localPort,
+        this._org,
+        this._bearerToken,
+        this._caCert,
+        defaultUser.username,
+        { acl: updatedAcl },
+      );
+      defaultUser.acl = updatedAcl;
+    } catch (error) {
+      this._options.logger.error({ username: defaultUser.username, error }, 'Failed to sync default user ACL');
+    }
+  }
+
+  private _findDefaultUser(users: LdapUser[]): LdapUser | undefined {
+    // Prefer user with username "falkordb"
+    const falkordbUser = users.find((user) => user.username === 'falkordb');
+    if (falkordbUser) {
+      return falkordbUser;
+    }
+
+    // Fall back to the oldest user by created_at
+    if (users.length === 0) {
+      return undefined;
+    }
+
+    const usersWithDate = users.filter((user) => user.createdAt);
+    if (usersWithDate.length === 0) {
+      return users[0];
+    }
+
+    return usersWithDate.reduce((oldest, user) =>
+      new Date(user.createdAt) < new Date(oldest.createdAt) ? user : oldest,
     );
   }
 }
