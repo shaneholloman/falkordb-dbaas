@@ -828,7 +828,7 @@ async def run_triage(args):
             nonlocal turn_active
             t = event.type.value
             print(f"  [{t}]", file=sys.stderr, flush=True)
-            if t in ("assistant.message_delta", "assistant.streaming_delta"):
+            if t == "assistant.message_delta":
                 delta = event.data.delta_content or ""
                 streamed_chunks.append(delta)
                 print(delta, end="", flush=True)
