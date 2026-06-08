@@ -72,6 +72,7 @@ const makeController = () => {
   };
   const tasksRepository = {
     listTasks: jest.fn().mockResolvedValue({ data: [] }),
+    getTaskById: jest.fn().mockResolvedValue(undefined),
     createTask: jest.fn().mockImplementation(async (_type, payload) => ({
       ...createdTask,
       payload,
@@ -162,11 +163,11 @@ describe('import RDB customer source flow', () => {
     expect(JSON.stringify(publicTask)).not.toContain(serviceAccountCredentials.private_key);
     expect(tasksRepository.updateTask).toHaveBeenCalledWith(expect.objectContaining({
       taskId: 'task-id',
-      status: 'pending',
+      status: 'in_progress',
     }));
     expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalledWith(expect.objectContaining({
       taskId: 'task-id',
-      status: 'pending',
+      status: 'in_progress',
       payload: createdPayload,
     }));
   });
@@ -225,7 +226,7 @@ describe('import RDB customer source flow', () => {
     expect(JSON.stringify(publicTask)).not.toContain('session-token');
     expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalledWith(expect.objectContaining({
       taskId: 'task-id',
-      status: 'pending',
+      status: 'in_progress',
       payload: createdPayload,
     }));
   });
@@ -276,13 +277,70 @@ describe('import RDB customer source flow', () => {
 
     expect(tasksRepository.updateTask).toHaveBeenCalledWith(expect.objectContaining({
       taskId: 'task-id',
-      status: 'pending',
+      status: 'in_progress',
     }));
     expect(tasksRepository.updateTask).toHaveBeenCalledWith(expect.objectContaining({
       taskId: 'task-id',
       status: 'failed',
       errors: ['Failed to submit import task to queue'],
     }));
+  });
+
+  it('does not resubmit an already queued customer source task from confirm upload', async () => {
+    const source = {
+      type: 's3' as const,
+      bucketName: 'customer-bucket',
+      key: 'imports/customer.rdb',
+      region: 'us-east-1',
+      accessKeyId: 'access-key',
+      secretAccessKey: 'secret-key',
+    };
+    const { controller, tasksRepository, taskQueueRepository } = makeController();
+    tasksRepository.getTaskById.mockResolvedValueOnce({
+      taskId: 'task-id',
+      type: 'RDBImport',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'in_progress',
+      payload: { source },
+    });
+
+    await expect(controller.confirmUpload({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      taskId: 'task-id',
+    })).rejects.toMatchObject({
+      message: 'Task is not in a valid state',
+      errorCode: 'TASK_INVALID_STATE',
+    });
+
+    expect(tasksRepository.updateTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+  });
+
+  it('marks a confirmed upload task in progress before submitting it to the queue', async () => {
+    const task = {
+      taskId: 'task-id',
+      type: 'RDBImport',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'pending',
+      payload: {},
+    };
+    const { controller, tasksRepository, taskQueueRepository } = makeController();
+    tasksRepository.getTaskById.mockResolvedValueOnce(task);
+
+    await controller.confirmUpload({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      taskId: 'task-id',
+    });
+
+    expect(tasksRepository.updateTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-id',
+      status: 'in_progress',
+    }));
+    expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalledWith(task);
   });
 
   it('adds customer source copy jobs to the import flow without queueing credentials', () => {

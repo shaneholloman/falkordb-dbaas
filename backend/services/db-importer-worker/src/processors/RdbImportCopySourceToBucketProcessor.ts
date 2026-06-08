@@ -12,15 +12,12 @@ import { ITasksDBRepository } from '../repositories/tasks';
 
 const CUSTOMER_SOURCE_COPY_TIMEOUT_MS = parseInt(process.env.RDB_IMPORT_SOURCE_COPY_TIMEOUT_MS ?? '', 10) || 5 * 60 * 1000;
 
-const fetchWithDeadline = async (url: string, init: RequestInit | undefined, description: string): Promise<Response> => {
+const runWithCopyDeadline = async <T>(description: string, operation: (signal: AbortSignal) => Promise<T>): Promise<T> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CUSTOMER_SOURCE_COPY_TIMEOUT_MS);
 
   try {
-    return await fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
+    return await operation(controller.signal);
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
       throw new Error(`${description} timed out after ${CUSTOMER_SOURCE_COPY_TIMEOUT_MS}ms`);
@@ -98,19 +95,22 @@ const processor: Processor<RdbImportCopySourceToBucketProcessorData> = async (jo
       ),
     ]);
 
-    const sourceResponse = await fetchWithDeadline(sourceReadUrl, undefined, 'Reading customer RDB source');
-    if (!sourceResponse.ok || !sourceResponse.body) {
-      throw new Error(`Failed to read customer RDB source: ${sourceResponse.status} ${sourceResponse.statusText}`);
-    }
+    const destinationResponse = await runWithCopyDeadline('Copying customer RDB source to managed import bucket', async (signal) => {
+      const sourceResponse = await fetch(sourceReadUrl, { signal });
+      if (!sourceResponse.ok || !sourceResponse.body) {
+        throw new Error(`Failed to read customer RDB source: ${sourceResponse.status} ${sourceResponse.statusText}`);
+      }
 
-    const destinationResponse = await fetchWithDeadline(destinationWriteUrl, {
-      method: 'PUT',
-      headers: {
-        'content-type': 'application/octet-stream',
-      },
-      body: sourceResponse.body,
-      duplex: 'half',
-    } as RequestInit & { duplex: 'half' }, 'Writing customer RDB source to managed import bucket');
+      return fetch(destinationWriteUrl, {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/octet-stream',
+        },
+        body: sourceResponse.body,
+        duplex: 'half',
+        signal,
+      } as RequestInit & { duplex: 'half' });
+    });
 
     if (!destinationResponse.ok) {
       throw new Error(`Failed to stage customer RDB source: ${destinationResponse.status} ${destinationResponse.statusText}`);

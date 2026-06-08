@@ -244,14 +244,14 @@ export class ImportRDBController {
     if (source) {
       await this.tasksRepository.updateTask({
         taskId: task.taskId,
-        status: 'pending',
+        status: 'in_progress',
         updatedAt: new Date().toISOString(),
       });
 
       try {
         await this.taskQueueRepository.submitImportRDBTask({
           ...task,
-          status: 'pending',
+          status: 'in_progress',
         });
       } catch (error) {
         this._opts.logger.error({ error, taskId: task.taskId }, 'Error submitting RDB import task to queue');
@@ -337,6 +337,7 @@ export class ImportRDBController {
     // Update the task status to in_progress
     await this.tasksRepository.updateTask({
       taskId,
+      status: 'in_progress',
       updatedAt: new Date().toISOString(),
     });
 
