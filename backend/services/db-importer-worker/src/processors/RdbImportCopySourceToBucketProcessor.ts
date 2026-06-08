@@ -9,7 +9,7 @@ import { Logger } from 'pino';
 import { setupContainer } from '../container';
 import { IBlobStorageRepository } from '../repositories/blob/IBlobStorageRepository';
 import { ITasksDBRepository } from '../repositories/tasks';
-import { validateImportSourceUrl } from '../utils/importSourceUrlSecurity';
+import { validateImportSourceUrl } from '@falkordb/security';
 
 const CUSTOMER_SOURCE_COPY_TIMEOUT_MS = parseInt(process.env.RDB_IMPORT_SOURCE_COPY_TIMEOUT_MS ?? '', 10) || 5 * 60 * 1000;
 

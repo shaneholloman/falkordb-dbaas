@@ -11,7 +11,7 @@ import { OmnistrateInstanceSchemaType } from '../../../schemas/omnistrate-instan
 import { ImportRDBTaskType, RDBImportSourceType, RDBImportTaskPayloadType, sanitizeForLogging, TaskDocumentType } from '@falkordb/schemas/global';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 import { randomUUID } from 'crypto';
-import { validateImportSourceUrl } from '../../../utils/importSourceUrlSecurity';
+import { validateImportSourceUrl } from '@falkordb/security';
 
 const IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS = parseInt(process.env.RDB_IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS ?? '', 10) || 30 * 1000;
 

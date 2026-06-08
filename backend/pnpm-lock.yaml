@@ -300,6 +300,12 @@ importers:
         specifier: ^0.34.49
         version: 0.34.49
 
+  libs/security:
+    dependencies:
+      '@falkordb/configs':
+        specifier: workspace:*
+        version: link:../configs
+
   services/alert-silence-syncer:
     dependencies:
       '@falkordb/configs':
@@ -686,6 +692,9 @@ importers:
       '@falkordb/schemas':
         specifier: workspace:^
         version: link:../../libs/schemas
+      '@falkordb/security':
+        specifier: workspace:*
+        version: link:../../libs/security
       '@fastify/autoload':
         specifier: ^5.10.0
         version: 5.10.0
@@ -861,6 +870,9 @@ importers:
       '@falkordb/schemas':
         specifier: workspace:^
         version: link:../../libs/schemas
+      '@falkordb/security':
+        specifier: workspace:*
+        version: link:../../libs/security
       '@google-cloud/container':
         specifier: ^5.19.0
         version: 5.19.0

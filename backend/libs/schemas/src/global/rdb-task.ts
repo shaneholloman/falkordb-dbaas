@@ -202,7 +202,9 @@ export const RDBImportS3SourceSchema = Type.Object({
 
 export const RDBImportURLSourceSchema = Type.Object({
   type: Type.Literal('url'),
-  url: Type.String(),
+  url: Type.String({
+    pattern: '^https:\/\/[^\/@?#]+(?:[\/?#].*)?$',
+  }),
 }, { additionalProperties: false });
 
 export const RDBImportSourceSchema = Type.Union([

@@ -19,11 +19,27 @@ const isBlockedIPv4 = (address: string): boolean => {
     || (first === 192 && second === 168);
 };
 
+const parseIPv4MappedIPv6 = (address: string): string | undefined => {
+  const dottedDecimal = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (dottedDecimal) {
+    return dottedDecimal[1];
+  }
+
+  const hex = address.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+  if (!hex) {
+    return undefined;
+  }
+
+  const high = parseInt(hex[1], 16);
+  const low = parseInt(hex[2], 16);
+  return [high >> 8, high & 255, low >> 8, low & 255].join('.');
+};
+
 const isBlockedIPv6 = (address: string): boolean => {
   const normalized = address.toLowerCase();
-  const mappedIPv4 = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  const mappedIPv4 = parseIPv4MappedIPv6(normalized);
   if (mappedIPv4) {
-    return isBlockedIPv4(mappedIPv4[1]);
+    return isBlockedIPv4(mappedIPv4);
   }
 
   return normalized === '::'

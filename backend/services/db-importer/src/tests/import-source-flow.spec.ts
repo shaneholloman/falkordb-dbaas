@@ -2,6 +2,8 @@ import { ImportRDBController } from '../routes/import/controllers/ImportRDBContr
 import { sanitizeTaskDocument } from '@falkordb/schemas/global';
 import { TaskQueueBullMQRepository } from '../repositories/tasksQueue/TaskQueueBullMQRepository';
 import { RdbImportTaskNames } from '@falkordb/schemas/services/db-importer-worker/v1';
+import { ImportRDBRequestUploadURLRequestBodySchema } from '@falkordb/schemas/services/import-export-rdb/v1';
+import { Value } from '@sinclair/typebox/value';
 
 const mockGcsExists = jest.fn();
 const mockS3Send = jest.fn();
@@ -138,6 +140,30 @@ describe('import RDB customer source flow', () => {
 
   afterAll(() => {
     global.fetch = originalFetch;
+  });
+
+  it('validates URL import source shape at request schema level', () => {
+    expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
+      instanceId: 'instance-id',
+      source: {
+        type: 'url',
+        url: 'https://customer.example.com/imports/customer.rdb?token=secret-token',
+      },
+    })).toBe(true);
+    expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
+      instanceId: 'instance-id',
+      source: {
+        type: 'url',
+        url: 'http://customer.example.com/imports/customer.rdb',
+      },
+    })).toBe(false);
+    expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
+      instanceId: 'instance-id',
+      source: {
+        type: 'url',
+        url: 'https://user:pass@customer.example.com/imports/customer.rdb',
+      },
+    })).toBe(false);
   });
 
   it('creates a customer GCS source import task without copying in the API request', async () => {
@@ -338,6 +364,7 @@ describe('import RDB customer source flow', () => {
     ['private resolved address', { url: 'https://customer.example.com/imports/customer.rdb' }, [{ address: '10.0.0.10', family: 4 }]],
     ['link-local literal address', { url: 'https://169.254.169.254/latest/meta-data' }, undefined],
     ['localhost literal address', { url: 'https://127.0.0.1/imports/customer.rdb' }, undefined],
+    ['hex IPv4-mapped IPv6 localhost literal address', { url: 'https://[::ffff:7f00:1]/imports/customer.rdb' }, undefined],
   ])('rejects URL source with %s before creating a task', async (_caseName, sourceOverrides, resolvedAddresses) => {
     const source = {
       type: 'url' as const,
