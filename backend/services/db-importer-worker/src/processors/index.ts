@@ -7,6 +7,7 @@ import RdbExportCopyRDBToBucketProcessor from './RdbExportCopyRDBToBucketProcess
 import RdbExportMonitorRDBMergeProcessor from './RdbExportMonitorRDBMergeProcessor';
 import RdbExportRequestRDBMergeProcessor from './RdbExportRequestRDBMergeProcessor';
 import PlaceholderProcessor from './PlaceholderProcessor';
+import RdbImportCopySourceToBucketProcessor from './RdbImportCopySourceToBucketProcessor';
 import RdbImportDeleteLocalBackupProcessor from './RdbImportDeleteLocalBackupProcessor';
 import RdbImportFlushInstanceProcessor from './RdbImportFlushInstanceProcessor';
 import RdbImportMakeLocalBackupProcessor from './RdbImportMakeLocalBackupProcessor';
@@ -36,6 +37,7 @@ export default [
   RdbExportMonitorRDBMergeProcessor,
   RdbExportRequestRDBMergeProcessor,
   PlaceholderProcessor,
+  RdbImportCopySourceToBucketProcessor,
   RdbImportDeleteLocalBackupProcessor,
   RdbImportFlushInstanceProcessor,
   RdbImportMakeLocalBackupProcessor,
@@ -75,6 +77,7 @@ export {
   RdbExportMonitorRDBMergeProcessor,
   RdbExportRequestRDBMergeProcessor,
   PlaceholderProcessor,
+  RdbImportCopySourceToBucketProcessor,
   RdbImportDeleteLocalBackupProcessor,
   RdbImportFlushInstanceProcessor,
   RdbImportMakeLocalBackupProcessor,

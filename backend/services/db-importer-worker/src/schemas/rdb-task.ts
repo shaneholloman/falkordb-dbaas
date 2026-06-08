@@ -66,6 +66,30 @@ const RDBExportOutputTarget = Yup.lazy((value) => {
   }
 });
 
+const RDBImportSource = Yup.lazy((value) => {
+  switch (value?.type) {
+    case 'gcs':
+      return Yup.object({
+        type: Yup.string().oneOf(['gcs']).required(),
+        bucketName: Yup.string().required(),
+        fileName: Yup.string().required(),
+        credentials: GCPServiceAccountKey.required(),
+      }).strict().noUnknown().required();
+    case 's3':
+      return Yup.object({
+        type: Yup.string().oneOf(['s3']).required(),
+        bucketName: Yup.string().required(),
+        key: Yup.string().required(),
+        region: Yup.string().required(),
+        accessKeyId: Yup.string().required(),
+        secretAccessKey: Yup.string().required(),
+        sessionToken: Yup.string().optional(),
+      }).strict().noUnknown().required();
+    default:
+      return Yup.mixed().oneOf([]).required();
+  }
+});
+
 export const SingleShardRDBExportPayload = Yup.object({
   cloudProvider: Yup.string().oneOf(['gcp', 'aws']).required(),
   region: Yup.string().required(),
@@ -127,6 +151,7 @@ export const RDBImportPayload = Yup.object({
   backupPath: Yup.string().required(),
   aofEnabled: Yup.boolean().required(),
   isCluster: Yup.boolean().required(),
+  source: RDBImportSource.optional(),
 }).strict().noUnknown().required();
 
 export type RDBImportPayloadType = Yup.InferType<typeof RDBImportPayload>;

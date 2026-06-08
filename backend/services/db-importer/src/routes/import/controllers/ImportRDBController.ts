@@ -1,14 +1,16 @@
 import { FastifyBaseLogger } from 'fastify';
+import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { Storage } from '@google-cloud/storage';
 import { K8sRepository } from '../../../repositories/k8s/K8sRepository';
 import { OmnistrateRepository } from '../../../repositories/omnistrate/OmnistrateRepository';
-import assert from 'assert';
+import assert = require('assert');
 import { IBlobStorageRepository } from '../../../repositories/blob/IBlobStorageRepository';
 import { ITasksDBRepository } from '../../../repositories/tasks';
 import { ApiError } from '@falkordb/errors';
 import { OmnistrateInstanceSchemaType } from '../../../schemas/omnistrate-instance';
-import { ImportRDBTaskType, RDBImportTaskPayloadType, TaskDocumentType } from '@falkordb/schemas/global';
+import { ImportRDBTaskType, RDBImportSourceType, RDBImportTaskPayloadType, sanitizeForLogging, TaskDocumentType } from '@falkordb/schemas/global';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
-import crypto from 'crypto';
+import { randomUUID } from 'crypto';
 
 export class ImportRDBController {
   constructor(
@@ -67,8 +69,9 @@ export class ImportRDBController {
   private _createTaskPayload(
     instance: OmnistrateInstanceSchemaType,
     deploymentSizeInMb: number,
+    source?: RDBImportSourceType,
   ): RDBImportTaskPayloadType {
-    const randomId = crypto.randomUUID();
+    const randomId = randomUUID();
     return {
       cloudProvider: instance.cloudProvider,
       region: instance.region,
@@ -84,7 +87,42 @@ export class ImportRDBController {
       aofEnabled: instance.aofEnabled,
       backupPath: instance.aofEnabled ? `/data/backup/appendonlydir` : `/data/backup/dump.rdb`,
       isCluster: instance.deploymentType.startsWith('Cluster'),
+      source,
     };
+  }
+
+  private async _validateCustomerSource(source: RDBImportSourceType): Promise<void> {
+    try {
+      if (source.type === 'gcs') {
+        const storage = new Storage({
+          projectId: source.credentials.project_id,
+          credentials: source.credentials,
+        });
+        const [exists] = await storage.bucket(source.bucketName).file(source.fileName).exists();
+
+        if (!exists) {
+          throw new Error(`GCS object gs://${source.bucketName}/${source.fileName} does not exist or cannot be accessed`);
+        }
+        return;
+      }
+
+      const s3Client = new S3Client({
+        region: source.region,
+        credentials: {
+          accessKeyId: source.accessKeyId,
+          secretAccessKey: source.secretAccessKey,
+          sessionToken: source.sessionToken,
+        },
+      });
+
+      await s3Client.send(new HeadObjectCommand({
+        Bucket: source.bucketName,
+        Key: source.key,
+      }));
+    } catch (error) {
+      this._opts.logger.warn({ error, source: sanitizeForLogging(source) }, 'Invalid import source credentials or object access');
+      throw ApiError.badRequest('Invalid import source credentials or object access', 'INVALID_IMPORT_SOURCE');
+    }
   }
 
   private _convertMaxMemoryToMB(maxMemory: string | undefined): number {
@@ -100,12 +138,14 @@ export class ImportRDBController {
     instanceId,
     username,
     password,
+    source,
   }: {
     requestorId: string;
     instanceId: string;
     username: string;
     password: string;
-  }): Promise<{ taskId: string; uploadUrl: string }> {
+    source?: RDBImportSourceType;
+  }): Promise<{ taskId: string; uploadUrl?: string }> {
     // Get instance details from omnistrate
     let instance: OmnistrateInstanceSchemaType | undefined;
     try {
@@ -183,13 +223,50 @@ export class ImportRDBController {
       throw ApiError.internalServerError('Instance size is not set', 'INSTANCE_SIZE_NOT_SET');
     }
 
+    if (source) {
+      await this._validateCustomerSource(source);
+    }
+
     let task: ImportRDBTaskType | undefined;
-    const payload = this._createTaskPayload(instance, this._convertMaxMemoryToMB(maxMemory));
+    const payload = this._createTaskPayload(
+      instance,
+      this._convertMaxMemoryToMB(maxMemory),
+      source,
+    );
+
     try {
       task = (await this.tasksRepository.createTask('RDBImport', payload)) as ImportRDBTaskType;
     } catch (error) {
       this._opts.logger.error({ error }, 'Error creating task');
       throw ApiError.internalServerError('Error creating task', 'TASK_CREATION_ERROR');
+    }
+
+    if (source) {
+      await this.tasksRepository.updateTask({
+        taskId: task.taskId,
+        status: 'in_progress',
+        updatedAt: new Date().toISOString(),
+      });
+
+      try {
+        await this.taskQueueRepository.submitImportRDBTask({
+          ...task,
+          status: 'in_progress',
+        });
+      } catch (error) {
+        this._opts.logger.error({ error, taskId: task.taskId }, 'Error submitting RDB import task to queue');
+        await this.tasksRepository.updateTask({
+          taskId: task.taskId,
+          status: 'failed',
+          errors: ['Failed to submit import task to queue'],
+          updatedAt: new Date().toISOString(),
+        });
+        throw ApiError.internalServerError('Error submitting task', 'TASK_SUBMISSION_ERROR');
+      }
+
+      return {
+        taskId: task.taskId,
+      };
     }
 
     let uploadUrl = '';
@@ -260,6 +337,7 @@ export class ImportRDBController {
     // Update the task status to in_progress
     await this.tasksRepository.updateTask({
       taskId,
+      status: 'in_progress',
       updatedAt: new Date().toISOString(),
     });
 
