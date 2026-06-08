@@ -6,6 +6,7 @@ import { RdbImportTaskNames } from '@falkordb/schemas/services/db-importer-worke
 const mockGcsExists = jest.fn();
 const mockS3Send = jest.fn();
 const mockFetch = jest.fn();
+const mockDnsLookup = jest.fn();
 const originalFetch = global.fetch;
 
 jest.mock('@google-cloud/storage', () => ({
@@ -23,6 +24,10 @@ jest.mock('@aws-sdk/client-s3', () => ({
     send: (...args: unknown[]) => mockS3Send(...args),
   })),
   HeadObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
+}));
+
+jest.mock('dns/promises', () => ({
+  lookup: (...args: unknown[]) => mockDnsLookup(...args),
 }));
 
 const logger = {
@@ -108,6 +113,7 @@ describe('import RDB customer source flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     global.fetch = mockFetch as never;
+    mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     mockFetch.mockResolvedValue({
       ok: true,
       status: 206,
@@ -322,6 +328,71 @@ describe('import RDB customer source flow', () => {
       errorCode: 'INVALID_IMPORT_SOURCE',
     });
 
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['http scheme', { url: 'http://customer.example.com/imports/customer.rdb' }, [{ address: '93.184.216.34', family: 4 }]],
+    ['URL credentials', { url: 'https://user:pass@customer.example.com/imports/customer.rdb' }, [{ address: '93.184.216.34', family: 4 }]],
+    ['private resolved address', { url: 'https://customer.example.com/imports/customer.rdb' }, [{ address: '10.0.0.10', family: 4 }]],
+    ['link-local literal address', { url: 'https://169.254.169.254/latest/meta-data' }, undefined],
+    ['localhost literal address', { url: 'https://127.0.0.1/imports/customer.rdb' }, undefined],
+  ])('rejects URL source with %s before creating a task', async (_caseName, sourceOverrides, resolvedAddresses) => {
+    const source = {
+      type: 'url' as const,
+      ...sourceOverrides,
+    };
+    const { controller, tasksRepository, taskQueueRepository } = makeController();
+    if (resolvedAddresses) {
+      mockDnsLookup.mockResolvedValue(resolvedAddresses);
+    }
+
+    await expect(controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source,
+    })).rejects.toMatchObject({
+      message: 'Invalid import source credentials or object access',
+      errorCode: 'INVALID_IMPORT_SOURCE',
+    });
+
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+  });
+
+  it('rejects URL source redirects before creating a task', async () => {
+    const source = {
+      type: 'url' as const,
+      url: 'https://customer.example.com/redirect.rdb',
+    };
+    const { controller, tasksRepository, taskQueueRepository } = makeController();
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 302,
+      statusText: 'Found',
+      headers: new Headers({ location: 'https://169.254.169.254/latest/meta-data' }),
+      body: {
+        cancel: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await expect(controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source,
+    })).rejects.toMatchObject({
+      message: 'Invalid import source credentials or object access',
+      errorCode: 'INVALID_IMPORT_SOURCE',
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(source.url, expect.objectContaining({
+      redirect: 'manual',
+    }));
     expect(tasksRepository.createTask).not.toHaveBeenCalled();
     expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
   });

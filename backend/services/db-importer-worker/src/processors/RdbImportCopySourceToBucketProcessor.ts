@@ -9,6 +9,7 @@ import { Logger } from 'pino';
 import { setupContainer } from '../container';
 import { IBlobStorageRepository } from '../repositories/blob/IBlobStorageRepository';
 import { ITasksDBRepository } from '../repositories/tasks';
+import { validateImportSourceUrl } from '../utils/importSourceUrlSecurity';
 
 const CUSTOMER_SOURCE_COPY_TIMEOUT_MS = parseInt(process.env.RDB_IMPORT_SOURCE_COPY_TIMEOUT_MS ?? '', 10) || 5 * 60 * 1000;
 
@@ -48,7 +49,7 @@ const getCustomerSourceReadUrl = async (source: RDBImportSourceType): Promise<st
   }
 
   if (source.type === 'url') {
-    return source.url;
+    return (await validateImportSourceUrl(source.url)).toString();
   }
 
   const s3Client = new S3Client({
@@ -100,7 +101,10 @@ const processor: Processor<RdbImportCopySourceToBucketProcessorData> = async (jo
     ]);
 
     const destinationResponse = await runWithCopyDeadline('Copying customer RDB source to managed import bucket', async (signal) => {
-      const sourceResponse = await fetch(sourceReadUrl, { signal });
+      const sourceResponse = await fetch(sourceReadUrl, {
+        redirect: 'manual',
+        signal,
+      });
       if (!sourceResponse.ok || !sourceResponse.body) {
         throw new Error(`Failed to read customer RDB source: ${sourceResponse.status} ${sourceResponse.statusText}`);
       }
@@ -112,6 +116,7 @@ const processor: Processor<RdbImportCopySourceToBucketProcessorData> = async (jo
         },
         body: sourceResponse.body,
         duplex: 'half',
+        redirect: 'manual',
         signal,
       } as RequestInit & { duplex: 'half' });
     });

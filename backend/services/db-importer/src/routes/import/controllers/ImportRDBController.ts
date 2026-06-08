@@ -11,6 +11,7 @@ import { OmnistrateInstanceSchemaType } from '../../../schemas/omnistrate-instan
 import { ImportRDBTaskType, RDBImportSourceType, RDBImportTaskPayloadType, sanitizeForLogging, TaskDocumentType } from '@falkordb/schemas/global';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 import { randomUUID } from 'crypto';
+import { validateImportSourceUrl } from '../../../utils/importSourceUrlSecurity';
 
 const IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS = parseInt(process.env.RDB_IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS ?? '', 10) || 30 * 1000;
 
@@ -109,19 +110,17 @@ export class ImportRDBController {
       }
 
       if (source.type === 'url') {
-        const url = new URL(source.url);
-        if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-          throw new Error('Import source URL must use http or https');
-        }
+        const url = await validateImportSourceUrl(source.url);
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS);
         try {
-          const response = await fetch(source.url, {
+          const response = await fetch(url.toString(), {
             method: 'GET',
             headers: {
               range: 'bytes=0-0',
             },
+            redirect: 'manual',
             signal: controller.signal,
           });
           await response.body?.cancel();
