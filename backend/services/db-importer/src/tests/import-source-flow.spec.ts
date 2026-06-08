@@ -2,9 +2,14 @@ import { ImportRDBController } from '../routes/import/controllers/ImportRDBContr
 import { sanitizeTaskDocument } from '@falkordb/schemas/global';
 import { TaskQueueBullMQRepository } from '../repositories/tasksQueue/TaskQueueBullMQRepository';
 import { RdbImportTaskNames } from '@falkordb/schemas/services/db-importer-worker/v1';
+import { ImportRDBRequestUploadURLRequestBodySchema } from '@falkordb/schemas/services/import-export-rdb/v1';
+import { Value } from '@sinclair/typebox/value';
 
 const mockGcsExists = jest.fn();
 const mockS3Send = jest.fn();
+const mockFetch = jest.fn();
+const mockDnsLookup = jest.fn();
+const originalFetch = global.fetch;
 
 jest.mock('@google-cloud/storage', () => ({
   Storage: jest.fn().mockImplementation(() => ({
@@ -21,6 +26,10 @@ jest.mock('@aws-sdk/client-s3', () => ({
     send: (...args: unknown[]) => mockS3Send(...args),
   })),
   HeadObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
+}));
+
+jest.mock('dns/promises', () => ({
+  lookup: (...args: unknown[]) => mockDnsLookup(...args),
 }));
 
 const logger = {
@@ -105,6 +114,16 @@ const makeController = () => {
 describe('import RDB customer source flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    global.fetch = mockFetch as never;
+    mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 206,
+      statusText: 'Partial Content',
+      body: {
+        cancel: jest.fn().mockResolvedValue(undefined),
+      },
+    });
     mockGcsExists.mockImplementation(async (fileName: string) => {
       if (fileName.includes('missing')) {
         throw new Error('missing object');
@@ -117,6 +136,34 @@ describe('import RDB customer source flow', () => {
       }
       return {};
     });
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('validates URL import source shape at request schema level', () => {
+    expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
+      instanceId: 'instance-id',
+      source: {
+        type: 'url',
+        url: 'https://customer.example.com/imports/customer.rdb?token=secret-token',
+      },
+    })).toBe(true);
+    expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
+      instanceId: 'instance-id',
+      source: {
+        type: 'url',
+        url: 'http://customer.example.com/imports/customer.rdb',
+      },
+    })).toBe(false);
+    expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
+      instanceId: 'instance-id',
+      source: {
+        type: 'url',
+        url: 'https://user:pass@customer.example.com/imports/customer.rdb',
+      },
+    })).toBe(false);
   });
 
   it('creates a customer GCS source import task without copying in the API request', async () => {
@@ -229,6 +276,153 @@ describe('import RDB customer source flow', () => {
       status: 'in_progress',
       payload: createdPayload,
     }));
+  });
+
+  it('creates a customer URL source import task after validating the URL', async () => {
+    const source = {
+      type: 'url' as const,
+      url: 'https://customer.example.com/imports/customer.rdb?X-Amz-Signature=secret-signature',
+    };
+    const { controller, storageRepository, tasksRepository, taskQueueRepository } = makeController();
+
+    const result = await controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source,
+    });
+
+    expect(result).toEqual({ taskId: 'task-id' });
+    expect(mockFetch).toHaveBeenCalledWith(source.url, expect.objectContaining({
+      method: 'GET',
+      headers: {
+        range: 'bytes=0-0',
+      },
+    }));
+    expect(storageRepository.getWriteUrl).not.toHaveBeenCalled();
+
+    const createdPayload = tasksRepository.createTask.mock.calls[0][1];
+    expect(createdPayload.source).toEqual(source);
+    expect(JSON.stringify(createdPayload)).toContain('secret-signature');
+
+    const publicTask = sanitizeTaskDocument({
+      taskId: 'task-id',
+      type: 'RDBImport',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'pending',
+      payload: createdPayload,
+    });
+    if (publicTask.type !== 'RDBImport') {
+      throw new Error(`Expected RDBImport task, got ${publicTask.type}`);
+    }
+    expect(publicTask.payload.source).toEqual({
+      type: 'url',
+    });
+    expect(JSON.stringify(publicTask)).not.toContain('secret-signature');
+    expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-id',
+      status: 'in_progress',
+      payload: createdPayload,
+    }));
+  });
+
+  it('rejects invalid URL source access before creating a task', async () => {
+    const source = {
+      type: 'url' as const,
+      url: 'https://customer.example.com/imports/missing.rdb?token=secret-token',
+    };
+    const { controller, tasksRepository, taskQueueRepository } = makeController();
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      body: {
+        cancel: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await expect(controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source,
+    })).rejects.toMatchObject({
+      message: 'Invalid import source credentials or object access',
+      errorCode: 'INVALID_IMPORT_SOURCE',
+    });
+
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['http scheme', { url: 'http://customer.example.com/imports/customer.rdb' }, [{ address: '93.184.216.34', family: 4 }]],
+    ['URL credentials', { url: 'https://user:pass@customer.example.com/imports/customer.rdb' }, [{ address: '93.184.216.34', family: 4 }]],
+    ['private resolved address', { url: 'https://customer.example.com/imports/customer.rdb' }, [{ address: '10.0.0.10', family: 4 }]],
+    ['link-local literal address', { url: 'https://169.254.169.254/latest/meta-data' }, undefined],
+    ['localhost literal address', { url: 'https://127.0.0.1/imports/customer.rdb' }, undefined],
+    ['hex IPv4-mapped IPv6 localhost literal address', { url: 'https://[::ffff:7f00:1]/imports/customer.rdb' }, undefined],
+    ['expanded hex IPv4-mapped IPv6 localhost literal address', { url: 'https://[0:0:0:0:0:ffff:7f00:1]/imports/customer.rdb' }, undefined],
+  ])('rejects URL source with %s before creating a task', async (_caseName, sourceOverrides, resolvedAddresses) => {
+    const source = {
+      type: 'url' as const,
+      ...sourceOverrides,
+    };
+    const { controller, tasksRepository, taskQueueRepository } = makeController();
+    if (resolvedAddresses) {
+      mockDnsLookup.mockResolvedValue(resolvedAddresses);
+    }
+
+    await expect(controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source,
+    })).rejects.toMatchObject({
+      message: 'Invalid import source credentials or object access',
+      errorCode: 'INVALID_IMPORT_SOURCE',
+    });
+
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+  });
+
+  it('rejects URL source redirects before creating a task', async () => {
+    const source = {
+      type: 'url' as const,
+      url: 'https://customer.example.com/redirect.rdb',
+    };
+    const { controller, tasksRepository, taskQueueRepository } = makeController();
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 302,
+      statusText: 'Found',
+      headers: new Headers({ location: 'https://169.254.169.254/latest/meta-data' }),
+      body: {
+        cancel: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await expect(controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source,
+    })).rejects.toMatchObject({
+      message: 'Invalid import source credentials or object access',
+      errorCode: 'INVALID_IMPORT_SOURCE',
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(source.url, expect.objectContaining({
+      redirect: 'manual',
+    }));
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
   });
 
   it('rejects invalid customer source access before creating a task', async () => {
@@ -377,13 +571,8 @@ describe('import RDB customer source flow', () => {
         aofEnabled: false,
         isCluster: false,
         source: {
-          type: 's3',
-          bucketName: 'customer-bucket',
-          key: 'imports/customer.rdb',
-          region: 'us-east-1',
-          accessKeyId: 'access-key',
-          secretAccessKey: 'secret-key',
-          sessionToken: 'session-token',
+          type: 'url',
+          url: 'https://customer.example.com/imports/customer.rdb?token=secret-token',
         },
       },
     });
@@ -400,6 +589,7 @@ describe('import RDB customer source flow', () => {
       });
       expect(JSON.stringify(copyJob)).not.toContain('secret-key');
       expect(JSON.stringify(copyJob)).not.toContain('session-token');
+      expect(JSON.stringify(copyJob)).not.toContain('secret-token');
     }
 
     const sendSaveJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportSendSaveCommand);
@@ -416,7 +606,13 @@ describe('import RDB customer source flow', () => {
   });
 });
 
-const collectJobs = (job) => [
+type FlowJob = {
+  name: string;
+  data?: unknown;
+  children?: FlowJob[];
+};
+
+const collectJobs = (job: FlowJob): FlowJob[] => [
   job,
   ...(job.children ?? []).flatMap(collectJobs),
 ];

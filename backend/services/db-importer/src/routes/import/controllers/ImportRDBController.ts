@@ -11,6 +11,9 @@ import { OmnistrateInstanceSchemaType } from '../../../schemas/omnistrate-instan
 import { ImportRDBTaskType, RDBImportSourceType, RDBImportTaskPayloadType, sanitizeForLogging, TaskDocumentType } from '@falkordb/schemas/global';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 import { randomUUID } from 'crypto';
+import { validateImportSourceUrl } from '@falkordb/security';
+
+const IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS = parseInt(process.env.RDB_IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS ?? '', 10) || 30 * 1000;
 
 export class ImportRDBController {
   constructor(
@@ -102,6 +105,31 @@ export class ImportRDBController {
 
         if (!exists) {
           throw new Error(`GCS object gs://${source.bucketName}/${source.fileName} does not exist or cannot be accessed`);
+        }
+        return;
+      }
+
+      if (source.type === 'url') {
+        const url = await validateImportSourceUrl(source.url);
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS);
+        try {
+          const response = await fetch(url.toString(), {
+            method: 'GET',
+            headers: {
+              range: 'bytes=0-0',
+            },
+            redirect: 'manual',
+            signal: controller.signal,
+          });
+          await response.body?.cancel();
+
+          if (!response.ok) {
+            throw new Error(`URL source returned ${response.status} ${response.statusText}`);
+          }
+        } finally {
+          clearTimeout(timeout);
         }
         return;
       }

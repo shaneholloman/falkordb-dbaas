@@ -28,6 +28,7 @@
     "@falkordb/errors": "workspace:*",
     "@falkordb/plugins": "workspace:*",
     "@falkordb/rest-client": "workspace:^",
+    "@falkordb/security": "workspace:*",
     "@falkordb/schemas": "workspace:^",
     "@google-cloud/container": "^5.19.0",
     "@google-cloud/storage": "^7.19.0",
