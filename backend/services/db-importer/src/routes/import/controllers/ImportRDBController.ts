@@ -10,7 +10,7 @@ import { ApiError } from '@falkordb/errors';
 import { OmnistrateInstanceSchemaType } from '../../../schemas/omnistrate-instance';
 import { ImportRDBTaskType, RDBImportSourceType, RDBImportTaskPayloadType, sanitizeForLogging, TaskDocumentType } from '@falkordb/schemas/global';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
-import crypto = require('crypto');
+import { randomUUID } from 'crypto';
 
 export class ImportRDBController {
   constructor(
@@ -71,7 +71,7 @@ export class ImportRDBController {
     deploymentSizeInMb: number,
     source?: RDBImportSourceType,
   ): RDBImportTaskPayloadType {
-    const randomId = crypto.randomUUID();
+    const randomId = randomUUID();
     return {
       cloudProvider: instance.cloudProvider,
       region: instance.region,
@@ -261,7 +261,7 @@ export class ImportRDBController {
           errors: ['Failed to submit import task to queue'],
           updatedAt: new Date().toISOString(),
         });
-        throw error;
+        throw ApiError.internalServerError('Error submitting task', 'TASK_SUBMISSION_ERROR');
       }
 
       return {

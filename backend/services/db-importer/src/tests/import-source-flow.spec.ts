@@ -273,7 +273,10 @@ describe('import RDB customer source flow', () => {
       username: 'falkordb',
       password: 'password',
       source,
-    })).rejects.toThrow('queue down');
+    })).rejects.toMatchObject({
+      message: 'Error submitting task',
+      errorCode: 'TASK_SUBMISSION_ERROR',
+    });
 
     expect(tasksRepository.updateTask).toHaveBeenCalledWith(expect.objectContaining({
       taskId: 'task-id',
@@ -343,7 +346,7 @@ describe('import RDB customer source flow', () => {
     expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalledWith(task);
   });
 
-  it('adds customer source copy jobs to the import flow without queueing credentials', () => {
+  it('serializes customer source validation behind one copy job without queueing credentials', () => {
     process.env.APPLICATION_PLANE_PROJECT_ID = 'app-plane-project';
     process.env.CTRL_PLANE_PROJECT_ID = 'ctrl-plane-project';
     process.env.CTRL_PLANE_CLUSTER_ID = 'ctrl-plane-cluster';
@@ -401,8 +404,15 @@ describe('import RDB customer source flow', () => {
 
     const sendSaveJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportSendSaveCommand);
     expect(sendSaveJob?.children).toHaveLength(1);
-    expect(sendSaveJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportMonitorSizeValidationProgress);
-    expect(JSON.stringify(sendSaveJob)).toContain(RdbImportTaskNames.RdbImportMonitorFormatValidationProgress);
+    const sizeMonitorJob = sendSaveJob?.children?.[0];
+    expect(sizeMonitorJob?.name).toBe(RdbImportTaskNames.RdbImportMonitorSizeValidationProgress);
+    const sizeValidationJob = sizeMonitorJob?.children?.[0];
+    expect(sizeValidationJob?.name).toBe(RdbImportTaskNames.RdbImportValidateRDBSize);
+    const formatMonitorJob = sizeValidationJob?.children?.[0];
+    expect(formatMonitorJob?.name).toBe(RdbImportTaskNames.RdbImportMonitorFormatValidationProgress);
+    const formatValidationJob = formatMonitorJob?.children?.[0];
+    expect(formatValidationJob?.name).toBe(RdbImportTaskNames.RdbImportValidateRDBFormat);
+    expect(formatValidationJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportCopySourceToBucket);
   });
 });
 

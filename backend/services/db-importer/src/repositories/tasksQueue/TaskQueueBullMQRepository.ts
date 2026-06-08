@@ -365,6 +365,8 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
       ],
     );
 
+    // BullMQ flows are trees, so one copy prerequisite cannot be shared by two sibling validation branches.
+    // Keep customer-source validation serialized to avoid duplicate copy jobs and duplicate customer egress.
     const validationBranches = copySourceToBucketJob
       ? [makeSizeValidationBranch([makeFormatValidationBranch([copySourceToBucketJob])])]
       : [makeFormatValidationBranch(), makeSizeValidationBranch()];
