@@ -95,12 +95,14 @@ spec:
 
         - alert: RedisCrashed
           # LogsQL: Detect any Redis crash (signal crash or assertion failure).
-          # Uses "=== REDIS BUG REPORT START" as the single anchor — Redis emits this line exactly
-          # once per crash for ALL crash types (signal via sigsegvHandler and assertion via serverPanic).
-          # This triggers log collection and a warning alert.
+          # Uses "crashed by signal" as the anchor — Redis emits this line exactly once per crash
+          # for ALL crash types (signal via sigsegvHandler and assertion via serverPanic/abort()).
+          # Excludes external SIGABRT (si_code: 0) sent by OOM automation — those are handled by
+          # ContainerKilledBySIGABRT. Internal abort() (assertion failure) uses si_code: -6 and
+          # still matches correctly.
           # Note: Duplicate issues are prevented by checking for existing open issues in the alert-reaction script
           expr: |
-            ~"=== REDIS BUG REPORT START" and -pod:~"vmalert*" | 
+            ~"crashed by signal" and -~"crashed by signal: 6, si_code: 0" and -pod:~"vmalert.*" | 
             stats by (pod, namespace, cluster, environment) count() as crash_count    
           for: 0m
           keep_firing_for: 5m
@@ -142,11 +144,11 @@ spec:
 
         - alert: RedisCrashLoop
           # LogsQL: Detect Redis crash loop (2+ crashes in last 10 minutes).
-          # Uses "=== REDIS BUG REPORT START" as the single anchor — it is emitted exactly once per
-          # crash for all crash types. Using an OR with "crashed by signal" caused a single signal
-          # crash to match two lines (count=2) and falsely trigger this alert.
+          # Uses "crashed by signal" as the single anchor — it is emitted exactly once per crash
+          # for all crash types. Excludes external SIGABRT (si_code: 0) from OOM automation.
+          # Internal abort() uses si_code: -6 and still counts correctly.
           expr: |
-            ~"=== REDIS BUG REPORT START" and -pod:~"vmalert*" and _time:10m | 
+            ~"crashed by signal" and -~"crashed by signal: 6, si_code: 0" and -pod:~"vmalert.*" and _time:10m | 
             stats by (pod, namespace, cluster, environment) count() as crash_count | 
             filter crash_count :>= 2
           for: 1m
@@ -175,7 +177,7 @@ spec:
           for: 0m
           keep_firing_for: 5m
           labels:
-            severity: critical
+            severity: warning
             cluster: "{{ $labels.cluster }}"
             environment: "{{ $labels.environment }}"
           annotations:
