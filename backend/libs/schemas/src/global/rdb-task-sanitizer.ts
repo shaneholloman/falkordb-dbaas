@@ -15,6 +15,7 @@ const SENSITIVE_KEYS = new Set([
   'private_key',
   'secretAccessKey',
   'sessionToken',
+  'url',
 ]);
 
 const MASKED = '[REDACTED]';
@@ -53,6 +54,10 @@ export const sanitizeRDBImportSource = (source?: RDBImportSourceType | RDBImport
         bucketName: source.bucketName,
         key: source.key,
         region: source.region,
+      };
+    case 'url':
+      return {
+        type: 'url',
       };
     default:
       return undefined;
