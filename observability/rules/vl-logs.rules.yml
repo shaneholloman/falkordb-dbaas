@@ -172,7 +172,7 @@ spec:
           # Redis internal abort() (assertion failure) produces si_code: -6 (SI_TKILL) and
           # will NOT match this alert, correctly falling through to RedisCrashed instead.
           expr: |
-            ~"crashed by signal: 6, si_code: 0" and -pod:~"vmalert.*" | 
+            ~"crashed by signal: 6, si_code: 0" and namespace:~"instance-.*" | 
             stats by (pod, namespace, cluster, environment) count() as crash_count    
           for: 0m
           keep_firing_for: 5m
@@ -195,7 +195,7 @@ spec:
           # Uses si_code: 0 (SI_USER) to only match externally-sent SIGABRT from OOM automation,
           # not internal abort() from genuine Redis/FalkorDB assertion failures.
           expr: |
-            ~"crashed by signal: 6, si_code: 0" and -pod:~"vmalert.*" and _time:10m | 
+            ~"crashed by signal: 6, si_code: 0" and namespace:~"instance-.*" and _time:10m | 
             stats by (pod, namespace, cluster, environment) count() as crash_count | 
             filter crash_count :>= 2
           for: 1m
@@ -218,7 +218,7 @@ spec:
           # in the observability namespace. All failure modes emit "FORK_KILL_FAILED:" to identify
           # that automated remediation of a stuck AOF rewrite did not succeed.
           expr: |
-            "FORK_KILL_FAILED:" and namespace: "observability" and _time:5m |
+            "FORK_KILL_FAILED:" and namespace: "observability" and -pod:~"vm-.*" and _time:5m |
             stats by (pod, namespace, cluster, environment) count() as failure_count |
             filter failure_count :> 0
           for: 0m
