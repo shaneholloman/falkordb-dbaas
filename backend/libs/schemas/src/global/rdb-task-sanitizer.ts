@@ -1,8 +1,11 @@
 import {
   ExportRDBTaskType,
+  ImportRDBTaskType,
   PublicTaskDocumentType,
   RDBExportPublicTargetType,
   RDBExportTargetType,
+  RDBImportPublicSourceType,
+  RDBImportSourceType,
   TaskDocumentType,
 } from './rdb-task';
 
@@ -12,6 +15,7 @@ const SENSITIVE_KEYS = new Set([
   'private_key',
   'secretAccessKey',
   'sessionToken',
+  'url',
 ]);
 
 const MASKED = '[REDACTED]';
@@ -36,9 +40,45 @@ export const sanitizeRDBExportTarget = (target?: RDBExportTargetType): RDBExport
   }
 };
 
+export const sanitizeRDBImportSource = (source?: RDBImportSourceType | RDBImportPublicSourceType): RDBImportPublicSourceType | undefined => {
+  switch (source?.type) {
+    case 'gcs':
+      return {
+        type: 'gcs',
+        bucketName: source.bucketName,
+        fileName: source.fileName,
+      };
+    case 's3':
+      return {
+        type: 's3',
+        bucketName: source.bucketName,
+        key: source.key,
+        region: source.region,
+      };
+    case 'url':
+      return {
+        type: 'url',
+      };
+    default:
+      return undefined;
+  }
+};
+
 export const sanitizeTaskDocument = (task: TaskDocumentType): PublicTaskDocumentType => {
+  if (task.type === 'RDBImport') {
+    const importTask = task as ImportRDBTaskType;
+
+    return {
+      ...importTask,
+      payload: {
+        ...importTask.payload,
+        source: sanitizeRDBImportSource(importTask.payload.source),
+      },
+    } as PublicTaskDocumentType;
+  }
+
   if (task.type !== 'SingleShardRDBExport' && task.type !== 'MultiShardRDBExport') {
-    return task;
+    return task as PublicTaskDocumentType;
   }
 
   const exportTask = task as ExportRDBTaskType;

@@ -1,6 +1,6 @@
 {
   "name": "db-importer-worker",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -28,6 +28,7 @@
     "@falkordb/errors": "workspace:*",
     "@falkordb/plugins": "workspace:*",
     "@falkordb/rest-client": "workspace:^",
+    "@falkordb/security": "workspace:*",
     "@falkordb/schemas": "workspace:^",
     "@google-cloud/container": "^5.19.0",
     "@google-cloud/storage": "^7.19.0",

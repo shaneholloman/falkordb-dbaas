@@ -183,6 +183,61 @@ export const RDBExportOutputSchema = Type.Object({
 });
 export type RDBExportOutputType = Static<typeof RDBExportOutputSchema>;
 
+export const RDBImportGCSSourceSchema = Type.Object({
+  type: Type.Literal('gcs'),
+  bucketName: Type.String(),
+  fileName: Type.String(),
+  credentials: GCPServiceAccountKeySchema,
+}, { additionalProperties: false });
+
+export const RDBImportS3SourceSchema = Type.Object({
+  type: Type.Literal('s3'),
+  bucketName: Type.String(),
+  key: Type.String(),
+  region: Type.String(),
+  accessKeyId: Type.String(),
+  secretAccessKey: Type.String(),
+  sessionToken: Type.Optional(Type.String()),
+}, { additionalProperties: false });
+
+export const RDBImportURLSourceSchema = Type.Object({
+  type: Type.Literal('url'),
+  url: Type.String({
+    pattern: '^https:\/\/[^\/@?#]+(?:[\/?#].*)?$',
+  }),
+}, { additionalProperties: false });
+
+export const RDBImportSourceSchema = Type.Union([
+  RDBImportGCSSourceSchema,
+  RDBImportS3SourceSchema,
+  RDBImportURLSourceSchema,
+]);
+export type RDBImportSourceType = Static<typeof RDBImportSourceSchema>;
+
+export const RDBImportPublicGCSSourceSchema = Type.Object({
+  type: Type.Literal('gcs'),
+  bucketName: Type.String(),
+  fileName: Type.String(),
+}, { additionalProperties: false });
+
+export const RDBImportPublicS3SourceSchema = Type.Object({
+  type: Type.Literal('s3'),
+  bucketName: Type.String(),
+  key: Type.String(),
+  region: Type.String(),
+}, { additionalProperties: false });
+
+export const RDBImportPublicURLSourceSchema = Type.Object({
+  type: Type.Literal('url'),
+}, { additionalProperties: false });
+
+export const RDBImportPublicSourceSchema = Type.Union([
+  RDBImportPublicGCSSourceSchema,
+  RDBImportPublicS3SourceSchema,
+  RDBImportPublicURLSourceSchema,
+]);
+export type RDBImportPublicSourceType = Static<typeof RDBImportPublicSourceSchema>;
+
 export const TaskStatusSchema = Type.Union([
   Type.Literal('created'),
   Type.Literal('pending'),
@@ -284,8 +339,28 @@ export const RDBImportTaskPayloadSchema = Type.Object({
   backupPath: Type.String(),
   aofEnabled: Type.Boolean(),
   isCluster: Type.Boolean(),
+  source: Type.Optional(RDBImportSourceSchema),
 });
 export type RDBImportTaskPayloadType = Static<typeof RDBImportTaskPayloadSchema>;
+
+export const RDBImportPublicTaskPayloadSchema = Type.Object({
+  cloudProvider: SupportedCloudProviderSchema,
+  region: Type.String(),
+  clusterId: Type.String(),
+  instanceId: Type.String(),
+  podIds: Type.Array(Type.String()),
+  hasTLS: Type.Boolean(),
+  bucketName: Type.String(),
+  fileName: Type.String(),
+  rdbSizeFileName: Type.String(),
+  rdbKeyNumberFileName: Type.String(),
+  deploymentSizeInMb: Type.Number(),
+  backupPath: Type.String(),
+  aofEnabled: Type.Boolean(),
+  isCluster: Type.Boolean(),
+  source: Type.Optional(RDBImportPublicSourceSchema),
+});
+export type RDBImportPublicTaskPayloadType = Static<typeof RDBImportPublicTaskPayloadSchema>;
 
 export const ImportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
@@ -303,6 +378,22 @@ export const ImportRDBTaskSchema = Type.Object({
 });
 export type ImportRDBTaskType = Static<typeof ImportRDBTaskSchema>;
 
+export const PublicImportRDBTaskSchema = Type.Object({
+  taskId: Type.String(),
+  type: Type.Literal('RDBImport'),
+  createdAt: Type.String(),
+  updatedAt: Type.String(),
+  status: TaskStatusSchema,
+  /**
+   * @deprecated Use 'errors' field instead
+   */
+  error: Type.Optional(Type.String()),
+  errors: Type.Optional(Type.Array(Type.String())),
+  payload: RDBImportPublicTaskPayloadSchema,
+  output: Type.Optional(RDBImportOutputSchema),
+});
+export type PublicImportRDBTaskType = Static<typeof PublicImportRDBTaskSchema>;
+
 export const TaskDocumentSchema = Type.Union([
   ExportRDBTaskSchema,
   ImportRDBTaskSchema,
@@ -312,7 +403,7 @@ export type TaskDocumentType = ExportRDBTaskType | ImportRDBTaskType;
 
 export const PublicTaskDocumentSchema = Type.Union([
   PublicExportRDBTaskSchema,
-  ImportRDBTaskSchema,
+  PublicImportRDBTaskSchema,
 ]);
 
-export type PublicTaskDocumentType = PublicExportRDBTaskType | ImportRDBTaskType;
+export type PublicTaskDocumentType = PublicExportRDBTaskType | PublicImportRDBTaskType;
