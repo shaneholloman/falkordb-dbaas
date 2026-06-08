@@ -21,7 +21,9 @@ spec:
         echo "=========================================="
 
         # Install omnistrate-ctl
+        export HOME=/tmp
         curl -fsSL https://raw.githubusercontent.com/omnistrate-oss/omnistrate-ctl/main/install-ctl.sh | sh
+        export PATH="$HOME/.omnistrate/bin:$PATH"
 
         # Normalize GCP cluster name to deployment cell ID
         # GCP passes "c-hc<id>" but omnistrate-ctl expects "hc-<id>"
