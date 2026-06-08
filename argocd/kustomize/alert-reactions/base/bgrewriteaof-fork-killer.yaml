@@ -20,9 +20,9 @@ spec:
         echo "Namespace: ${NAMESPACE}"
         echo "=========================================="
 
-        # Install omnistrate-ctl
+        # Install omnistrate-ctl (pinned version for reproducibility)
         export HOME=/tmp
-        curl -fsSL https://raw.githubusercontent.com/omnistrate-oss/omnistrate-ctl/main/install-ctl.sh | sh
+        curl -fsSL https://raw.githubusercontent.com/omnistrate-oss/omnistrate-ctl/main/install-ctl.sh | sh -s -- --version v1.9.4
         export PATH="$HOME/.omnistrate/bin:$PATH"
 
         # Normalize GCP cluster name to deployment cell ID
