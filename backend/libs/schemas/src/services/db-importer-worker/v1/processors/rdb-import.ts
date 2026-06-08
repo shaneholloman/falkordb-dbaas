@@ -1,6 +1,13 @@
 import { type Static, Type } from '@sinclair/typebox';
 import { SupportedCloudProviderSchema } from '../../../../global';
 
+export const RdbImportCopySourceToBucketProcessorDataSchema = Type.Object({
+  taskId: Type.String(),
+  bucketName: Type.String(),
+  fileName: Type.String(),
+});
+export type RdbImportCopySourceToBucketProcessorData = Static<typeof RdbImportCopySourceToBucketProcessorDataSchema>;
+
 export const RdbImportValidateRDBSizeProcessorDataSchema = Type.Object({
   taskId: Type.String(),
   bucketName: Type.String(),
@@ -168,6 +175,7 @@ export const RdbImportRecoverFailedImportProcessorDataSchema = Type.Object({
 export type RdbImportRecoverFailedImportProcessorData = Static<typeof RdbImportRecoverFailedImportProcessorDataSchema>;
 
 export enum RdbImportTaskNames {
+  RdbImportCopySourceToBucket = 'rdb-import-copy-source-to-bucket',
   RdbImportValidateRDBSize = 'rdb-import-validate-rdb-size',
   RdbImportValidateRDBFormat = 'rdb-import-validate-rdb-format',
   RdbImportMonitorSizeValidationProgress = 'rdb-import-monitor-size-validation-progress',
@@ -185,6 +193,7 @@ export enum RdbImportTaskNames {
 }
 
 export const RdbImportSchemaMap = {
+  [RdbImportTaskNames.RdbImportCopySourceToBucket]: RdbImportCopySourceToBucketProcessorDataSchema,
   [RdbImportTaskNames.RdbImportValidateRDBSize]: RdbImportValidateRDBSizeProcessorDataSchema,
   [RdbImportTaskNames.RdbImportValidateRDBFormat]: RdbImportValidateRDBFormatProcessorDataSchema,
   [RdbImportTaskNames.RdbImportMonitorSizeValidationProgress]: RdbImportMonitorSizeValidationProgressProcessorDataSchema,
