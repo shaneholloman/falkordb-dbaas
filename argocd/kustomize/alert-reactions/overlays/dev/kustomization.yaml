@@ -5,3 +5,4 @@ resources:
   - ../../base
   - redis-crash-alert-env-secret.yaml
   - redis-crash-loop-github-token-secret.yaml
+  - omnistrate-api-key-secret.yaml
