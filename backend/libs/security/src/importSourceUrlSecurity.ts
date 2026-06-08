@@ -19,19 +19,73 @@ const isBlockedIPv4 = (address: string): boolean => {
     || (first === 192 && second === 168);
 };
 
-const parseIPv4MappedIPv6 = (address: string): string | undefined => {
-  const dottedDecimal = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (dottedDecimal) {
-    return dottedDecimal[1];
+const expandIPv6 = (address: string): number[] | undefined => {
+  const sections = address.split('::');
+  if (sections.length > 2) {
+    return undefined;
   }
+  const [head = '', tail = ''] = sections;
 
-  const hex = address.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
-  if (!hex) {
+  const parseGroups = (section: string): number[] | undefined => {
+    if (section === '') {
+      return [];
+    }
+
+    const groups = section.split(':');
+    if (groups.some((group) => !/^[0-9a-f]{1,4}$/i.test(group))) {
+      return undefined;
+    }
+
+    return groups.map((group) => parseInt(group, 16));
+  };
+
+  const headGroups = parseGroups(head);
+  const tailGroups = parseGroups(tail);
+  if (!headGroups || !tailGroups) {
     return undefined;
   }
 
-  const high = parseInt(hex[1], 16);
-  const low = parseInt(hex[2], 16);
+  const missingGroups = 8 - headGroups.length - tailGroups.length;
+  if (address.includes('::')) {
+    if (missingGroups < 1) {
+      return undefined;
+    }
+
+    return [...headGroups, ...Array(missingGroups).fill(0), ...tailGroups];
+  }
+
+  if (missingGroups !== 0) {
+    return undefined;
+  }
+
+  return headGroups;
+};
+
+const dottedDecimalToHexGroups = (address: string): string | undefined => {
+  const octets = address.split('.').map((octet) => Number(octet));
+  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return undefined;
+  }
+
+  return [
+    (octets[0] << 8) | octets[1],
+    (octets[2] << 8) | octets[3],
+  ].map((group) => group.toString(16)).join(':');
+};
+
+const parseIPv4MappedIPv6 = (address: string): string | undefined => {
+  const dottedDecimal = address.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  const dottedDecimalGroups = dottedDecimal ? dottedDecimalToHexGroups(dottedDecimal[2]) : undefined;
+  const normalizedAddress = dottedDecimal && dottedDecimalGroups ? `${dottedDecimal[1]}${dottedDecimalGroups}` : address;
+  const groups = expandIPv6(normalizedAddress);
+  if (!groups
+    || groups.length !== 8
+    || groups.slice(0, 5).some((group) => group !== 0)
+    || groups[5] !== 0xffff) {
+    return undefined;
+  }
+
+  const [high, low] = groups.slice(6);
   return [high >> 8, high & 255, low >> 8, low & 255].join('.');
 };
 

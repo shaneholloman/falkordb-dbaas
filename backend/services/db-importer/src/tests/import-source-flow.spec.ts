@@ -365,6 +365,7 @@ describe('import RDB customer source flow', () => {
     ['link-local literal address', { url: 'https://169.254.169.254/latest/meta-data' }, undefined],
     ['localhost literal address', { url: 'https://127.0.0.1/imports/customer.rdb' }, undefined],
     ['hex IPv4-mapped IPv6 localhost literal address', { url: 'https://[::ffff:7f00:1]/imports/customer.rdb' }, undefined],
+    ['expanded hex IPv4-mapped IPv6 localhost literal address', { url: 'https://[0:0:0:0:0:ffff:7f00:1]/imports/customer.rdb' }, undefined],
   ])('rejects URL source with %s before creating a task', async (_caseName, sourceOverrides, resolvedAddresses) => {
     const source = {
       type: 'url' as const,
@@ -605,7 +606,13 @@ describe('import RDB customer source flow', () => {
   });
 });
 
-const collectJobs = (job) => [
+type FlowJob = {
+  name: string;
+  data?: unknown;
+  children?: FlowJob[];
+};
+
+const collectJobs = (job: FlowJob): FlowJob[] => [
   job,
   ...(job.children ?? []).flatMap(collectJobs),
 ];

@@ -88,7 +88,7 @@ const RDBImportSource = Yup.lazy((value) => {
     case 'url':
       return Yup.object({
         type: Yup.string().oneOf(['url']).required(),
-        url: Yup.string().url().required(),
+        url: Yup.string().url().matches(/^https:\/\/[^\/@?#]+(?:[\/?#].*)?$/).required(),
       }).strict().noUnknown().required();
     default:
       return Yup.mixed().oneOf([]).required();
