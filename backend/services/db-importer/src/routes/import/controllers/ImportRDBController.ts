@@ -12,6 +12,8 @@ import { ImportRDBTaskType, RDBImportSourceType, RDBImportTaskPayloadType, sanit
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 import { randomUUID } from 'crypto';
 
+const IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS = parseInt(process.env.RDB_IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS ?? '', 10) || 30 * 1000;
+
 export class ImportRDBController {
   constructor(
     private omnistrateRepository: OmnistrateRepository,
@@ -102,6 +104,33 @@ export class ImportRDBController {
 
         if (!exists) {
           throw new Error(`GCS object gs://${source.bucketName}/${source.fileName} does not exist or cannot be accessed`);
+        }
+        return;
+      }
+
+      if (source.type === 'url') {
+        const url = new URL(source.url);
+        if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+          throw new Error('Import source URL must use http or https');
+        }
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS);
+        try {
+          const response = await fetch(source.url, {
+            method: 'GET',
+            headers: {
+              range: 'bytes=0-0',
+            },
+            signal: controller.signal,
+          });
+          await response.body?.cancel();
+
+          if (!response.ok) {
+            throw new Error(`URL source returned ${response.status} ${response.statusText}`);
+          }
+        } finally {
+          clearTimeout(timeout);
         }
         return;
       }

@@ -47,6 +47,10 @@ const getCustomerSourceReadUrl = async (source: RDBImportSourceType): Promise<st
     return readUrl;
   }
 
+  if (source.type === 'url') {
+    return source.url;
+  }
+
   const s3Client = new S3Client({
     region: source.region,
     credentials: {

@@ -85,6 +85,11 @@ const RDBImportSource = Yup.lazy((value) => {
         secretAccessKey: Yup.string().required(),
         sessionToken: Yup.string().optional(),
       }).strict().noUnknown().required();
+    case 'url':
+      return Yup.object({
+        type: Yup.string().oneOf(['url']).required(),
+        url: Yup.string().url().required(),
+      }).strict().noUnknown().required();
     default:
       return Yup.mixed().oneOf([]).required();
   }

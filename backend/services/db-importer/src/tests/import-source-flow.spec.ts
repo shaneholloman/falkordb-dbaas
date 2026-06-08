@@ -5,6 +5,8 @@ import { RdbImportTaskNames } from '@falkordb/schemas/services/db-importer-worke
 
 const mockGcsExists = jest.fn();
 const mockS3Send = jest.fn();
+const mockFetch = jest.fn();
+const originalFetch = global.fetch;
 
 jest.mock('@google-cloud/storage', () => ({
   Storage: jest.fn().mockImplementation(() => ({
@@ -105,6 +107,15 @@ const makeController = () => {
 describe('import RDB customer source flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    global.fetch = mockFetch as never;
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 206,
+      statusText: 'Partial Content',
+      body: {
+        cancel: jest.fn().mockResolvedValue(undefined),
+      },
+    });
     mockGcsExists.mockImplementation(async (fileName: string) => {
       if (fileName.includes('missing')) {
         throw new Error('missing object');
@@ -117,6 +128,10 @@ describe('import RDB customer source flow', () => {
       }
       return {};
     });
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
   });
 
   it('creates a customer GCS source import task without copying in the API request', async () => {
@@ -229,6 +244,86 @@ describe('import RDB customer source flow', () => {
       status: 'in_progress',
       payload: createdPayload,
     }));
+  });
+
+  it('creates a customer URL source import task after validating the URL', async () => {
+    const source = {
+      type: 'url' as const,
+      url: 'https://customer.example.com/imports/customer.rdb?X-Amz-Signature=secret-signature',
+    };
+    const { controller, storageRepository, tasksRepository, taskQueueRepository } = makeController();
+
+    const result = await controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source,
+    });
+
+    expect(result).toEqual({ taskId: 'task-id' });
+    expect(mockFetch).toHaveBeenCalledWith(source.url, expect.objectContaining({
+      method: 'GET',
+      headers: {
+        range: 'bytes=0-0',
+      },
+    }));
+    expect(storageRepository.getWriteUrl).not.toHaveBeenCalled();
+
+    const createdPayload = tasksRepository.createTask.mock.calls[0][1];
+    expect(createdPayload.source).toEqual(source);
+    expect(JSON.stringify(createdPayload)).toContain('secret-signature');
+
+    const publicTask = sanitizeTaskDocument({
+      taskId: 'task-id',
+      type: 'RDBImport',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'pending',
+      payload: createdPayload,
+    });
+    if (publicTask.type !== 'RDBImport') {
+      throw new Error(`Expected RDBImport task, got ${publicTask.type}`);
+    }
+    expect(publicTask.payload.source).toEqual({
+      type: 'url',
+    });
+    expect(JSON.stringify(publicTask)).not.toContain('secret-signature');
+    expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-id',
+      status: 'in_progress',
+      payload: createdPayload,
+    }));
+  });
+
+  it('rejects invalid URL source access before creating a task', async () => {
+    const source = {
+      type: 'url' as const,
+      url: 'https://customer.example.com/imports/missing.rdb?token=secret-token',
+    };
+    const { controller, tasksRepository, taskQueueRepository } = makeController();
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      body: {
+        cancel: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await expect(controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source,
+    })).rejects.toMatchObject({
+      message: 'Invalid import source credentials or object access',
+      errorCode: 'INVALID_IMPORT_SOURCE',
+    });
+
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
   });
 
   it('rejects invalid customer source access before creating a task', async () => {
@@ -377,13 +472,8 @@ describe('import RDB customer source flow', () => {
         aofEnabled: false,
         isCluster: false,
         source: {
-          type: 's3',
-          bucketName: 'customer-bucket',
-          key: 'imports/customer.rdb',
-          region: 'us-east-1',
-          accessKeyId: 'access-key',
-          secretAccessKey: 'secret-key',
-          sessionToken: 'session-token',
+          type: 'url',
+          url: 'https://customer.example.com/imports/customer.rdb?token=secret-token',
         },
       },
     });
@@ -400,6 +490,7 @@ describe('import RDB customer source flow', () => {
       });
       expect(JSON.stringify(copyJob)).not.toContain('secret-key');
       expect(JSON.stringify(copyJob)).not.toContain('session-token');
+      expect(JSON.stringify(copyJob)).not.toContain('secret-token');
     }
 
     const sendSaveJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportSendSaveCommand);

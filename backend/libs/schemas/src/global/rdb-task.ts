@@ -200,9 +200,15 @@ export const RDBImportS3SourceSchema = Type.Object({
   sessionToken: Type.Optional(Type.String()),
 }, { additionalProperties: false });
 
+export const RDBImportURLSourceSchema = Type.Object({
+  type: Type.Literal('url'),
+  url: Type.String(),
+}, { additionalProperties: false });
+
 export const RDBImportSourceSchema = Type.Union([
   RDBImportGCSSourceSchema,
   RDBImportS3SourceSchema,
+  RDBImportURLSourceSchema,
 ]);
 export type RDBImportSourceType = Static<typeof RDBImportSourceSchema>;
 
@@ -219,9 +225,14 @@ export const RDBImportPublicS3SourceSchema = Type.Object({
   region: Type.String(),
 }, { additionalProperties: false });
 
+export const RDBImportPublicURLSourceSchema = Type.Object({
+  type: Type.Literal('url'),
+}, { additionalProperties: false });
+
 export const RDBImportPublicSourceSchema = Type.Union([
   RDBImportPublicGCSSourceSchema,
   RDBImportPublicS3SourceSchema,
+  RDBImportPublicURLSourceSchema,
 ]);
 export type RDBImportPublicSourceType = Static<typeof RDBImportPublicSourceSchema>;
 
