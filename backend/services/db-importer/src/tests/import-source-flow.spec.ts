@@ -256,6 +256,35 @@ describe('import RDB customer source flow', () => {
     expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
   });
 
+  it('marks customer source task failed when queue submission fails', async () => {
+    const source = {
+      type: 'gcs' as const,
+      bucketName: 'customer-bucket',
+      fileName: 'imports/customer.rdb',
+      credentials: serviceAccountCredentials,
+    };
+    const { controller, tasksRepository, taskQueueRepository } = makeController();
+    taskQueueRepository.submitImportRDBTask.mockRejectedValueOnce(new Error('queue down'));
+
+    await expect(controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source,
+    })).rejects.toThrow('queue down');
+
+    expect(tasksRepository.updateTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-id',
+      status: 'pending',
+    }));
+    expect(tasksRepository.updateTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-id',
+      status: 'failed',
+      errors: ['Failed to submit import task to queue'],
+    }));
+  });
+
   it('adds customer source copy jobs to the import flow without queueing credentials', () => {
     process.env.APPLICATION_PLANE_PROJECT_ID = 'app-plane-project';
     process.env.CTRL_PLANE_PROJECT_ID = 'ctrl-plane-project';
@@ -301,7 +330,7 @@ describe('import RDB customer source flow', () => {
     const jobs = collectJobs(flow);
     const copyJobs = jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportCopySourceToBucket);
 
-    expect(copyJobs.length).toBeGreaterThan(0);
+    expect(copyJobs).toHaveLength(1);
     for (const copyJob of copyJobs) {
       expect(copyJob.data).toEqual({
         taskId: 'task-id',
@@ -311,6 +340,11 @@ describe('import RDB customer source flow', () => {
       expect(JSON.stringify(copyJob)).not.toContain('secret-key');
       expect(JSON.stringify(copyJob)).not.toContain('session-token');
     }
+
+    const sendSaveJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportSendSaveCommand);
+    expect(sendSaveJob?.children).toHaveLength(1);
+    expect(sendSaveJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportMonitorSizeValidationProgress);
+    expect(JSON.stringify(sendSaveJob)).toContain(RdbImportTaskNames.RdbImportMonitorFormatValidationProgress);
   });
 });
 

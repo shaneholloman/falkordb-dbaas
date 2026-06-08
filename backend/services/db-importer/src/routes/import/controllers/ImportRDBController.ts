@@ -248,10 +248,21 @@ export class ImportRDBController {
         updatedAt: new Date().toISOString(),
       });
 
-      await this.taskQueueRepository.submitImportRDBTask({
-        ...task,
-        status: 'pending',
-      });
+      try {
+        await this.taskQueueRepository.submitImportRDBTask({
+          ...task,
+          status: 'pending',
+        });
+      } catch (error) {
+        this._opts.logger.error({ error, taskId: task.taskId }, 'Error submitting RDB import task to queue');
+        await this.tasksRepository.updateTask({
+          taskId: task.taskId,
+          status: 'failed',
+          errors: ['Failed to submit import task to queue'],
+          updatedAt: new Date().toISOString(),
+        });
+        throw error;
+      }
 
       return {
         taskId: task.taskId,

@@ -270,8 +270,8 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
     task: ImportRDBTaskType,
   ): FlowJob {
     this._opts.logger.debug(`Creating import RDB flow for task: ${task.taskId}`);
-    const copySourceToBucketChildren = task.payload.source ? [
-      this._makeJobNode(
+    const copySourceToBucketJob = task.payload.source
+      ? this._makeJobNode(
         RdbImportTaskNames.RdbImportCopySourceToBucket,
         ProcessorsSchemaMap[RdbImportTaskNames.RdbImportCopySourceToBucket],
         {
@@ -283,8 +283,91 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
           failParentOnFailure: true,
           jobId: `${task.taskId}-copy-source-to-bucket`,
         },
-      ),
-    ] : undefined;
+      )
+      : undefined;
+
+    const makeFormatValidationBranch = (children?: FlowChildJob[]): FlowJob => this._makeJobNode(
+      RdbImportTaskNames.RdbImportMonitorFormatValidationProgress,
+      ProcessorsSchemaMap[RdbImportTaskNames.RdbImportMonitorFormatValidationProgress],
+      {
+        taskId: task.taskId,
+        cloudProvider: 'gcp',
+        clusterId: process.env.CTRL_PLANE_CLUSTER_ID,
+        region: process.env.CTRL_PLANE_REGION,
+        namespace: process.env.NAMESPACE,
+        bucketName: task.payload.bucketName,
+        jobResultFileName: task.payload.rdbKeyNumberFileName,
+        projectId: process.env.CTRL_PLANE_PROJECT_ID,
+      },
+      {
+        failParentOnFailure: true,
+      },
+      [
+        this._makeJobNode(
+          RdbImportTaskNames.RdbImportValidateRDBFormat,
+          ProcessorsSchemaMap[RdbImportTaskNames.RdbImportValidateRDBFormat],
+          {
+            taskId: task.taskId,
+            cloudProvider: 'gcp',
+            clusterId: process.env.CTRL_PLANE_CLUSTER_ID,
+            region: process.env.CTRL_PLANE_REGION,
+            namespace: process.env.NAMESPACE,
+            bucketName: task.payload.bucketName,
+            jobResultFileName: task.payload.rdbKeyNumberFileName,
+            fileName: task.payload.fileName,
+            projectId: process.env.CTRL_PLANE_PROJECT_ID,
+          },
+          {
+            failParentOnFailure: true,
+          },
+          children,
+        ),
+      ],
+    );
+
+    const makeSizeValidationBranch = (children?: FlowChildJob[]): FlowJob => this._makeJobNode(
+      RdbImportTaskNames.RdbImportMonitorSizeValidationProgress,
+      ProcessorsSchemaMap[RdbImportTaskNames.RdbImportMonitorSizeValidationProgress],
+      {
+        taskId: task.taskId,
+        cloudProvider: 'gcp',
+        clusterId: process.env.CTRL_PLANE_CLUSTER_ID,
+        region: process.env.CTRL_PLANE_REGION,
+        namespace: process.env.NAMESPACE,
+        bucketName: task.payload.bucketName,
+        jobResultFileName: task.payload.rdbSizeFileName,
+        maxRdbSize: task.payload.deploymentSizeInMb,
+        projectId: process.env.CTRL_PLANE_PROJECT_ID,
+      },
+      {
+        failParentOnFailure: true,
+      },
+      [
+        this._makeJobNode(
+          RdbImportTaskNames.RdbImportValidateRDBSize,
+          ProcessorsSchemaMap[RdbImportTaskNames.RdbImportValidateRDBSize],
+          {
+            taskId: task.taskId,
+            cloudProvider: 'gcp',
+            clusterId: process.env.CTRL_PLANE_CLUSTER_ID,
+            region: process.env.CTRL_PLANE_REGION,
+            namespace: process.env.NAMESPACE,
+            bucketName: task.payload.bucketName,
+            jobResultFileName: task.payload.rdbSizeFileName,
+            fileName: task.payload.fileName,
+            projectId: process.env.CTRL_PLANE_PROJECT_ID,
+          },
+          {
+            failParentOnFailure: true,
+          },
+          children,
+        ),
+      ],
+    );
+
+    const validationBranches = copySourceToBucketJob
+      ? [makeSizeValidationBranch([makeFormatValidationBranch([copySourceToBucketJob])])]
+      : [makeFormatValidationBranch(), makeSizeValidationBranch()];
 
     return this._makeJobNode(
       RdbImportTaskNames.RdbImportValidateImportKeyNumber,
@@ -410,85 +493,7 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
                               {
                                 failParentOnFailure: true,
                               },
-                              [
-                                this._makeJobNode(
-                                  RdbImportTaskNames.RdbImportMonitorFormatValidationProgress,
-                                  ProcessorsSchemaMap[RdbImportTaskNames.RdbImportMonitorFormatValidationProgress],
-                                  {
-                                    taskId: task.taskId,
-                                    cloudProvider: 'gcp',
-                                    clusterId: process.env.CTRL_PLANE_CLUSTER_ID,
-                                    region: process.env.CTRL_PLANE_REGION,
-                                    namespace: process.env.NAMESPACE,
-                                    bucketName: task.payload.bucketName,
-                                    jobResultFileName: task.payload.rdbKeyNumberFileName,
-                                    projectId: process.env.CTRL_PLANE_PROJECT_ID,
-                                  },
-                                  {
-                                    failParentOnFailure: true,
-                                  },
-                                  [
-                                    this._makeJobNode(
-                                      RdbImportTaskNames.RdbImportValidateRDBFormat,
-                                      ProcessorsSchemaMap[RdbImportTaskNames.RdbImportValidateRDBFormat],
-                                      {
-                                        taskId: task.taskId,
-                                        cloudProvider: 'gcp',
-                                        clusterId: process.env.CTRL_PLANE_CLUSTER_ID,
-                                        region: process.env.CTRL_PLANE_REGION,
-                                        namespace: process.env.NAMESPACE,
-                                        bucketName: task.payload.bucketName,
-                                        jobResultFileName: task.payload.rdbKeyNumberFileName,
-                                        fileName: task.payload.fileName,
-                                        projectId: process.env.CTRL_PLANE_PROJECT_ID,
-                                      },
-                                      {
-                                        failParentOnFailure: true,
-                                      },
-                                      copySourceToBucketChildren,
-                                    ),
-                                  ],
-                                ),
-                                this._makeJobNode(
-                                  RdbImportTaskNames.RdbImportMonitorSizeValidationProgress,
-                                  ProcessorsSchemaMap[RdbImportTaskNames.RdbImportMonitorSizeValidationProgress],
-                                  {
-                                    taskId: task.taskId,
-                                    cloudProvider: 'gcp',
-                                    clusterId: process.env.CTRL_PLANE_CLUSTER_ID,
-                                    region: process.env.CTRL_PLANE_REGION,
-                                    namespace: process.env.NAMESPACE,
-                                    bucketName: task.payload.bucketName,
-                                    jobResultFileName: task.payload.rdbSizeFileName,
-                                    maxRdbSize: task.payload.deploymentSizeInMb,
-                                    projectId: process.env.CTRL_PLANE_PROJECT_ID,
-                                  },
-                                  {
-                                    failParentOnFailure: true,
-                                  },
-                                  [
-                                    this._makeJobNode(
-                                      RdbImportTaskNames.RdbImportValidateRDBSize,
-                                      ProcessorsSchemaMap[RdbImportTaskNames.RdbImportValidateRDBSize],
-                                      {
-                                        taskId: task.taskId,
-                                        cloudProvider: 'gcp',
-                                        clusterId: process.env.CTRL_PLANE_CLUSTER_ID,
-                                        region: process.env.CTRL_PLANE_REGION,
-                                        namespace: process.env.NAMESPACE,
-                                        bucketName: task.payload.bucketName,
-                                        jobResultFileName: task.payload.rdbSizeFileName,
-                                        fileName: task.payload.fileName,
-                                        projectId: process.env.CTRL_PLANE_PROJECT_ID,
-                                      },
-                                      {
-                                        failParentOnFailure: true,
-                                      },
-                                      copySourceToBucketChildren,
-                                    ),
-                                  ],
-                                ),
-                              ],
+                              validationBranches,
                             ),
                           ],
                         ),
