@@ -1,4 +1,5 @@
 import { type Static, Type } from '@sinclair/typebox';
+import { RDBImportSourceSchema } from '../../../../global';
 
 export const ImportRDBRequestUploadURLRequestBodySchema = Type.Object({
   instanceId: Type.String(),
@@ -8,13 +9,14 @@ export const ImportRDBRequestUploadURLRequestBodySchema = Type.Object({
   password: Type.Optional(Type.String({
     pattern: "^[a-zA-Z0-9._!\@\#\$\%\^\&\*]+$"
   })),
+  source: Type.Optional(RDBImportSourceSchema),
 });
 
 export type ImportRDBRequestUploadURLRequestBody = Static<typeof ImportRDBRequestUploadURLRequestBodySchema>;
 
 export const ImportRDBRequestUploadURLResponseBodySchema = Type.Object({
   taskId: Type.String(),
-  uploadUrl: Type.String(),
+  uploadUrl: Type.Optional(Type.String()),
 });
 export type ImportRDBRequestUploadURLResponseBody = Static<typeof ImportRDBRequestUploadURLResponseBodySchema>;
 

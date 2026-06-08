@@ -1,0 +1,16 @@
+{
+  "name": "@falkordb/security",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "SSPL",
+  "dependencies": {
+    "@falkordb/configs": "workspace:*"
+  }
+}
