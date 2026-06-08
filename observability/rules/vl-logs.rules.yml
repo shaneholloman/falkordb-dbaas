@@ -218,7 +218,7 @@ spec:
           # in the observability namespace. All failure modes emit "FORK_KILL_FAILED:" to identify
           # that automated remediation of a stuck AOF rewrite did not succeed.
           expr: |
-            "FORK_KILL_FAILED:" and namespace: "observability" and _time:5m |
+            "FORK_KILL_FAILED:" and namespace: "observability" and -pod:~"vm-.*" and _time:5m |
             stats by (pod, namespace, cluster, environment) count() as failure_count |
             filter failure_count :> 0
           for: 0m
