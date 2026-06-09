@@ -47,14 +47,12 @@ const processor: Processor<RdbImportCopyInstanceSourceToBucketProcessorData> = a
       60 * 60 * 1000,
     );
 
-    await k8sRepository.sendUserSaveAndUploadCommand(
+    await k8sRepository.sendSaveAndUploadCommand(
       source.cloudProvider,
       source.clusterId,
       source.region,
       source.instanceId,
       job.data.podId,
-      source.username,
-      source.password,
       source.tls,
       destinationWriteUrl,
     );

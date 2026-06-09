@@ -480,34 +480,32 @@ export class K8sRepository {
     });
   }
 
-  async sendUserSaveAndUploadCommand(
+  async sendSaveAndUploadCommand(
     cloudProvider: 'gcp' | 'aws',
     clusterId: string,
     region: string,
     instanceId: string,
     podId: string,
-    username: string,
-    password: string,
     hasTLS: boolean,
     signedWriteUrl: string,
   ): Promise<void> {
-    this._options.logger.info({ clusterId, region, instanceId, podId, username }, 'Sending user-authenticated save and upload command');
+    this._options.logger.info({ clusterId, region, instanceId, podId }, 'Sending default-user save and upload command');
 
     const kubeConfig = await this._getK8sConfig(cloudProvider, clusterId, region);
+    const password = await this._getDeploymentPassword(kubeConfig, instanceId, podId);
     const tlsFlag = hasTLS ? '--tls' : '';
     const shellCommand = `set -eu
-      USERNAME="$1"
-      PASSWORD="$2"
-      WRITE_URL="$3"
+      PASSWORD="$1"
+      WRITE_URL="$2"
 
-      redis-cli --user "$USERNAME" -a "$PASSWORD" ${tlsFlag} --no-auth-warning bgsave >/tmp/bgsave.out 2>&1 || {
+      redis-cli -a "$PASSWORD" ${tlsFlag} --no-auth-warning bgsave >/tmp/bgsave.out 2>&1 || {
         cat /tmp/bgsave.out >&2
         exit 1
       }
 
       attempt=1
       while [ $attempt -le 300 ]; do
-        INFO=$(redis-cli --user "$USERNAME" -a "$PASSWORD" ${tlsFlag} --no-auth-warning info persistence) || exit 1
+        INFO=$(redis-cli -a "$PASSWORD" ${tlsFlag} --no-auth-warning info persistence) || exit 1
         case "$INFO" in
           *rdb_bgsave_in_progress:0*) break ;;
         esac
@@ -532,10 +530,10 @@ export class K8sRepository {
       kubeConfig,
       instanceId,
       podId,
-      ['sh', '-c', shellCommand, 'sh', username, password, signedWriteUrl],
+      ['sh', '-c', shellCommand, 'sh', password, signedWriteUrl],
       10 * 60,
     ).catch((e) => {
-      this._options.logger.error(e, 'Error sending user-authenticated save and upload command');
+      this._options.logger.error(e, 'Error sending default-user save and upload command');
       throw e;
     });
   }

@@ -212,13 +212,13 @@ export const RDBImportInstanceSourceSchema = Type.Object({
   instanceId: Type.String(),
   username: Type.String(),
   password: Type.String(),
-  cloudProvider: Type.Optional(SupportedCloudProviderSchema),
-  clusterId: Type.Optional(Type.String()),
-  region: Type.Optional(Type.String()),
-  podId: Type.Optional(Type.String()),
-  podIds: Type.Optional(Type.Array(Type.String())),
-  isCluster: Type.Optional(Type.Boolean()),
-  tls: Type.Optional(Type.Boolean()),
+  cloudProvider: SupportedCloudProviderSchema,
+  clusterId: Type.String(),
+  region: Type.String(),
+  podId: Type.String(),
+  podIds: Type.Array(Type.String()),
+  isCluster: Type.Boolean(),
+  tls: Type.Boolean(),
 }, { additionalProperties: false });
 
 export const RDBImportRequestInstanceSourceSchema = Type.Object({

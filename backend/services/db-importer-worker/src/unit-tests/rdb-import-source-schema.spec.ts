@@ -1,4 +1,6 @@
 import { RDBTask, TaskTypes } from '../schemas/rdb-task';
+import { RDBImportRequestSourceSchema, RDBImportSourceSchema } from '@falkordb/schemas/global';
+import { Value } from '@sinclair/typebox/value';
 
 const makeImportTask = (source: Record<string, unknown>) => ({
   taskId: 'task-id',
@@ -65,6 +67,28 @@ describe('RDB import source task schema', () => {
       username: 'source-user',
       password: 'source-password',
     }))).toThrow();
+  });
+
+  it('requires prepared metadata in shared task schema while request schema accepts client input', () => {
+    const requestSource = {
+      type: 'instance',
+      instanceId: 'source-instance-id',
+      username: 'source-user',
+      password: 'source-password',
+    };
+
+    expect(Value.Check(RDBImportRequestSourceSchema, requestSource)).toBe(true);
+    expect(Value.Check(RDBImportSourceSchema, requestSource)).toBe(false);
+    expect(Value.Check(RDBImportSourceSchema, {
+      ...requestSource,
+      cloudProvider: 'gcp',
+      clusterId: 'source-cluster-id',
+      region: 'us-central1',
+      podId: 'node-s-0',
+      podIds: ['node-s-0'],
+      isCluster: false,
+      tls: false,
+    })).toBe(true);
   });
 
   it('accepts HTTPS URL sources without credentials', () => {
