@@ -2607,7 +2607,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(20, redis_falkordb_graph_memory_total_mb{namespace=~\"$namespace\", pod=~\"$pod\"})",
+              "expr": "redis_falkordb_graph_memory_total_mb{namespace=~\"$namespace\", pod=~\"$pod\"}",
               "legendFormat": "{{ graph }}",
               "range": true,
               "refId": "A"
@@ -2908,7 +2908,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(5, redis_falkordb_graph_node_block_mb{namespace=~\"$namespace\", pod=~\"$pod\"})",
+              "expr": "redis_falkordb_graph_node_block_mb{namespace=~\"$namespace\", pod=~\"$pod\", graph=~\"$graph\"}",
               "legendFormat": "Node Blocks ({{ graph }})",
               "range": true,
               "refId": "A"
@@ -2919,7 +2919,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(5, redis_falkordb_graph_node_attributes_mb{namespace=~\"$namespace\", pod=~\"$pod\"})",
+              "expr": "redis_falkordb_graph_node_attributes_mb{namespace=~\"$namespace\", pod=~\"$pod\", graph=~\"$graph\"}",
               "legendFormat": "Node Attrs {{label}} ({{ graph }})",
               "range": true,
               "refId": "B"
@@ -2930,7 +2930,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(5, redis_falkordb_graph_edge_block_mb{namespace=~\"$namespace\", pod=~\"$pod\"})",
+              "expr": "redis_falkordb_graph_edge_block_mb{namespace=~\"$namespace\", pod=~\"$pod\", graph=~\"$graph\"}",
               "legendFormat": "Edge Blocks ({{ graph }})",
               "range": true,
               "refId": "C"
@@ -2941,7 +2941,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(5, redis_falkordb_graph_edge_attributes_mb{namespace=~\"$namespace\", pod=~\"$pod\"})",
+              "expr": "redis_falkordb_graph_edge_attributes_mb{namespace=~\"$namespace\", pod=~\"$pod\", graph=~\"$graph\"}",
               "legendFormat": "Edge Attrs {{type}} ({{ graph }})",
               "range": true,
               "refId": "D"
@@ -2952,7 +2952,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(5, redis_falkordb_graph_label_matrices_mb{namespace=~\"$namespace\", pod=~\"$pod\"})",
+              "expr": "redis_falkordb_graph_label_matrices_mb{namespace=~\"$namespace\", pod=~\"$pod\", graph=~\"$graph\"}",
               "legendFormat": "Label Matrices ({{ graph }})",
               "range": true,
               "refId": "E"
@@ -2963,7 +2963,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(5, redis_falkordb_graph_relation_matrices_mb{namespace=~\"$namespace\", pod=~\"$pod\"})",
+              "expr": "redis_falkordb_graph_relation_matrices_mb{namespace=~\"$namespace\", pod=~\"$pod\", graph=~\"$graph\"}",
               "legendFormat": "Relation Matrices ({{ graph }})",
               "range": true,
               "refId": "F"
@@ -2974,13 +2974,13 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(5, redis_falkordb_graph_indices_mb{namespace=~\"$namespace\", pod=~\"$pod\"})",
+              "expr": "redis_falkordb_graph_indices_mb{namespace=~\"$namespace\", pod=~\"$pod\", graph=~\"$graph\"}",
               "legendFormat": "Indices ({{ graph }})",
               "range": true,
               "refId": "G"
             }
           ],
-          "title": "Graph Memory Components (Top 5)",
+          "title": "Graph Memory Components (by $graph)",
           "type": "timeseries"
         }
       ],
@@ -3072,6 +3072,28 @@
         "name": "container",
         "options": [],
         "query": "label_values(redis_uptime_in_seconds{namespace=~\"$namespace\", pod=~\"$pod\"}, container)",
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(redis_falkordb_graph_memory_total_mb{namespace=~\"$namespace\"}, graph)",
+        "includeAll": true,
+        "multi": true,
+        "name": "graph",
+        "options": [],
+        "query": "label_values(redis_falkordb_graph_memory_total_mb{namespace=~\"$namespace\"}, graph)",
         "refresh": 2,
         "regex": "",
         "sort": 1,
