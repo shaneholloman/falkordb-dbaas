@@ -30,3 +30,7 @@ clusters.yml
 certs
 .history
 .terragrunt-cache
+
+# AI prompt files (local use only)
+.github/prompts/
+.github/copilot-instructions.md
