@@ -282,7 +282,7 @@ spec:
             description: "[cluster={{ $labels.cluster }}] FalkorDB instance in namespace {{ $labels.namespace }} has a memory fragmentation ratio above 1.5 (current: {{ $value | printf \"%.2f\" }}). This indicates significant allocator overhead or fragmentation."
 
         - alert: FalkorDBMemoryGrowthRapid
-          expr: deriv(redis_memory_used_bytes{container="service"}[1h]) > 50 * 1024 * 1024
+          expr: deriv(redis_memory_used_bytes{container="service"}[1h]) > (50 * 1024 * 1024) / 3600
           for: 30m
           labels:
             severity: warning
@@ -293,9 +293,9 @@ spec:
 
         - alert: FalkorDBGraphMemoryImbalance
           expr: >
-            (max(falkordb_graph_memory_total_mb{container="service"}) by (namespace, cluster)
-            /
-            sum(falkordb_graph_memory_total_mb{container="service"}) by (namespace, cluster))
+            (falkordb_graph_memory_total_mb{container="service"}
+            / on(namespace, pod, cluster) group_left(graph)
+            sum(falkordb_graph_memory_total_mb{container="service"}) by (namespace, pod, cluster))
             > 0.7
           for: 15m
           labels:
@@ -303,7 +303,7 @@ spec:
             cluster: '{{ $labels.cluster }}'
           annotations:
             summary: "Single graph consuming >70% of total graph memory in {{ $labels.namespace }}"
-            description: "[cluster={{ $labels.cluster }}] A single graph in namespace {{ $labels.namespace }} is consuming more than 70% of total graph memory. Consider graph eviction or migration."
+            description: "[cluster={{ $labels.cluster }}] Graph '{{ $labels.graph }}' in namespace {{ $labels.namespace }} is consuming more than 70% of total graph memory. Consider graph eviction or migration."
 
     - name: falkordb.rules.standalone
       rules: []
