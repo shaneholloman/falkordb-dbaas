@@ -153,6 +153,21 @@ export class K8sRepository {
     return password.replace(/[\r\n]+$/, '');
   }
 
+  private _sanitizeCommandForError(command: string[]): string {
+    return command.map((part, index) => {
+      if (command[index - 1] === '-a' || command[index - 1] === '--pass' || command[index - 1] === '--password') {
+        return '[REDACTED]';
+      }
+      if (part.startsWith('http://') || part.startsWith('https://')) {
+        return '[REDACTED_URL]';
+      }
+      if (part.includes('PASSWORD=') || part.includes('WRITE_URL=') || part.includes('redis-cli')) {
+        return '[REDACTED_SCRIPT]';
+      }
+      return part;
+    }).join(' ');
+  }
+
   private async _executeCommand(kubeConfig: k8s.KubeConfig, instanceId: string, podId: string, command: string[], timeoutMs = 60 * 1000): Promise<string> {
     const exec = new k8s.Exec(kubeConfig);
 
@@ -185,7 +200,7 @@ export class K8sRepository {
       const timeoutId = setTimeout(() => {
         execStream?.close?.();
         execStream?.terminate?.();
-        const error = new Error(`Command timed out after ${timeoutMs}ms: ${command.join(' ')}`);
+        const error = new Error(`Command timed out after ${timeoutMs}ms: ${this._sanitizeCommandForError(command)}`);
         error.name = 'TimeoutError';
         settle(() => reject(error));
       }, timeoutMs);
