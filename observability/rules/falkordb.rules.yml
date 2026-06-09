@@ -159,7 +159,7 @@ spec:
           expr: ceil(redis_memory_used_bytes{container="service"} / redis_memory_max_bytes{container="service"} * 100) >= 100 and on(instance) redis_memory_max_bytes{container="service"} > 0
           for: 2m
           labels:
-            severity: warning
+            severity: critical
             cluster: '{{ $labels.cluster }}'
           annotations:
             summary: FalkorDB out of configured maxmemory (instance {{ $labels.namespace }})
@@ -293,9 +293,9 @@ spec:
 
         - alert: FalkorDBGraphMemoryImbalance
           expr: >
-            (falkordb_graph_memory_total_mb{container="service"}
-            / on(namespace, pod, cluster) group_left(graph)
-            sum(falkordb_graph_memory_total_mb{container="service"}) by (namespace, pod, cluster))
+            (redis_falkordb_graph_memory_total_mb{container="service"}
+            / on(namespace, pod, cluster) group_left
+            sum(redis_falkordb_graph_memory_total_mb{container="service"}) by (namespace, pod, cluster))
             > 0.7
           for: 15m
           labels:
