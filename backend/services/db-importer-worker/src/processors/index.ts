@@ -7,6 +7,7 @@ import RdbExportCopyRDBToBucketProcessor from './RdbExportCopyRDBToBucketProcess
 import RdbExportMonitorRDBMergeProcessor from './RdbExportMonitorRDBMergeProcessor';
 import RdbExportRequestRDBMergeProcessor from './RdbExportRequestRDBMergeProcessor';
 import PlaceholderProcessor from './PlaceholderProcessor';
+import RdbImportCopyInstanceSourceToBucketProcessor from './RdbImportCopyInstanceSourceToBucketProcessor';
 import RdbImportCopySourceToBucketProcessor from './RdbImportCopySourceToBucketProcessor';
 import RdbImportDeleteLocalBackupProcessor from './RdbImportDeleteLocalBackupProcessor';
 import RdbImportFlushInstanceProcessor from './RdbImportFlushInstanceProcessor';
@@ -15,10 +16,12 @@ import RdbImportMonitorFormatValidationProcessor from './RdbImportMonitorFormatV
 import RdbImportMonitorImportRDBProcessor from './RdbImportMonitorImportRDBProcessor';
 import RdbImportMonitorSaveProgressProcessor from './RdbImportMonitorSaveProgressProcessor';
 import RdbImportMonitorSizeValidationProcessor from './RdbImportMonitorSizeValidationProcessor';
+import RdbImportMonitorSourceRDBMergeProcessor from './RdbImportMonitorSourceRDBMergeProcessor';
 import RdbImportRdbFormatValidationProcessor from './RdbImportRdbFormatValidationProcessor';
 import RdbImportRdbSizeValidationProcessor from './RdbImportRdbSizeValidationProcessor';
 import RdbImportRecoverFailedImportProcessor from './RdbImportRecoverFailedImportProcessor';
 import RdbImportRequestRdbImportProcessor from './RdbImportRequestRdbImportProcessor';
+import RdbImportRequestSourceRDBMergeProcessor from './RdbImportRequestSourceRDBMergeProcessor';
 import RdbImportSendSaveCommandProcessor from './RdbImportSendSaveCommandProcessor';
 import RdbImportValidateImportKeyNumberProcessor from './RdbImportValidateImportKeyNumberProcessor';
 
@@ -37,6 +40,7 @@ export default [
   RdbExportMonitorRDBMergeProcessor,
   RdbExportRequestRDBMergeProcessor,
   PlaceholderProcessor,
+  RdbImportCopyInstanceSourceToBucketProcessor,
   RdbImportCopySourceToBucketProcessor,
   RdbImportDeleteLocalBackupProcessor,
   RdbImportFlushInstanceProcessor,
@@ -45,10 +49,12 @@ export default [
   RdbImportMonitorImportRDBProcessor,
   RdbImportMonitorSaveProgressProcessor,
   RdbImportMonitorSizeValidationProcessor,
+  RdbImportMonitorSourceRDBMergeProcessor,
   RdbImportRdbFormatValidationProcessor,
   RdbImportRdbSizeValidationProcessor,
   RdbImportRecoverFailedImportProcessor,
   RdbImportRequestRdbImportProcessor,
+  RdbImportRequestSourceRDBMergeProcessor,
   RdbImportSendSaveCommandProcessor,
   RdbImportValidateImportKeyNumberProcessor,
 ] as IProcessorType[];
@@ -77,6 +83,7 @@ export {
   RdbExportMonitorRDBMergeProcessor,
   RdbExportRequestRDBMergeProcessor,
   PlaceholderProcessor,
+  RdbImportCopyInstanceSourceToBucketProcessor,
   RdbImportCopySourceToBucketProcessor,
   RdbImportDeleteLocalBackupProcessor,
   RdbImportFlushInstanceProcessor,
@@ -85,10 +92,12 @@ export {
   RdbImportMonitorImportRDBProcessor,
   RdbImportMonitorSaveProgressProcessor,
   RdbImportMonitorSizeValidationProcessor,
+  RdbImportMonitorSourceRDBMergeProcessor,
   RdbImportRdbFormatValidationProcessor,
   RdbImportRdbSizeValidationProcessor,
   RdbImportRecoverFailedImportProcessor,
   RdbImportRequestRdbImportProcessor,
+  RdbImportRequestSourceRDBMergeProcessor,
   RdbImportSendSaveCommandProcessor,
   RdbImportValidateImportKeyNumberProcessor,
 }

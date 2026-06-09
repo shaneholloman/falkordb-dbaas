@@ -52,6 +52,10 @@ const getCustomerSourceReadUrl = async (source: RDBImportSourceType): Promise<st
     return (await validateImportSourceUrl(source.url)).toString();
   }
 
+  if (source.type === 'instance') {
+    throw new Error('Instance sources are exported directly to the managed import bucket');
+  }
+
   const s3Client = new S3Client({
     region: source.region,
     credentials: {
@@ -71,6 +75,11 @@ const getCustomerSourceReadUrl = async (source: RDBImportSourceType): Promise<st
   );
 };
 
+/**
+ * Stages customer-supplied RDB sources from GCS, S3, or HTTPS URL into the managed import bucket.
+ * Instance sources intentionally do not run here because they require source-pod export jobs and,
+ * for clusters, an explicit merge flow before the regular import validation can start.
+ */
 const processor: Processor<RdbImportCopySourceToBucketProcessorData> = async (job) => {
   const container = setupContainer();
   const logger = container.resolve<Logger>('logger');
@@ -88,6 +97,10 @@ const processor: Processor<RdbImportCopySourceToBucketProcessorData> = async (jo
     }
     if (!task.payload.source) {
       return { success: true, skipped: true };
+    }
+
+    if (task.payload.source.type === 'instance') {
+      throw new Error('Instance sources must use the instance-source import flow');
     }
 
     const [sourceReadUrl, destinationWriteUrl] = await Promise.all([
@@ -127,10 +140,11 @@ const processor: Processor<RdbImportCopySourceToBucketProcessorData> = async (jo
 
     return { success: true };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error({ error, data: sanitizeForLogging(job.data) }, `Error processing job ${job.id}: ${error}`);
     await tasksRepository.updateTask({
       taskId: job.data.taskId,
-      errors: [error.message ?? error.toString()],
+      errors: [errorMessage],
       status: 'failed',
     });
     throw error;
