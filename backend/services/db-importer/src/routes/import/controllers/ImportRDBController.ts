@@ -8,7 +8,7 @@ import { IBlobStorageRepository } from '../../../repositories/blob/IBlobStorageR
 import { ITasksDBRepository } from '../../../repositories/tasks';
 import { ApiError } from '@falkordb/errors';
 import { OmnistrateInstanceSchemaType } from '../../../schemas/omnistrate-instance';
-import { ImportRDBTaskType, RDBImportSourceType, RDBImportTaskPayloadType, sanitizeForLogging, TaskDocumentType } from '@falkordb/schemas/global';
+import { ImportRDBTaskType, RDBImportRequestSourceType, RDBImportSourceType, RDBImportTaskPayloadType, sanitizeForLogging, TaskDocumentType } from '@falkordb/schemas/global';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 import { randomUUID } from 'crypto';
 import { validateImportSourceUrl } from '@falkordb/security';
@@ -104,7 +104,7 @@ export class ImportRDBController {
   }
 
   private async _prepareImportSource(
-    source: RDBImportSourceType,
+    source: RDBImportRequestSourceType,
     requestorId: string,
     destinationInstanceId: string,
     destinationMaxMemoryBytes: number,
@@ -202,12 +202,13 @@ export class ImportRDBController {
         const sourceUsedMemoryDataset = destinationIsCluster
           ? Math.max(...sourceUsedMemoryDatasets)
           : sourceUsedMemoryDatasets.reduce((total, usedMemoryDataset) => total + usedMemoryDataset, 0);
-        if (sourceUsedMemoryDataset > destinationMaxMemoryBytes) {
+        if (destinationMaxMemoryBytes !== 0 && sourceUsedMemoryDataset > destinationMaxMemoryBytes) {
           throw new Error(`Source instance dataset size ${sourceUsedMemoryDataset} exceeds destination maxmemory ${destinationMaxMemoryBytes}`);
         }
 
         return {
-          ...source,
+          type: source.type,
+          instanceId: source.instanceId,
           cloudProvider: sourceInstance.cloudProvider,
           clusterId: sourceInstance.clusterId,
           region: sourceInstance.region,
@@ -257,7 +258,7 @@ export class ImportRDBController {
     instanceId: string;
     username: string;
     password: string;
-    source?: RDBImportSourceType;
+    source?: RDBImportRequestSourceType;
   }): Promise<{ taskId: string; uploadUrl?: string }> {
     // Get instance details from omnistrate
     let instance: OmnistrateInstanceSchemaType | undefined;

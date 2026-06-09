@@ -32,8 +32,6 @@ describe('RDB import source task schema', () => {
     expect(() => RDBTask.validateSync(makeImportTask({
       type: 'instance',
       instanceId: 'source-instance-id',
-      username: 'source-user',
-      password: 'source-password',
       cloudProvider: 'gcp',
       clusterId: 'source-cluster-id',
       region: 'us-central1',
@@ -48,8 +46,6 @@ describe('RDB import source task schema', () => {
     expect(() => RDBTask.validateSync(makeImportTask({
       type: 'instance',
       instanceId: 'source-instance-id',
-      username: 'source-user',
-      password: 'source-password',
       cloudProvider: 'gcp',
       clusterId: 'source-cluster-id',
       region: 'us-central1',
@@ -80,7 +76,8 @@ describe('RDB import source task schema', () => {
     expect(Value.Check(RDBImportRequestSourceSchema, requestSource)).toBe(true);
     expect(Value.Check(RDBImportSourceSchema, requestSource)).toBe(false);
     expect(Value.Check(RDBImportSourceSchema, {
-      ...requestSource,
+      type: 'instance',
+      instanceId: requestSource.instanceId,
       cloudProvider: 'gcp',
       clusterId: 'source-cluster-id',
       region: 'us-central1',

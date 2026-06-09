@@ -408,7 +408,8 @@ describe('import RDB customer source flow', () => {
 
     const createdPayload = tasksRepository.createTask.mock.calls[0][1];
     expect(createdPayload.source).toEqual({
-      ...source,
+      type: 'instance',
+      instanceId: 'source-instance-id',
       cloudProvider: 'gcp',
       clusterId: 'source-cluster-id',
       region: 'us-central1',
@@ -417,7 +418,9 @@ describe('import RDB customer source flow', () => {
       isCluster: false,
       tls: false,
     });
-    expect(JSON.stringify(createdPayload)).toContain('source-password');
+    expect(createdPayload.source.username).toBeUndefined();
+    expect(createdPayload.source.password).toBeUndefined();
+    expect(JSON.stringify(createdPayload)).not.toContain('source-password');
 
     const publicTask = sanitizeTaskDocument({
       taskId: 'task-id',
@@ -464,6 +467,28 @@ describe('import RDB customer source flow', () => {
 
     expect(tasksRepository.createTask).not.toHaveBeenCalled();
     expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+  });
+
+  it('allows instance source import when destination maxmemory is unlimited', async () => {
+    const { controller, k8sRepository, tasksRepository, taskQueueRepository } = makeController();
+    k8sRepository.getMaxMemory.mockResolvedValueOnce('0');
+    k8sRepository.getUsedMemoryDataset.mockResolvedValueOnce(10 * 1024 * 1024 * 1024);
+
+    await expect(controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source: {
+        type: 'instance',
+        instanceId: 'source-instance-id',
+        username: 'source-user',
+        password: 'source-password',
+      },
+    })).resolves.toEqual({ taskId: 'task-id' });
+
+    expect(tasksRepository.createTask).toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalled();
   });
 
   it('rejects an instance source that is the destination instance', async () => {
@@ -902,7 +927,7 @@ describe('import RDB customer source flow', () => {
     expect(formatValidationJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportCopySourceToBucket);
   });
 
-  it('builds standalone instance source tree with one source copy and no RDB validation', () => {
+  it('builds standalone instance source tree with one source copy, format validation, and no RDB size validation', () => {
     process.env.APPLICATION_PLANE_PROJECT_ID = 'app-plane-project';
     process.env.CTRL_PLANE_PROJECT_ID = 'ctrl-plane-project';
     process.env.CTRL_PLANE_CLUSTER_ID = 'ctrl-plane-cluster';
@@ -935,8 +960,6 @@ describe('import RDB customer source flow', () => {
         source: {
           type: 'instance',
           instanceId: 'source-instance-id',
-          username: 'source-user',
-          password: 'source-password',
           cloudProvider: 'gcp',
           clusterId: 'source-cluster-id',
           region: 'us-central1',
@@ -952,8 +975,8 @@ describe('import RDB customer source flow', () => {
     expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportCopySourceToBucket)).toHaveLength(0);
     expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBSize)).toHaveLength(0);
     expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorSizeValidationProgress)).toHaveLength(0);
-    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBFormat)).toHaveLength(0);
-    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorFormatValidationProgress)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBFormat)).toHaveLength(1);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorFormatValidationProgress)).toHaveLength(1);
     expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportRequestSourceRDBMerge)).toHaveLength(0);
     expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorSourceRDBMerge)).toHaveLength(0);
 
@@ -968,10 +991,62 @@ describe('import RDB customer source flow', () => {
     expect(JSON.stringify(copyJobs[0])).not.toContain('source-password');
 
     const sendSaveJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportSendSaveCommand);
-    expect(sendSaveJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket);
+    expect(sendSaveJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportMonitorFormatValidationProgress);
+    const formatMonitorJob = sendSaveJob?.children?.[0];
+    const formatValidationJob = formatMonitorJob?.children?.[0];
+    expect(formatValidationJob?.name).toBe(RdbImportTaskNames.RdbImportValidateRDBFormat);
+    expect(formatValidationJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket);
   });
 
-  it('stages cluster instance sources with per-pod copy jobs and a merge job without RDB validation', () => {
+  it('rejects standalone instance source trees without exactly one prepared source podId', () => {
+    process.env.APPLICATION_PLANE_PROJECT_ID = 'app-plane-project';
+    process.env.CTRL_PLANE_PROJECT_ID = 'ctrl-plane-project';
+    process.env.CTRL_PLANE_CLUSTER_ID = 'ctrl-plane-cluster';
+    process.env.CTRL_PLANE_REGION = 'us-central1';
+    process.env.NAMESPACE = 'db-importer';
+
+    const repository = Object.create(TaskQueueBullMQRepository.prototype) as TaskQueueBullMQRepository;
+    (repository as unknown as { _opts: { logger: typeof logger } })._opts = { logger };
+    const makeTask = (podIds: string[]) => ({
+      taskId: 'task-id',
+      type: 'RDBImport' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'pending' as const,
+      payload: {
+        cloudProvider: 'gcp' as const,
+        clusterId: 'cluster-id',
+        region: 'us-central1',
+        instanceId: 'instance-id',
+        podIds: ['node-s-0'],
+        hasTLS: false,
+        bucketName: 'falkordb-import-bucket',
+        fileName: 'imports/instance-id/import.rdb',
+        rdbSizeFileName: 'imports/instance-id/import-size.txt',
+        rdbKeyNumberFileName: 'imports/instance-id/import-keys.txt',
+        deploymentSizeInMb: 100,
+        backupPath: '/data/backup/dump.rdb',
+        aofEnabled: false,
+        isCluster: false,
+        source: {
+          type: 'instance' as const,
+          instanceId: 'source-instance-id',
+          cloudProvider: 'gcp' as const,
+          clusterId: 'source-cluster-id',
+          region: 'us-central1',
+          podId: podIds[0] ?? '',
+          podIds,
+          isCluster: false,
+          tls: false,
+        },
+      },
+    });
+
+    expect(() => repository._createImportRDBFlow(makeTask([]))).toThrow('missing/invalid podIds');
+    expect(() => repository._createImportRDBFlow(makeTask(['node-s-0', 'node-s-1']))).toThrow('standalone import requires exactly one podId');
+  });
+
+  it('stages cluster instance sources with per-pod copy jobs, merge, format validation, and no RDB size validation', () => {
     process.env.APPLICATION_PLANE_PROJECT_ID = 'app-plane-project';
     process.env.CTRL_PLANE_PROJECT_ID = 'ctrl-plane-project';
     process.env.CTRL_PLANE_CLUSTER_ID = 'ctrl-plane-cluster';
@@ -1004,8 +1079,6 @@ describe('import RDB customer source flow', () => {
         source: {
           type: 'instance',
           instanceId: 'source-instance-id',
-          username: 'source-user',
-          password: 'source-password',
           cloudProvider: 'gcp',
           clusterId: 'source-cluster-id',
           region: 'us-central1',
@@ -1021,8 +1094,8 @@ describe('import RDB customer source flow', () => {
     expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportCopySourceToBucket)).toHaveLength(0);
     expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBSize)).toHaveLength(0);
     expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorSizeValidationProgress)).toHaveLength(0);
-    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBFormat)).toHaveLength(0);
-    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorFormatValidationProgress)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBFormat)).toHaveLength(1);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorFormatValidationProgress)).toHaveLength(1);
 
     const copyJobs = jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket);
     expect(copyJobs).toHaveLength(3);
@@ -1076,7 +1149,11 @@ describe('import RDB customer source flow', () => {
     expect(mergeMonitorJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportRequestSourceRDBMerge);
 
     const sendSaveJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportSendSaveCommand);
-    expect(sendSaveJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportMonitorSourceRDBMerge);
+    expect(sendSaveJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportMonitorFormatValidationProgress);
+    const formatMonitorJob = sendSaveJob?.children?.[0];
+    const formatValidationJob = formatMonitorJob?.children?.[0];
+    expect(formatValidationJob?.name).toBe(RdbImportTaskNames.RdbImportValidateRDBFormat);
+    expect(formatValidationJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportMonitorSourceRDBMerge);
   });
 });
 

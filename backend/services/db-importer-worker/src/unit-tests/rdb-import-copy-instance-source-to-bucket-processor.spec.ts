@@ -33,8 +33,6 @@ describe('RDB import copy instance source to bucket processor', () => {
           source: {
             type: 'instance',
             instanceId: 'source-instance-id',
-            username: 'source-user',
-            password: 'source-password',
             cloudProvider: 'gcp',
             clusterId: 'source-cluster-id',
             region: 'us-central1',

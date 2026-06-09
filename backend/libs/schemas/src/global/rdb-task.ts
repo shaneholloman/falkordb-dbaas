@@ -210,8 +210,6 @@ export const RDBImportURLSourceSchema = Type.Object({
 export const RDBImportInstanceSourceSchema = Type.Object({
   type: Type.Literal('instance'),
   instanceId: Type.String(),
-  username: Type.String(),
-  password: Type.String(),
   cloudProvider: SupportedCloudProviderSchema,
   clusterId: Type.String(),
   region: Type.String(),

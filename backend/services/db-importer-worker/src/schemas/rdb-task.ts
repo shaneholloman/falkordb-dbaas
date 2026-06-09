@@ -94,8 +94,6 @@ const RDBImportSource = Yup.lazy((value) => {
       return Yup.object({
         type: Yup.string().oneOf(['instance']).required(),
         instanceId: Yup.string().required(),
-        username: Yup.string().required(),
-        password: Yup.string().required(),
         cloudProvider: Yup.string().oneOf(['gcp', 'aws']).required(),
         clusterId: Yup.string().required(),
         region: Yup.string().required(),

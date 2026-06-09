@@ -283,8 +283,8 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
   }
 
   private _createImportStandaloneInstanceSourcePrerequisite(task: ImportRDBTaskType): FlowJob {
-    if (task.payload.source?.type !== 'instance' || !task.payload.source.podIds) {
-      throw new Error('Instance import source is missing prepared source pod metadata');
+    if (task.payload.source?.type !== 'instance' || !Array.isArray(task.payload.source.podIds) || task.payload.source.podIds.length !== 1) {
+      throw new Error('Instance import source has missing/invalid podIds: standalone import requires exactly one podId');
     }
 
     return this._makeJobNode(
@@ -304,8 +304,8 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
   }
 
   private _createImportClusterInstanceSourcePrerequisite(task: ImportRDBTaskType): FlowJob {
-    if (task.payload.source?.type !== 'instance' || !task.payload.source.podIds) {
-      throw new Error('Instance import source is missing prepared source pod metadata');
+    if (task.payload.source?.type !== 'instance' || !Array.isArray(task.payload.source.podIds) || task.payload.source.podIds.length === 0) {
+      throw new Error('Instance import source has missing/invalid podIds');
     }
 
     const sourcePartFileNames = task.payload.source.podIds.map((podId) => `${task.payload.fileName}.${podId}.part.rdb`);
@@ -368,8 +368,8 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
       return this._createImportCustomerSourcePrerequisite(task);
     }
 
-    if (!task.payload.source.podIds || task.payload.source.isCluster === undefined) {
-      throw new Error('Instance import source is missing prepared source pod metadata');
+    if (!Array.isArray(task.payload.source.podIds) || task.payload.source.podIds.length === 0 || task.payload.source.isCluster === undefined) {
+      throw new Error('Instance import source has missing/invalid podIds or prepared source metadata');
     }
 
     return task.payload.source.isCluster
@@ -462,12 +462,14 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
 
   private _createImportValidationPrerequisites(task: ImportRDBTaskType, sourcePrerequisite?: FlowJob): FlowJob[] {
     // BullMQ flows are trees, so one source-staging prerequisite cannot be shared by two sibling validation branches.
-    // Customer sources serialize staging behind validation; instance sources skip RDB validation and stage directly.
+    // Source-backed imports serialize staging behind validation to avoid duplicate customer/source-instance egress.
+    // Instance sources skip RDB size validation because source memory was checked before task creation, but still
+    // run format validation so the monitor records task.output.numberOfKeys for final import verification.
     if (task.payload.source?.type === 'instance') {
       if (!sourcePrerequisite) {
         throw new Error('Instance import source is missing prepared source pod metadata');
       }
-      return [sourcePrerequisite];
+      return [this._createImportFormatValidationBranch(task, [sourcePrerequisite])];
     }
 
     if (sourcePrerequisite) {
