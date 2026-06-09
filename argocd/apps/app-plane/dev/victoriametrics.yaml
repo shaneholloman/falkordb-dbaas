@@ -46,6 +46,7 @@ spec:
                 node_pool: observability
             vmsingle:
               spec:
+                port: "8429"
                 retentionPeriod: 3d
                 logFormat: json
                 nodeSelector:
