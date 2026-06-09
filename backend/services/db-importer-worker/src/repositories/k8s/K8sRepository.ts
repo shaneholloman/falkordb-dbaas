@@ -173,6 +173,12 @@ export class K8sRepository {
     }).join(' ');
   }
 
+  private _sanitizeCommandOutputForError(output: string): string {
+    return output
+      .replace(/https?:\/\/[^\s"'<>]+/g, '[REDACTED_URL]')
+      .replace(/((?:password|token|access[_-]?key|secret[_-]?key|signature)=)[^\s&"'<>]+/gi, '$1[REDACTED]');
+  }
+
   private async _executeCommand(kubeConfig: k8s.KubeConfig, instanceId: string, podId: string, command: string[], timeoutMs = 60 * 1000): Promise<string> {
     const exec = new k8s.Exec(kubeConfig);
 
@@ -244,17 +250,17 @@ export class K8sRepository {
                 settle(() => resolve(fullResponse));
               }
             } else {
-              settle(() => reject(`Command failed with code ${code}, signal ${signal}:\n${fullResponse}`));
+              settle(() => reject(`Command failed with code ${code}, signal ${signal}:\n${this._sanitizeCommandOutputForError(fullResponse)}`));
             }
           });
 
           stream.on('error', (err: Error) => {
-            settle(() => reject(`Error executing command: ${err}`));
+            settle(() => reject(`Error executing command: ${this._sanitizeCommandOutputForError(String(err))}`));
           });
         }
       ).catch(
         (err) => {
-          settle(() => reject(`Error creating exec stream: ${err}`));
+          settle(() => reject(`Error creating exec stream: ${this._sanitizeCommandOutputForError(String(err))}`));
         });
     });
   }
