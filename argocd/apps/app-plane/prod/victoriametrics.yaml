@@ -46,6 +46,7 @@ spec:
                 node_pool: observability
             vmsingle:
               spec:
+                port: "8429"
                 resources:
                   requests:
                     memory: "1Gi"
