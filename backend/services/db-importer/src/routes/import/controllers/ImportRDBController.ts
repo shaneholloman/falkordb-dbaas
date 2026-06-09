@@ -69,6 +69,15 @@ export class ImportRDBController {
     }
   }
 
+  private _resolveSourceExportPodIds(instance: OmnistrateInstanceSchemaType): string[] {
+    const podPrefix = this._resolvePodPrefix(instance);
+    if (instance.deploymentType.startsWith('Cluster')) {
+      return [0, 2, 4].map((index) => `${podPrefix}-${index}`);
+    }
+
+    return [`${podPrefix}-0`];
+  }
+
   private _createTaskPayload(
     instance: OmnistrateInstanceSchemaType,
     deploymentSizeInMb: number,
@@ -94,7 +103,13 @@ export class ImportRDBController {
     };
   }
 
-  private async _validateCustomerSource(source: RDBImportSourceType): Promise<void> {
+  private async _prepareImportSource(
+    source: RDBImportSourceType,
+    requestorId: string,
+    destinationInstanceId: string,
+    destinationMaxMemoryBytes: number,
+    destinationIsCluster: boolean,
+  ): Promise<RDBImportSourceType> {
     try {
       if (source.type === 'gcs') {
         const storage = new Storage({
@@ -106,7 +121,7 @@ export class ImportRDBController {
         if (!exists) {
           throw new Error(`GCS object gs://${source.bucketName}/${source.fileName} does not exist or cannot be accessed`);
         }
-        return;
+        return source;
       }
 
       if (source.type === 'url') {
@@ -131,7 +146,76 @@ export class ImportRDBController {
         } finally {
           clearTimeout(timeout);
         }
-        return;
+        return source;
+      }
+
+      if (source.type === 'instance') {
+        if (source.instanceId === destinationInstanceId) {
+          throw new Error('Source instance must be different from destination instance');
+        }
+
+        const sourceInstance = await this.omnistrateRepository.getInstance(source.instanceId);
+        if (!sourceInstance) {
+          throw new Error(`Source instance ${source.instanceId} was not found`);
+        }
+
+        const hasAccess = await this.omnistrateRepository.checkIfUserHasAccessToInstance(requestorId, sourceInstance, undefined, [
+          'root',
+          'editor',
+          'reader',
+        ]);
+        if (!hasAccess) {
+          throw new Error(`User does not have access to source instance ${source.instanceId}`);
+        }
+        if (sourceInstance.status !== 'RUNNING') {
+          throw new Error(`Source instance ${source.instanceId} is not running`);
+        }
+        if (sourceInstance.productTierName === 'FalkorDB BYOA') {
+          throw new Error('BYOA source instances are not supported');
+        }
+        const sourcePodIds = this._resolveSourceExportPodIds(sourceInstance);
+        const podId = sourcePodIds[0];
+        const isSourceAdmin = await this.k8sRepository.isUserAdmin(
+          sourceInstance.cloudProvider,
+          sourceInstance.clusterId,
+          sourceInstance.region,
+          sourceInstance.id,
+          podId,
+          source.username,
+          source.password,
+          sourceInstance.tls,
+        );
+        if (!isSourceAdmin) {
+          throw new Error('Invalid source instance credentials');
+        }
+
+        const sourceUsedMemoryDatasets = await Promise.all(sourcePodIds.map((sourcePodId) => this.k8sRepository.getUsedMemoryDataset(
+          sourceInstance.cloudProvider,
+          sourceInstance.clusterId,
+          sourceInstance.region,
+          sourceInstance.id,
+          sourcePodId,
+          source.username,
+          source.password,
+          sourceInstance.tls,
+        )));
+        const sourceUsedMemoryDataset = destinationIsCluster
+          ? Math.max(...sourceUsedMemoryDatasets)
+          : sourceUsedMemoryDatasets.reduce((total, usedMemoryDataset) => total + usedMemoryDataset, 0);
+        if (sourceUsedMemoryDataset > destinationMaxMemoryBytes) {
+          throw new Error(`Source instance dataset size ${sourceUsedMemoryDataset} exceeds destination maxmemory ${destinationMaxMemoryBytes}`);
+        }
+
+        return {
+          ...source,
+          cloudProvider: sourceInstance.cloudProvider,
+          clusterId: sourceInstance.clusterId,
+          region: sourceInstance.region,
+          podId,
+          podIds: sourcePodIds,
+          isCluster: sourceInstance.deploymentType.startsWith('Cluster'),
+          tls: sourceInstance.tls,
+        };
       }
 
       const s3Client = new S3Client({
@@ -147,6 +231,7 @@ export class ImportRDBController {
         Bucket: source.bucketName,
         Key: source.key,
       }));
+      return source;
     } catch (error) {
       this._opts.logger.warn({ error, source: sanitizeForLogging(source) }, 'Invalid import source credentials or object access');
       throw ApiError.badRequest('Invalid import source credentials or object access', 'INVALID_IMPORT_SOURCE');
@@ -251,15 +336,16 @@ export class ImportRDBController {
       throw ApiError.internalServerError('Instance size is not set', 'INSTANCE_SIZE_NOT_SET');
     }
 
-    if (source) {
-      await this._validateCustomerSource(source);
-    }
+    const destinationMaxMemoryBytes = parseInt(maxMemory, 10);
+    const preparedSource = source
+      ? await this._prepareImportSource(source, requestorId, instanceId, destinationMaxMemoryBytes, instance.deploymentType.startsWith('Cluster'))
+      : undefined;
 
     let task: ImportRDBTaskType | undefined;
     const payload = this._createTaskPayload(
       instance,
       this._convertMaxMemoryToMB(maxMemory),
-      source,
+      preparedSource,
     );
 
     try {

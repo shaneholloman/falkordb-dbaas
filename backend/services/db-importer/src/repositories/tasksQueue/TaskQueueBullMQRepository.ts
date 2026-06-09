@@ -266,27 +266,119 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
     }
   }
 
-  _createImportRDBFlow(
-    task: ImportRDBTaskType,
-  ): FlowJob {
-    this._opts.logger.debug(`Creating import RDB flow for task: ${task.taskId}`);
-    const copySourceToBucketJob = task.payload.source
-      ? this._makeJobNode(
-        RdbImportTaskNames.RdbImportCopySourceToBucket,
-        ProcessorsSchemaMap[RdbImportTaskNames.RdbImportCopySourceToBucket],
-        {
-          taskId: task.taskId,
-          bucketName: task.payload.bucketName,
-          fileName: task.payload.fileName,
-        },
-        {
-          failParentOnFailure: true,
-          jobId: `${task.taskId}-copy-source-to-bucket`,
-        },
-      )
-      : undefined;
+  private _createImportCustomerSourcePrerequisite(task: ImportRDBTaskType): FlowJob {
+    return this._makeJobNode(
+      RdbImportTaskNames.RdbImportCopySourceToBucket,
+      ProcessorsSchemaMap[RdbImportTaskNames.RdbImportCopySourceToBucket],
+      {
+        taskId: task.taskId,
+        bucketName: task.payload.bucketName,
+        fileName: task.payload.fileName,
+      },
+      {
+        failParentOnFailure: true,
+        jobId: `${task.taskId}-copy-source-to-bucket`,
+      },
+    );
+  }
 
-    const makeFormatValidationBranch = (children?: FlowChildJob[]): FlowJob => this._makeJobNode(
+  private _createImportStandaloneInstanceSourcePrerequisite(task: ImportRDBTaskType): FlowJob {
+    if (task.payload.source?.type !== 'instance' || !task.payload.source.podIds) {
+      throw new Error('Instance import source is missing prepared source pod metadata');
+    }
+
+    return this._makeJobNode(
+      RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket,
+      ProcessorsSchemaMap[RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket],
+      {
+        taskId: task.taskId,
+        bucketName: task.payload.bucketName,
+        fileName: task.payload.fileName,
+        podId: task.payload.source.podIds[0],
+      },
+      {
+        failParentOnFailure: true,
+        jobId: `${task.taskId}-copy-instance-source-to-bucket`,
+      },
+    );
+  }
+
+  private _createImportClusterInstanceSourcePrerequisite(task: ImportRDBTaskType): FlowJob {
+    if (task.payload.source?.type !== 'instance' || !task.payload.source.podIds) {
+      throw new Error('Instance import source is missing prepared source pod metadata');
+    }
+
+    const sourcePartFileNames = task.payload.source.podIds.map((podId) => `${task.payload.fileName}.${podId}.part.rdb`);
+    return this._makeJobNode(
+      RdbImportTaskNames.RdbImportMonitorSourceRDBMerge,
+      ProcessorsSchemaMap[RdbImportTaskNames.RdbImportMonitorSourceRDBMerge],
+      {
+        taskId: task.taskId,
+        cloudProvider: 'gcp',
+        projectId: process.env.CTRL_PLANE_PROJECT_ID,
+        clusterId: process.env.CTRL_PLANE_CLUSTER_ID,
+        region: process.env.CTRL_PLANE_REGION,
+        namespace: process.env.NAMESPACE,
+      },
+      {
+        failParentOnFailure: true,
+        jobId: `${task.taskId}-monitor-source-rdb-merge`,
+      },
+      [
+        this._makeJobNode(
+          RdbImportTaskNames.RdbImportRequestSourceRDBMerge,
+          ProcessorsSchemaMap[RdbImportTaskNames.RdbImportRequestSourceRDBMerge],
+          {
+            taskId: task.taskId,
+            cloudProvider: 'gcp',
+            projectId: process.env.CTRL_PLANE_PROJECT_ID,
+            clusterId: process.env.CTRL_PLANE_CLUSTER_ID,
+            region: process.env.CTRL_PLANE_REGION,
+            namespace: process.env.NAMESPACE,
+            bucketName: task.payload.bucketName,
+            rdbFileNames: sourcePartFileNames,
+            outputRdbFileName: task.payload.fileName,
+          },
+          { failParentOnFailure: true },
+          task.payload.source.podIds.map((podId, index) => this._makeJobNode(
+            RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket,
+            ProcessorsSchemaMap[RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket],
+            {
+              taskId: task.taskId,
+              bucketName: task.payload.bucketName,
+              fileName: sourcePartFileNames[index],
+              podId,
+            },
+            {
+              failParentOnFailure: true,
+              jobId: `${task.taskId}-copy-instance-source-${podId}-to-bucket`,
+            },
+          )),
+        ),
+      ],
+    );
+  }
+
+  private _createImportSourcePrerequisite(task: ImportRDBTaskType): FlowJob | undefined {
+    if (!task.payload.source) {
+      return undefined;
+    }
+
+    if (task.payload.source.type !== 'instance') {
+      return this._createImportCustomerSourcePrerequisite(task);
+    }
+
+    if (!task.payload.source.podIds || task.payload.source.isCluster === undefined) {
+      throw new Error('Instance import source is missing prepared source pod metadata');
+    }
+
+    return task.payload.source.isCluster
+      ? this._createImportClusterInstanceSourcePrerequisite(task)
+      : this._createImportStandaloneInstanceSourcePrerequisite(task);
+  }
+
+  private _createImportFormatValidationBranch(task: ImportRDBTaskType, children?: FlowChildJob[]): FlowJob {
+    return this._makeJobNode(
       RdbImportTaskNames.RdbImportMonitorFormatValidationProgress,
       ProcessorsSchemaMap[RdbImportTaskNames.RdbImportMonitorFormatValidationProgress],
       {
@@ -324,8 +416,10 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
         ),
       ],
     );
+  }
 
-    const makeSizeValidationBranch = (children?: FlowChildJob[]): FlowJob => this._makeJobNode(
+  private _createImportSizeValidationBranch(task: ImportRDBTaskType, children?: FlowChildJob[]): FlowJob {
+    return this._makeJobNode(
       RdbImportTaskNames.RdbImportMonitorSizeValidationProgress,
       ProcessorsSchemaMap[RdbImportTaskNames.RdbImportMonitorSizeValidationProgress],
       {
@@ -364,13 +458,29 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
         ),
       ],
     );
+  }
 
-    // BullMQ flows are trees, so one copy prerequisite cannot be shared by two sibling validation branches.
-    // Keep customer-source validation serialized to avoid duplicate copy jobs and duplicate customer egress.
-    const validationBranches = copySourceToBucketJob
-      ? [makeSizeValidationBranch([makeFormatValidationBranch([copySourceToBucketJob])])]
-      : [makeFormatValidationBranch(), makeSizeValidationBranch()];
+  private _createImportValidationPrerequisites(task: ImportRDBTaskType, sourcePrerequisite?: FlowJob): FlowJob[] {
+    // BullMQ flows are trees, so one source-staging prerequisite cannot be shared by two sibling validation branches.
+    // Customer sources serialize staging behind validation; instance sources skip RDB validation and stage directly.
+    if (task.payload.source?.type === 'instance') {
+      if (!sourcePrerequisite) {
+        throw new Error('Instance import source is missing prepared source pod metadata');
+      }
+      return [sourcePrerequisite];
+    }
 
+    if (sourcePrerequisite) {
+      return [this._createImportSizeValidationBranch(task, [this._createImportFormatValidationBranch(task, [sourcePrerequisite])])];
+    }
+
+    return [
+      this._createImportFormatValidationBranch(task),
+      this._createImportSizeValidationBranch(task),
+    ];
+  }
+
+  private _createDestinationImportFlow(task: ImportRDBTaskType, prerequisites: FlowChildJob[]): FlowJob {
     return this._makeJobNode(
       RdbImportTaskNames.RdbImportValidateImportKeyNumber,
       ProcessorsSchemaMap[RdbImportTaskNames.RdbImportValidateImportKeyNumber],
@@ -495,7 +605,7 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
                               {
                                 failParentOnFailure: true,
                               },
-                              validationBranches,
+                              prerequisites,
                             ),
                           ],
                         ),
@@ -508,7 +618,17 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
           ],
         ),
       ],
-    )
+    );
+  }
+
+  _createImportRDBFlow(
+    task: ImportRDBTaskType,
+  ): FlowJob {
+    this._opts.logger.debug(`Creating import RDB flow for task: ${task.taskId}`);
+    const sourcePrerequisite = this._createImportSourcePrerequisite(task);
+    const validationPrerequisites = this._createImportValidationPrerequisites(task, sourcePrerequisite);
+
+    return this._createDestinationImportFlow(task, validationPrerequisites);
   }
 
   async submitExportRDBTask(

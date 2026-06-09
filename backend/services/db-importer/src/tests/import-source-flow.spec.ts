@@ -60,8 +60,7 @@ const makeController = () => {
     updatedAt: new Date().toISOString(),
     status: 'created',
   };
-  const omnistrateRepository = {
-    getInstance: jest.fn().mockResolvedValue({
+  const destinationInstance = {
       id: 'instance-id',
       cloudProvider: 'gcp',
       clusterId: 'cluster-id',
@@ -72,12 +71,23 @@ const makeController = () => {
       deploymentType: 'Standalone',
       podIds: ['node-s-0'],
       aofEnabled: false,
-    }),
+  };
+  const sourceInstance = {
+    ...destinationInstance,
+    id: 'source-instance-id',
+    clusterId: 'source-cluster-id',
+    podIds: ['node-s-0'],
+  };
+  const omnistrateRepository = {
+    getInstance: jest.fn().mockImplementation(async (instanceId: string) => (
+      instanceId === 'source-instance-id' ? sourceInstance : destinationInstance
+    )),
     checkIfUserHasAccessToInstance: jest.fn().mockResolvedValue(true),
   };
   const k8sRepository = {
     isUserAdmin: jest.fn().mockResolvedValue(true),
     getMaxMemory: jest.fn().mockResolvedValue('104857600'),
+    getUsedMemoryDataset: jest.fn().mockResolvedValue(50 * 1024 * 1024),
   };
   const tasksRepository = {
     listTasks: jest.fn().mockResolvedValue({ data: [] }),
@@ -105,6 +115,8 @@ const makeController = () => {
       'falkordb-import-bucket',
       { logger: logger as never },
     ),
+    omnistrateRepository,
+    k8sRepository,
     tasksRepository,
     storageRepository,
     taskQueueRepository,
@@ -162,6 +174,25 @@ describe('import RDB customer source flow', () => {
       source: {
         type: 'url',
         url: 'https://user:pass@customer.example.com/imports/customer.rdb',
+      },
+    })).toBe(false);
+    expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
+      instanceId: 'instance-id',
+      source: {
+        type: 'instance',
+        instanceId: 'source-instance-id',
+        username: 'falkordb',
+        password: 'source-password',
+      },
+    })).toBe(true);
+    expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
+      instanceId: 'instance-id',
+      source: {
+        type: 'instance',
+        instanceId: 'source-instance-id',
+        username: 'falkordb',
+        password: 'source-password',
+        clusterId: 'customer-supplied-cluster-id',
       },
     })).toBe(false);
   });
@@ -328,6 +359,224 @@ describe('import RDB customer source flow', () => {
     }));
   });
 
+  it('creates an instance source import task after access, credentials, and size checks', async () => {
+    const source = {
+      type: 'instance' as const,
+      instanceId: 'source-instance-id',
+      username: 'source-user',
+      password: 'source-password',
+    };
+    const { controller, omnistrateRepository, k8sRepository, storageRepository, tasksRepository, taskQueueRepository } = makeController();
+
+    const result = await controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source,
+    });
+
+    expect(result).toEqual({ taskId: 'task-id' });
+    expect(omnistrateRepository.getInstance).toHaveBeenCalledWith('source-instance-id');
+    expect(omnistrateRepository.checkIfUserHasAccessToInstance).toHaveBeenCalledWith(
+      'user-id',
+      expect.objectContaining({ id: 'source-instance-id' }),
+      undefined,
+      ['root', 'editor', 'reader'],
+    );
+    expect(k8sRepository.isUserAdmin).toHaveBeenCalledWith(
+      'gcp',
+      'source-cluster-id',
+      'us-central1',
+      'source-instance-id',
+      'node-s-0',
+      'source-user',
+      'source-password',
+      false,
+    );
+    expect(k8sRepository.getUsedMemoryDataset).toHaveBeenCalledWith(
+      'gcp',
+      'source-cluster-id',
+      'us-central1',
+      'source-instance-id',
+      'node-s-0',
+      'source-user',
+      'source-password',
+      false,
+    );
+    expect(storageRepository.getWriteUrl).not.toHaveBeenCalled();
+
+    const createdPayload = tasksRepository.createTask.mock.calls[0][1];
+    expect(createdPayload.source).toEqual({
+      ...source,
+      cloudProvider: 'gcp',
+      clusterId: 'source-cluster-id',
+      region: 'us-central1',
+      podId: 'node-s-0',
+      podIds: ['node-s-0'],
+      isCluster: false,
+      tls: false,
+    });
+    expect(JSON.stringify(createdPayload)).toContain('source-password');
+
+    const publicTask = sanitizeTaskDocument({
+      taskId: 'task-id',
+      type: 'RDBImport',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'pending',
+      payload: createdPayload,
+    });
+    if (publicTask.type !== 'RDBImport') {
+      throw new Error(`Expected RDBImport task, got ${publicTask.type}`);
+    }
+    expect(publicTask.payload.source).toEqual({
+      type: 'instance',
+      instanceId: 'source-instance-id',
+    });
+    expect(JSON.stringify(publicTask)).not.toContain('source-password');
+    expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-id',
+      status: 'in_progress',
+      payload: createdPayload,
+    }));
+  });
+
+  it('rejects an instance source that does not fit the destination instance', async () => {
+    const { controller, k8sRepository, tasksRepository, taskQueueRepository } = makeController();
+    k8sRepository.getUsedMemoryDataset.mockResolvedValueOnce(101 * 1024 * 1024);
+
+    await expect(controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source: {
+        type: 'instance',
+        instanceId: 'source-instance-id',
+        username: 'source-user',
+        password: 'source-password',
+      },
+    })).rejects.toMatchObject({
+      message: 'Invalid import source credentials or object access',
+      errorCode: 'INVALID_IMPORT_SOURCE',
+    });
+
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+  });
+
+  it('rejects an instance source that is the destination instance', async () => {
+    const { controller, tasksRepository, taskQueueRepository } = makeController();
+
+    await expect(controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source: {
+        type: 'instance',
+        instanceId: 'instance-id',
+        username: 'source-user',
+        password: 'source-password',
+      },
+    })).rejects.toMatchObject({
+      message: 'Invalid import source credentials or object access',
+      errorCode: 'INVALID_IMPORT_SOURCE',
+    });
+
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+  });
+
+  it('creates a cluster instance source import task with per-master size checks for cluster destinations', async () => {
+    const { controller, omnistrateRepository, k8sRepository, tasksRepository, taskQueueRepository } = makeController();
+    k8sRepository.getUsedMemoryDataset
+      .mockResolvedValueOnce(100 * 1024 * 1024)
+      .mockResolvedValueOnce(20 * 1024 * 1024)
+      .mockResolvedValueOnce(20 * 1024 * 1024);
+    omnistrateRepository.getInstance.mockImplementation(async (instanceId: string) => ({
+      id: instanceId,
+      cloudProvider: 'gcp',
+      clusterId: `${instanceId}-cluster-id`,
+      region: 'us-central1',
+      tls: false,
+      status: 'RUNNING',
+      productTierName: 'FalkorDB Free',
+      deploymentType: 'Cluster-Single-Zone',
+      podIds: ['cluster-sz-0', 'cluster-sz-2', 'cluster-sz-4'],
+      aofEnabled: false,
+    }));
+
+    const result = await controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source: {
+        type: 'instance',
+        instanceId: 'source-instance-id',
+        username: 'source-user',
+        password: 'source-password',
+      },
+    });
+
+    expect(result).toEqual({ taskId: 'task-id' });
+    expect(k8sRepository.getUsedMemoryDataset).toHaveBeenCalledTimes(3);
+    const createdPayload = tasksRepository.createTask.mock.calls[0][1];
+    expect(createdPayload.source).toEqual(expect.objectContaining({
+      type: 'instance',
+      instanceId: 'source-instance-id',
+      podId: 'cluster-sz-0',
+      podIds: ['cluster-sz-0', 'cluster-sz-2', 'cluster-sz-4'],
+      isCluster: true,
+    }));
+    expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-id',
+      status: 'in_progress',
+      payload: createdPayload,
+    }));
+  });
+
+  it('rejects a cluster instance source when the source shard sum does not fit a standalone destination', async () => {
+    const { controller, omnistrateRepository, k8sRepository, tasksRepository, taskQueueRepository } = makeController();
+    k8sRepository.getUsedMemoryDataset
+      .mockResolvedValueOnce(40 * 1024 * 1024)
+      .mockResolvedValueOnce(40 * 1024 * 1024)
+      .mockResolvedValueOnce(40 * 1024 * 1024);
+    omnistrateRepository.getInstance.mockImplementation(async (instanceId: string) => ({
+      id: instanceId,
+      cloudProvider: 'gcp',
+      clusterId: `${instanceId}-cluster-id`,
+      region: 'us-central1',
+      tls: false,
+      status: 'RUNNING',
+      productTierName: 'FalkorDB Free',
+      deploymentType: instanceId === 'source-instance-id' ? 'Cluster-Single-Zone' : 'Standalone',
+      podIds: instanceId === 'source-instance-id' ? ['cluster-sz-0', 'cluster-sz-2', 'cluster-sz-4'] : ['node-s-0'],
+      aofEnabled: false,
+    }));
+
+    await expect(controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source: {
+        type: 'instance',
+        instanceId: 'source-instance-id',
+        username: 'source-user',
+        password: 'source-password',
+      },
+    })).rejects.toMatchObject({
+      message: 'Invalid import source credentials or object access',
+      errorCode: 'INVALID_IMPORT_SOURCE',
+    });
+
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid URL source access before creating a task', async () => {
     const source = {
       type: 'url' as const,
@@ -435,9 +684,6 @@ describe('import RDB customer source flow', () => {
       secretAccessKey: 'secret-key',
     };
     const { controller, tasksRepository, taskQueueRepository } = makeController();
-    jest
-      .spyOn(controller as unknown as { _validateCustomerSource: (typeof controller)['requestUploadUrl'] }, '_validateCustomerSource')
-      .mockRejectedValue(new Error('Invalid import source credentials or object access'));
 
     await expect(controller.requestUploadUrl({
       requestorId: 'user-id',
@@ -445,7 +691,10 @@ describe('import RDB customer source flow', () => {
       username: 'falkordb',
       password: 'password',
       source,
-    })).rejects.toThrow('Invalid import source credentials or object access');
+    })).rejects.toMatchObject({
+      message: 'Invalid import source credentials or object access',
+      errorCode: 'INVALID_IMPORT_SOURCE',
+    });
 
     expect(tasksRepository.createTask).not.toHaveBeenCalled();
     expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
@@ -540,6 +789,54 @@ describe('import RDB customer source flow', () => {
     expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalledWith(task);
   });
 
+  it('builds the direct upload import tree with parallel RDB size and format validation', () => {
+    process.env.APPLICATION_PLANE_PROJECT_ID = 'app-plane-project';
+    process.env.CTRL_PLANE_PROJECT_ID = 'ctrl-plane-project';
+    process.env.CTRL_PLANE_CLUSTER_ID = 'ctrl-plane-cluster';
+    process.env.CTRL_PLANE_REGION = 'us-central1';
+    process.env.NAMESPACE = 'db-importer';
+
+    const repository = Object.create(TaskQueueBullMQRepository.prototype) as TaskQueueBullMQRepository;
+    (repository as unknown as { _opts: { logger: typeof logger } })._opts = { logger };
+    const flow = repository._createImportRDBFlow({
+      taskId: 'task-id',
+      type: 'RDBImport',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'pending',
+      payload: {
+        cloudProvider: 'gcp',
+        clusterId: 'cluster-id',
+        region: 'us-central1',
+        instanceId: 'instance-id',
+        podIds: ['node-s-0'],
+        hasTLS: false,
+        bucketName: 'falkordb-import-bucket',
+        fileName: 'imports/instance-id/import.rdb',
+        rdbSizeFileName: 'imports/instance-id/import-size.txt',
+        rdbKeyNumberFileName: 'imports/instance-id/import-keys.txt',
+        deploymentSizeInMb: 100,
+        backupPath: '/data/backup/dump.rdb',
+        aofEnabled: false,
+        isCluster: false,
+      },
+    });
+
+    const jobs = collectJobs(flow);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportCopySourceToBucket)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportRequestSourceRDBMerge)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorSourceRDBMerge)).toHaveLength(0);
+
+    const sendSaveJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportSendSaveCommand);
+    expect(sendSaveJob?.children?.map((job) => job.name)).toEqual([
+      RdbImportTaskNames.RdbImportMonitorFormatValidationProgress,
+      RdbImportTaskNames.RdbImportMonitorSizeValidationProgress,
+    ]);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBFormat)).toHaveLength(1);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBSize)).toHaveLength(1);
+  });
+
   it('serializes customer source validation behind one copy job without queueing credentials', () => {
     process.env.APPLICATION_PLANE_PROJECT_ID = 'app-plane-project';
     process.env.CTRL_PLANE_PROJECT_ID = 'ctrl-plane-project';
@@ -603,6 +900,183 @@ describe('import RDB customer source flow', () => {
     const formatValidationJob = formatMonitorJob?.children?.[0];
     expect(formatValidationJob?.name).toBe(RdbImportTaskNames.RdbImportValidateRDBFormat);
     expect(formatValidationJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportCopySourceToBucket);
+  });
+
+  it('builds standalone instance source tree with one source copy and no RDB validation', () => {
+    process.env.APPLICATION_PLANE_PROJECT_ID = 'app-plane-project';
+    process.env.CTRL_PLANE_PROJECT_ID = 'ctrl-plane-project';
+    process.env.CTRL_PLANE_CLUSTER_ID = 'ctrl-plane-cluster';
+    process.env.CTRL_PLANE_REGION = 'us-central1';
+    process.env.NAMESPACE = 'db-importer';
+
+    const repository = Object.create(TaskQueueBullMQRepository.prototype) as TaskQueueBullMQRepository;
+    (repository as unknown as { _opts: { logger: typeof logger } })._opts = { logger };
+    const flow = repository._createImportRDBFlow({
+      taskId: 'task-id',
+      type: 'RDBImport',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'pending',
+      payload: {
+        cloudProvider: 'gcp',
+        clusterId: 'cluster-id',
+        region: 'us-central1',
+        instanceId: 'instance-id',
+        podIds: ['node-s-0'],
+        hasTLS: false,
+        bucketName: 'falkordb-import-bucket',
+        fileName: 'imports/instance-id/import.rdb',
+        rdbSizeFileName: 'imports/instance-id/import-size.txt',
+        rdbKeyNumberFileName: 'imports/instance-id/import-keys.txt',
+        deploymentSizeInMb: 100,
+        backupPath: '/data/backup/dump.rdb',
+        aofEnabled: false,
+        isCluster: false,
+        source: {
+          type: 'instance',
+          instanceId: 'source-instance-id',
+          username: 'source-user',
+          password: 'source-password',
+          cloudProvider: 'gcp',
+          clusterId: 'source-cluster-id',
+          region: 'us-central1',
+          podId: 'node-s-0',
+          podIds: ['node-s-0'],
+          isCluster: false,
+          tls: false,
+        },
+      },
+    });
+
+    const jobs = collectJobs(flow);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportCopySourceToBucket)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBSize)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorSizeValidationProgress)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBFormat)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorFormatValidationProgress)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportRequestSourceRDBMerge)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorSourceRDBMerge)).toHaveLength(0);
+
+    const copyJobs = jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket);
+    expect(copyJobs).toHaveLength(1);
+    expect(copyJobs[0].data).toEqual({
+      taskId: 'task-id',
+      bucketName: 'falkordb-import-bucket',
+      fileName: 'imports/instance-id/import.rdb',
+      podId: 'node-s-0',
+    });
+    expect(JSON.stringify(copyJobs[0])).not.toContain('source-password');
+
+    const sendSaveJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportSendSaveCommand);
+    expect(sendSaveJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket);
+  });
+
+  it('stages cluster instance sources with per-pod copy jobs and a merge job without RDB validation', () => {
+    process.env.APPLICATION_PLANE_PROJECT_ID = 'app-plane-project';
+    process.env.CTRL_PLANE_PROJECT_ID = 'ctrl-plane-project';
+    process.env.CTRL_PLANE_CLUSTER_ID = 'ctrl-plane-cluster';
+    process.env.CTRL_PLANE_REGION = 'us-central1';
+    process.env.NAMESPACE = 'db-importer';
+
+    const repository = Object.create(TaskQueueBullMQRepository.prototype) as TaskQueueBullMQRepository;
+    (repository as unknown as { _opts: { logger: typeof logger } })._opts = { logger };
+    const flow = repository._createImportRDBFlow({
+      taskId: 'task-id',
+      type: 'RDBImport',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'pending',
+      payload: {
+        cloudProvider: 'gcp',
+        clusterId: 'cluster-id',
+        region: 'us-central1',
+        instanceId: 'instance-id',
+        podIds: ['node-s-0'],
+        hasTLS: false,
+        bucketName: 'falkordb-import-bucket',
+        fileName: 'imports/instance-id/import.rdb',
+        rdbSizeFileName: 'imports/instance-id/import-size.txt',
+        rdbKeyNumberFileName: 'imports/instance-id/import-keys.txt',
+        deploymentSizeInMb: 100,
+        backupPath: '/data/backup/dump.rdb',
+        aofEnabled: false,
+        isCluster: false,
+        source: {
+          type: 'instance',
+          instanceId: 'source-instance-id',
+          username: 'source-user',
+          password: 'source-password',
+          cloudProvider: 'gcp',
+          clusterId: 'source-cluster-id',
+          region: 'us-central1',
+          podId: 'cluster-sz-0',
+          podIds: ['cluster-sz-0', 'cluster-sz-2', 'cluster-sz-4'],
+          isCluster: true,
+          tls: false,
+        },
+      },
+    });
+
+    const jobs = collectJobs(flow);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportCopySourceToBucket)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBSize)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorSizeValidationProgress)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportValidateRDBFormat)).toHaveLength(0);
+    expect(jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorFormatValidationProgress)).toHaveLength(0);
+
+    const copyJobs = jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket);
+    expect(copyJobs).toHaveLength(3);
+    expect(copyJobs.map((job) => job.data)).toEqual([
+      {
+        taskId: 'task-id',
+        bucketName: 'falkordb-import-bucket',
+        fileName: 'imports/instance-id/import.rdb.cluster-sz-0.part.rdb',
+        podId: 'cluster-sz-0',
+      },
+      {
+        taskId: 'task-id',
+        bucketName: 'falkordb-import-bucket',
+        fileName: 'imports/instance-id/import.rdb.cluster-sz-2.part.rdb',
+        podId: 'cluster-sz-2',
+      },
+      {
+        taskId: 'task-id',
+        bucketName: 'falkordb-import-bucket',
+        fileName: 'imports/instance-id/import.rdb.cluster-sz-4.part.rdb',
+        podId: 'cluster-sz-4',
+      },
+    ]);
+    for (const copyJob of copyJobs) {
+      expect(JSON.stringify(copyJob)).not.toContain('source-password');
+    }
+
+    const mergeRequestJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportRequestSourceRDBMerge);
+    expect(mergeRequestJob?.data).toEqual({
+      taskId: 'task-id',
+      cloudProvider: 'gcp',
+      projectId: 'ctrl-plane-project',
+      clusterId: 'ctrl-plane-cluster',
+      region: 'us-central1',
+      namespace: 'db-importer',
+      bucketName: 'falkordb-import-bucket',
+      rdbFileNames: [
+        'imports/instance-id/import.rdb.cluster-sz-0.part.rdb',
+        'imports/instance-id/import.rdb.cluster-sz-2.part.rdb',
+        'imports/instance-id/import.rdb.cluster-sz-4.part.rdb',
+      ],
+      outputRdbFileName: 'imports/instance-id/import.rdb',
+    });
+    expect(mergeRequestJob?.children?.map((job) => job.name)).toEqual([
+      RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket,
+      RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket,
+      RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket,
+    ]);
+
+    const mergeMonitorJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportMonitorSourceRDBMerge);
+    expect(mergeMonitorJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportRequestSourceRDBMerge);
+
+    const sendSaveJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportSendSaveCommand);
+    expect(sendSaveJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportMonitorSourceRDBMerge);
   });
 });
 

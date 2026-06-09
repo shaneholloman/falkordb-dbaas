@@ -26,6 +26,47 @@ const makeImportTask = (source: Record<string, unknown>) => ({
 });
 
 describe('RDB import source task schema', () => {
+  it('accepts prepared instance sources', () => {
+    expect(() => RDBTask.validateSync(makeImportTask({
+      type: 'instance',
+      instanceId: 'source-instance-id',
+      username: 'source-user',
+      password: 'source-password',
+      cloudProvider: 'gcp',
+      clusterId: 'source-cluster-id',
+      region: 'us-central1',
+      podId: 'node-s-0',
+      podIds: ['node-s-0'],
+      isCluster: false,
+      tls: false,
+    }))).not.toThrow();
+  });
+
+  it('accepts prepared cluster instance sources', () => {
+    expect(() => RDBTask.validateSync(makeImportTask({
+      type: 'instance',
+      instanceId: 'source-instance-id',
+      username: 'source-user',
+      password: 'source-password',
+      cloudProvider: 'gcp',
+      clusterId: 'source-cluster-id',
+      region: 'us-central1',
+      podId: 'cluster-sz-0',
+      podIds: ['cluster-sz-0', 'cluster-sz-2', 'cluster-sz-4'],
+      isCluster: true,
+      tls: false,
+    }))).not.toThrow();
+  });
+
+  it('rejects unprepared instance sources', () => {
+    expect(() => RDBTask.validateSync(makeImportTask({
+      type: 'instance',
+      instanceId: 'source-instance-id',
+      username: 'source-user',
+      password: 'source-password',
+    }))).toThrow();
+  });
+
   it('accepts HTTPS URL sources without credentials', () => {
     expect(() => RDBTask.validateSync(makeImportTask({
       type: 'url',

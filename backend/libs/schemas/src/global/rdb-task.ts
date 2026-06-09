@@ -207,10 +207,40 @@ export const RDBImportURLSourceSchema = Type.Object({
   }),
 }, { additionalProperties: false });
 
+export const RDBImportInstanceSourceSchema = Type.Object({
+  type: Type.Literal('instance'),
+  instanceId: Type.String(),
+  username: Type.String(),
+  password: Type.String(),
+  cloudProvider: Type.Optional(SupportedCloudProviderSchema),
+  clusterId: Type.Optional(Type.String()),
+  region: Type.Optional(Type.String()),
+  podId: Type.Optional(Type.String()),
+  podIds: Type.Optional(Type.Array(Type.String())),
+  isCluster: Type.Optional(Type.Boolean()),
+  tls: Type.Optional(Type.Boolean()),
+}, { additionalProperties: false });
+
+export const RDBImportRequestInstanceSourceSchema = Type.Object({
+  type: Type.Literal('instance'),
+  instanceId: Type.String(),
+  username: Type.String(),
+  password: Type.String(),
+}, { additionalProperties: false });
+
+export const RDBImportRequestSourceSchema = Type.Union([
+  RDBImportGCSSourceSchema,
+  RDBImportS3SourceSchema,
+  RDBImportURLSourceSchema,
+  RDBImportRequestInstanceSourceSchema,
+]);
+export type RDBImportRequestSourceType = Static<typeof RDBImportRequestSourceSchema>;
+
 export const RDBImportSourceSchema = Type.Union([
   RDBImportGCSSourceSchema,
   RDBImportS3SourceSchema,
   RDBImportURLSourceSchema,
+  RDBImportInstanceSourceSchema,
 ]);
 export type RDBImportSourceType = Static<typeof RDBImportSourceSchema>;
 
@@ -231,10 +261,16 @@ export const RDBImportPublicURLSourceSchema = Type.Object({
   type: Type.Literal('url'),
 }, { additionalProperties: false });
 
+export const RDBImportPublicInstanceSourceSchema = Type.Object({
+  type: Type.Literal('instance'),
+  instanceId: Type.String(),
+}, { additionalProperties: false });
+
 export const RDBImportPublicSourceSchema = Type.Union([
   RDBImportPublicGCSSourceSchema,
   RDBImportPublicS3SourceSchema,
   RDBImportPublicURLSourceSchema,
+  RDBImportPublicInstanceSourceSchema,
 ]);
 export type RDBImportPublicSourceType = Static<typeof RDBImportPublicSourceSchema>;
 
