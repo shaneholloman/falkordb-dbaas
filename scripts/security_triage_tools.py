@@ -34,7 +34,7 @@ import subprocess
 from typing import Optional
 
 import requests
-from copilot import define_tool
+from copilot.tools import define_tool
 from pydantic import BaseModel, Field
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -600,20 +600,18 @@ async def fetch_compliance_failures(params: FetchComplianceFailuresParams) -> st
 
 class SearchRepoCodeParams(BaseModel):
     pattern: str = Field(description="Regex pattern to search for.")
-    path_glob: Optional[str] = Field(
-        default=None,
+    path_glob: str = Field(
+        default="",
         description="Optional path glob to scope the search (e.g. argocd/**).",
     )
 
 
 @define_tool(
-    name="search_repo_code",
     description=(
         "Grep this repo (FalkorDB/falkordb-dbaas) for a regex pattern. "
         "Read-only. Use to check whether a CVE'd package is actually used, "
         "or to find the declaration of an image tag that needs bumping."
     ),
-    skip_permission=True,
 )
 async def search_repo_code(params: SearchRepoCodeParams) -> str:
     """Grep this repo for a regex pattern. Read-only.
@@ -646,13 +644,11 @@ class ReadRepoFileParams(BaseModel):
 
 
 @define_tool(
-    name="read_repo_file",
     description=(
         "Read a slice of a file from this repo (FalkorDB/falkordb-dbaas). "
         "Read-only. Use to inspect a kustomization, manifest, or values file "
         "located via search_repo_code."
     ),
-    skip_permission=True,
 )
 async def read_repo_file(params: ReadRepoFileParams) -> str:
     """Read a slice of a file from this repo. Read-only."""
@@ -682,13 +678,11 @@ class LookupCVEParams(BaseModel):
 
 
 @define_tool(
-    name="lookup_cve",
     description=(
         "Query OSV for authoritative CVE metadata. Returns severity, affected "
         "package ranges, and fixed-in versions. Use to confirm a finding from "
         "Grype/Wazuh is real before recommending a fix."
     ),
-    skip_permission=True,
 )
 async def lookup_cve(params: LookupCVEParams) -> str:
     """Get authoritative CVE metadata from OSV. Returns severity + fixed versions."""
@@ -736,12 +730,10 @@ class ListOpenSecurityIssuesParams(BaseModel):
 
 
 @define_tool(
-    name="list_open_security_issues",
     description=(
         "List open GitHub issues labelled `security`, `soc2`, or `ai-triage` "
         "in the given repo. Use to avoid filing duplicate findings."
     ),
-    skip_permission=True,
 )
 async def list_open_security_issues(params: ListOpenSecurityIssuesParams) -> str:
     """List open issues with the `security` or `soc2` label.

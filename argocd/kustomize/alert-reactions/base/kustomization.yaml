@@ -7,3 +7,4 @@ resources:
   - oom-killed.yaml
   - redis-crash.yaml
   - sigabrt-oom.yaml
+  - bgrewriteaof-fork-killer.yaml

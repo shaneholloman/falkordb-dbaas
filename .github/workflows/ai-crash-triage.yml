@@ -123,14 +123,8 @@ jobs:
         with:
           python-version: '3.14'
 
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-
-      - name: Install Copilot CLI and Python deps
+      - name: Install Python deps
         run: |
-          npm install -g @github/copilot
           pip install github-copilot-sdk requests pydantic google-cloud-storage
 
       - name: Authenticate to GCP

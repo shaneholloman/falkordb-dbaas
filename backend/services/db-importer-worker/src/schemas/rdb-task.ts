@@ -6,6 +6,95 @@ export enum TaskTypes {
   RDBImport = 'RDBImport',
 }
 
+const GCPServiceAccountKey = Yup.object({
+  type: Yup.string().oneOf(['service_account']).required(),
+  project_id: Yup.string().required(),
+  private_key_id: Yup.string().required(),
+  private_key: Yup.string().required(),
+  client_email: Yup.string().email().required(),
+  client_id: Yup.string().required(),
+  auth_uri: Yup.string().required(),
+  token_uri: Yup.string().required(),
+  auth_provider_x509_cert_url: Yup.string().required(),
+  client_x509_cert_url: Yup.string().required(),
+  universe_domain: Yup.string().optional(),
+}).strict().noUnknown().required();
+
+const RDBExportTarget = Yup.lazy((value) => {
+  switch (value?.type) {
+    case 'gcs':
+      return Yup.object({
+        type: Yup.string().oneOf(['gcs']).required(),
+        bucketName: Yup.string().required(),
+        credentials: GCPServiceAccountKey,
+      }).strict().noUnknown().required();
+    case 's3':
+      return Yup.object({
+        type: Yup.string().oneOf(['s3']).required(),
+        bucketName: Yup.string().required(),
+        region: Yup.string().required(),
+        accessKeyId: Yup.string().required(),
+        secretAccessKey: Yup.string().required(),
+        sessionToken: Yup.string().optional(),
+      }).strict().noUnknown().required();
+    default:
+      return Yup.object({
+        type: Yup.string().oneOf(['default']).optional(),
+      }).strict().noUnknown().required();
+  }
+});
+
+const RDBExportOutputTarget = Yup.lazy((value) => {
+  switch (value?.type) {
+    case 'gcs':
+      return Yup.object({
+        type: Yup.string().oneOf(['gcs']).required(),
+        bucketName: Yup.string().required(),
+        fileName: Yup.string().required(),
+        path: Yup.string().required(),
+      }).strict().noUnknown().required();
+    case 's3':
+      return Yup.object({
+        type: Yup.string().oneOf(['s3']).required(),
+        bucketName: Yup.string().required(),
+        key: Yup.string().required(),
+        region: Yup.string().required(),
+        path: Yup.string().required(),
+      }).strict().noUnknown().required();
+    default:
+      return Yup.mixed().oneOf([]).required();
+  }
+});
+
+const RDBImportSource = Yup.lazy((value) => {
+  switch (value?.type) {
+    case 'gcs':
+      return Yup.object({
+        type: Yup.string().oneOf(['gcs']).required(),
+        bucketName: Yup.string().required(),
+        fileName: Yup.string().required(),
+        credentials: GCPServiceAccountKey.required(),
+      }).strict().noUnknown().required();
+    case 's3':
+      return Yup.object({
+        type: Yup.string().oneOf(['s3']).required(),
+        bucketName: Yup.string().required(),
+        key: Yup.string().required(),
+        region: Yup.string().required(),
+        accessKeyId: Yup.string().required(),
+        secretAccessKey: Yup.string().required(),
+        sessionToken: Yup.string().optional(),
+      }).strict().noUnknown().required();
+    case 'url':
+      return Yup.object({
+        type: Yup.string().oneOf(['url']).required(),
+        url: Yup.string().url().matches(/^https:\/\/[^\/@?#]+(?:[\/?#].*)?$/).required(),
+      }).strict().noUnknown().required();
+    default:
+      return Yup.mixed().oneOf([]).required();
+  }
+});
+
 export const SingleShardRDBExportPayload = Yup.object({
   cloudProvider: Yup.string().oneOf(['gcp', 'aws']).required(),
   region: Yup.string().required(),
@@ -17,6 +106,7 @@ export const SingleShardRDBExportPayload = Yup.object({
     bucketName: Yup.string().required(),
     fileName: Yup.string().required(),
     expiresIn: Yup.number().required(),
+    target: RDBExportTarget.optional(),
   }).required(),
 }).strict().noUnknown().required();
 
@@ -24,6 +114,7 @@ export type SingleShardRDBExportPayloadType = Yup.InferType<typeof SingleShardRD
 
 export const RDBExportOutput = Yup.object({
   readUrl: Yup.string().optional(),
+  target: RDBExportOutputTarget.optional(),
 }).strict().noUnknown().optional();
 export type RDBExportOutputType = Yup.InferType<typeof RDBExportOutput>;
 
@@ -33,18 +124,20 @@ export const MultiShardRDBExportPayload = Yup.object({
   region: Yup.string().required(),
   clusterId: Yup.string().required(),
   instanceId: Yup.string().required(),
+  podId: Yup.string().required(),
   hasTLS: Yup.boolean().required(),
   destination: Yup.object({
     bucketName: Yup.string().required(),
     expiresIn: Yup.number().required(),
     fileName: Yup.string().required(),
+    target: RDBExportTarget.optional(),
+    nodes: Yup.array().of(
+      Yup.object({
+        podId: Yup.string().required(),
+        partFileName: Yup.string().required(),
+      }).required()
+    ).required(),
   }).required(),
-  nodes: Yup.array().of(
-    Yup.object({
-      podId: Yup.string().required(),
-      partFileName: Yup.string().required(),
-    }).required()
-  ).required(),
 }).strict().noUnknown().required();
 export type MultiShardRDBExportPayloadType = Yup.InferType<typeof MultiShardRDBExportPayload>;
 
@@ -63,6 +156,7 @@ export const RDBImportPayload = Yup.object({
   backupPath: Yup.string().required(),
   aofEnabled: Yup.boolean().required(),
   isCluster: Yup.boolean().required(),
+  source: RDBImportSource.optional(),
 }).strict().noUnknown().required();
 
 export type RDBImportPayloadType = Yup.InferType<typeof RDBImportPayload>;
@@ -78,19 +172,20 @@ export interface IExportRDBTask {
   type: TaskTypes;
   createdAt: string;
   updatedAt: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  status: 'created' | 'pending' | 'in_progress' | 'completed' | 'failed';
   error?: string;
   errors?: string[];
   payload: SingleShardRDBExportPayloadType | MultiShardRDBExportPayloadType | RDBImportPayloadType;
   output?: RDBExportOutputType | RDBImportOutputType;
 }
 
-export const RDBTask: Yup.ObjectSchema<IExportRDBTask> = Yup.object({
+export const RDBTask = Yup.object({
   taskId: Yup.string().required(),
   type: Yup.string().oneOf(Object.values(TaskTypes)).required(),
   createdAt: Yup.string().required(),
   updatedAt: Yup.string().required(),
   status: Yup.string().oneOf([
+    'created',
     'pending',
     'in_progress',
     'completed',
@@ -100,7 +195,7 @@ export const RDBTask: Yup.ObjectSchema<IExportRDBTask> = Yup.object({
    * @deprecated Use 'errors' field instead
    */
   error: Yup.string().optional(),
-  errors: Yup.array(Yup.string()).optional(),
+  errors: Yup.array().of(Yup.string().required()).optional(),
   payload: Yup.lazy((_, opt) => {
     switch (opt.parent.type) {
       case TaskTypes.SingleShardRDBExport:

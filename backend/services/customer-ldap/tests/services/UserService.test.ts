@@ -61,8 +61,8 @@ describe('UserService', () => {
       const mockConfig = {} as any;
       const mockCloseFn = jest.fn();
       const mockUsers = [
-        { username: 'user1', acl: 'rw' },
-        { username: 'user2', acl: 'r' },
+        { username: 'user1', acl: 'rw', createdAt: '2024-01-01T00:00:00Z' },
+        { username: 'user2', acl: 'r', createdAt: '2024-01-02T00:00:00Z' },
       ];
 
       mockConnectionCache.getConnection.mockReturnValue(null);
@@ -101,7 +101,7 @@ describe('UserService', () => {
     });
 
     it('should reuse cached connection', async () => {
-      const mockUsers = [{ username: 'user1', acl: 'rw' }];
+      const mockUsers = [{ username: 'user1', acl: 'rw', createdAt: '2024-01-01T00:00:00Z' }];
       const mockLdapService = {
         listUsers: jest.fn().mockResolvedValue(mockUsers),
         createUser: jest.fn(),

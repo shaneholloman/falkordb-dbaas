@@ -24,26 +24,27 @@ const task = {
     clusterId: 'c-hcjx5tis6bc',
     region: 'us-central1',
     instanceId: 'instance-841aeorbq',
+    podId: 'cluster-mz-0',
     hasTLS: false,
     destination: {
       bucketName: 'falkordb-dev-rdb-exports-f7a2434f',
       fileName: `exports/export_instance-841aeorbq_${taskId}.rdb`,
       expiresIn: 7 * 24 * 60 * 60 * 1000,
+      nodes: [
+        {
+          podId: 'cluster-mz-0',
+          partFileName: `exports/parts/export_instance-841aeorbq_${taskId}_part_cluster-mz-0.rdb`,
+        },
+        {
+          podId: 'cluster-mz-2',
+          partFileName: `exports/parts/export_instance-841aeorbq_${taskId}_part_cluster-mz-2.rdb`,
+        },
+        {
+          podId: 'cluster-mz-4',
+          partFileName: `exports/parts/export_instance-841aeorbq_${taskId}_part_cluster-mz-4.rdb`,
+        },
+      ],
     },
-    nodes: [
-      {
-        podId: 'cluster-mz-0',
-        partFileName: `exports/parts/export_instance-841aeorbq_${taskId}_part_cluster-mz-0.rdb`,
-      },
-      {
-        podId: 'cluster-mz-2',
-        partFileName: `exports/parts/export_instance-841aeorbq_${taskId}_part_cluster-mz-2.rdb`,
-      },
-      {
-        podId: 'cluster-mz-4',
-        partFileName: `exports/parts/export_instance-841aeorbq_${taskId}_part_cluster-mz-4.rdb`,
-      },
-    ],
   },
 }
 
@@ -163,10 +164,10 @@ describe('export multi shard rdb test', () => {
                   namespace: process.env.NAMESPACE,
                   bucketName: task.payload.destination.bucketName,
                   outputRdbFileName: task.payload.destination.fileName,
-                  rdbFileNames: task.payload.nodes.map(node => node.partFileName),
+                  rdbFileNames: task.payload.destination.nodes.map(node => node.partFileName),
                 },
                 { failParentOnFailure: true },
-                task.payload.nodes.map(node => _makePodJob(node)),
+                task.payload.destination.nodes.map(node => _makePodJob(node)),
               )
             ]
           )
