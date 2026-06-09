@@ -1,6 +1,7 @@
 import { FlowJob } from 'bullmq';
 import { ExportRDBTaskType, PublicExportRDBTaskSchema, PublicTaskDocumentSchema, sanitizeTaskDocument, TaskDocumentSchema } from '@falkordb/schemas/global';
 import { RdbExportCopyRDBToBucketProcessorDataSchema, RdbExportTaskNames } from '@falkordb/schemas/services/db-importer-worker/v1';
+import { ExportRDBRequestBodySchema } from '@falkordb/schemas/services/import-export-rdb/v1';
 import { Value } from '@sinclair/typebox/value';
 import { TaskQueueBullMQRepository } from '../repositories/tasksQueue/TaskQueueBullMQRepository';
 import { ExportRDBController } from '../routes/export/controllers/ExportRDBController';
@@ -188,6 +189,19 @@ describe('export target flow', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('rejects hyphens in export request passwords', () => {
+    expect(Value.Check(ExportRDBRequestBodySchema, {
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+    })).toBe(true);
+    expect(Value.Check(ExportRDBRequestBodySchema, {
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'pass-word',
+    })).toBe(false);
   });
 
   it('verifies GCS target write access before creating an export task', async () => {
