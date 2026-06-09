@@ -2607,7 +2607,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "redis_falkordb_graph_memory_total_mb{namespace=~\"$namespace\", pod=~\"$pod\"}",
+              "expr": "topk(20, redis_falkordb_graph_memory_total_mb{namespace=~\"$namespace\", pod=~\"$pod\"})",
               "legendFormat": "{{ graph }}",
               "range": true,
               "refId": "A"
@@ -3078,21 +3078,17 @@
         "type": "query"
       },
       {
-        "allValue": ".*",
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(redis_falkordb_graph_memory_total_mb{namespace=~\"$namespace\"}, graph)",
-        "includeAll": true,
+        "definition": "label_values(topk(20, redis_falkordb_graph_memory_total_mb{namespace=~\"$namespace\"}), graph)",
+        "includeAll": false,
+        "multi": true,
         "name": "graph",
         "options": [],
-        "query": "label_values(redis_falkordb_graph_memory_total_mb{namespace=~\"$namespace\"}, graph)",
+        "query": "label_values(topk(20, redis_falkordb_graph_memory_total_mb{namespace=~\"$namespace\"}), graph)",
         "refresh": 2,
         "regex": "",
         "sort": 1,
