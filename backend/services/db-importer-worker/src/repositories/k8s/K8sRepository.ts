@@ -158,6 +158,9 @@ export class K8sRepository {
       if (command[index - 1] === '-a' || command[index - 1] === '--pass' || command[index - 1] === '--password') {
         return '[REDACTED]';
       }
+      if (command[index - 1] === 'sh' && command[index - 2] === '-c') {
+        return '[REDACTED]';
+      }
       if (part.startsWith('http://') || part.startsWith('https://')) {
         return '[REDACTED_URL]';
       }
