@@ -3,12 +3,12 @@ import { RDBImportRequestSourceSchema } from '../../../../global';
 
 export const ImportRDBRequestUploadURLRequestBodySchema = Type.Object({
   instanceId: Type.String(),
-  username: Type.Optional(Type.String({
+  username: Type.String({
     pattern: "^[a-zA-Z0-9._-]+$",
-  })),
-  password: Type.Optional(Type.String({
+  }),
+  password: Type.String({
     pattern: "^[a-zA-Z0-9._!\@\#\$\%\^\&\*]+$"
-  })),
+  }),
   source: Type.Optional(RDBImportRequestSourceSchema),
 });
 

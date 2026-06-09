@@ -154,11 +154,13 @@ export class K8sRepository {
   }
 
   private _sanitizeCommandForError(command: string[]): string {
+    const shellCommandIndex = command.findIndex((part, index) => part === '-c' && command[index - 1] === 'sh');
+
     return command.map((part, index) => {
-      if (command[index - 1] === '-a' || command[index - 1] === '--pass' || command[index - 1] === '--password') {
-        return '[REDACTED]';
+      if (shellCommandIndex !== -1 && index > shellCommandIndex) {
+        return index === shellCommandIndex + 1 ? '[REDACTED_SCRIPT]' : '[REDACTED]';
       }
-      if (command[index - 1] === 'sh' && command[index - 2] === '-c') {
+      if (command[index - 1] === '-a' || command[index - 1] === '--pass' || command[index - 1] === '--password') {
         return '[REDACTED]';
       }
       if (part.startsWith('http://') || part.startsWith('https://')) {

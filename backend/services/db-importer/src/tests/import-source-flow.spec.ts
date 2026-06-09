@@ -157,6 +157,8 @@ describe('import RDB customer source flow', () => {
   it('validates URL import source shape at request schema level', () => {
     expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
       instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
       source: {
         type: 'url',
         url: 'https://customer.example.com/imports/customer.rdb?token=secret-token',
@@ -166,11 +168,22 @@ describe('import RDB customer source flow', () => {
       instanceId: 'instance-id',
       source: {
         type: 'url',
+        url: 'https://customer.example.com/imports/customer.rdb?token=secret-token',
+      },
+    })).toBe(false);
+    expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source: {
+        type: 'url',
         url: 'http://customer.example.com/imports/customer.rdb',
       },
     })).toBe(false);
     expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
       instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
       source: {
         type: 'url',
         url: 'https://user:pass@customer.example.com/imports/customer.rdb',
@@ -178,6 +191,8 @@ describe('import RDB customer source flow', () => {
     })).toBe(false);
     expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
       instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
       source: {
         type: 'instance',
         instanceId: 'source-instance-id',
@@ -187,6 +202,19 @@ describe('import RDB customer source flow', () => {
     })).toBe(true);
     expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
       instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source: {
+        type: 'instance',
+        instanceId: 'source-instance-id',
+        username: 'falkordb;whoami',
+        password: 'source-password',
+      },
+    })).toBe(false);
+    expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
       source: {
         type: 'instance',
         instanceId: 'source-instance-id',

@@ -222,7 +222,9 @@ export const RDBImportInstanceSourceSchema = Type.Object({
 export const RDBImportRequestInstanceSourceSchema = Type.Object({
   type: Type.Literal('instance'),
   instanceId: Type.String(),
-  username: Type.String(),
+  username: Type.String({
+    pattern: "^[a-zA-Z0-9._-]+$",
+  }),
   password: Type.String(),
 }, { additionalProperties: false });
 
