@@ -678,7 +678,7 @@ export class K8sRepository {
     downloadUrl: string,
   ): Promise<void> {
     this._options.logger.info({
-      clusterId, region, namespace, jobId, podId, hasTLS, downloadUrl
+      clusterId, region, namespace, jobId, podId, hasTLS,
     }, 'Creating import RDB job');
 
     const kubeConfig = await this._getK8sConfig(cloudProvider, clusterId, region, { projectId });
@@ -827,8 +827,9 @@ export class K8sRepository {
       # @, :, /, %, or whitespace cannot break the redis URI parser in rmt.
       ENC_PASS=$(printf '%s' "$PASS" | od -An -tx1 -v | tr -d ' \\n' | sed 's/../%&/g')
 
-      URL="${scheme}://:$ENC_PASS@$TARGET_HOST:6379"
-      rmt -s /data/dump.rdb -m "$URL" -r`;
+      URL="${scheme}://$TARGET_HOST:6379?authPassword=$ENC_PASS"
+      rmt -s /data/dump.rdb -m "$URL" -r \\
+        || { rc=$?; echo "ERROR: rmt import failed with exit code $rc" >&2; exit $rc; }`;
 
     const jobManifest: k8s.V1Job = {
       apiVersion: 'batch/v1',
