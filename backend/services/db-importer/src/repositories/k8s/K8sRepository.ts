@@ -132,11 +132,17 @@ export class K8sRepository {
     return kubeConfig;
   }
 
+  private _sanitizeCommandForLogging(command: string[]): string[] {
+    return command.map((part, index) => (
+      command[index - 1] === '-a' ? '[REDACTED]' : part
+    ));
+  }
+
   private async _executeCommand(kubeConfig: k8s.KubeConfig, instanceId: string, podId: string, command: string[], timeout = 60): Promise<string> {
-    this._options.logger.info({ instanceId, podId, command }, 'Executing command');
+    this._options.logger.info({ instanceId, podId, command: this._sanitizeCommandForLogging(command) }, 'Executing command');
     const exec = new k8s.Exec(kubeConfig);
 
-    const stream = new Writable({
+    const outputStream = new Writable({
       write: (chunk, encoding, callback) => {
         callback();
       },
@@ -144,18 +150,51 @@ export class K8sRepository {
 
     return new Promise((resolve, reject) => {
       let fullResponse = '';
+      let settled = false;
+      let execStream: { close?: () => void; terminate?: () => void; removeAllListeners?: () => void } | undefined;
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        execStream?.removeAllListeners?.();
+        outputStream.destroy();
+      };
+
+      const settle = (callback: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        callback();
+      };
+
+      const timeoutId = setTimeout(() => {
+        execStream?.close?.();
+        execStream?.terminate?.();
+        const error = new Error(`Command timed out after ${timeout}s: ${this._sanitizeCommandForLogging(command).join(' ')}`);
+        error.name = 'TimeoutError';
+        settle(() => reject(error));
+      }, timeout * 1000);
 
       exec.exec(
         instanceId,
         podId,
         'service',
         command,
-        stream,
+        outputStream,
         null,
         null, // Stdin
         false // TTY
       ).then(
         (stream) => {
+          execStream = stream as typeof execStream;
+          if (settled) {
+            execStream?.close?.();
+            execStream?.terminate?.();
+            execStream?.removeAllListeners?.();
+            return;
+          }
+
           stream.on('message', (data: Buffer) => {
             fullResponse += data.toString('utf8');
           });
@@ -167,22 +206,22 @@ export class K8sRepository {
               // eslint-disable-next-line no-control-regex
               fullResponse = fullResponse.replace(/(\x01)|(\x03)/g, '')
               if (fullResponse.endsWith(successMarker)) {
-                resolve(fullResponse.slice(0, -successMarker.length));
+                settle(() => resolve(fullResponse.slice(0, -successMarker.length)));
               } else {
-                resolve(fullResponse);
+                settle(() => resolve(fullResponse));
               }
             } else {
-              reject(`Command failed with code ${code}, signal ${signal}:\n${fullResponse}`);
+              settle(() => reject(`Command failed with code ${code}, signal ${signal}:\n${fullResponse}`));
             }
           });
 
           stream.on('error', (err: Error) => {
-            reject(`Error executing command: ${err}`);
+            settle(() => reject(`Error executing command: ${err}`));
           });
         }
       ).catch(
         (err) => {
-          reject(`Error creating exec stream: ${err}`);
+          settle(() => reject(`Error creating exec stream: ${err}`));
         });
     });
   }
@@ -293,5 +332,52 @@ export class K8sRepository {
     }
 
     return response.split('\n')[1].trim();
+  }
+
+  async getUsedMemoryDataset(
+    cloudProvider: 'gcp' | 'aws',
+    clusterId: string,
+    region: string,
+    instanceId: string,
+    podId: string,
+    username: string,
+    password: string,
+    tls = false,
+  ): Promise<number> {
+    this._options.logger.info({ clusterId, region, instanceId, podId, username }, 'Getting used memory dataset');
+
+    const kubeConfig = await this._getK8sConfig(cloudProvider, clusterId, region);
+
+    const response = await this._executeCommand(
+      kubeConfig,
+      instanceId,
+      podId,
+      [
+        'redis-cli',
+        '--user',
+        username,
+        '-a',
+        password,
+        tls ? '--tls' : '',
+        '--no-auth-warning',
+        'info',
+        'memory',
+      ].filter((c) => c),
+    ).catch((e) => {
+      this._options.logger.error(e, 'Error getting used memory dataset');
+      throw e;
+    });
+
+    if (response.includes('NOAUTH')) {
+      throw new Error('Failed to authenticate to FalkorDB');
+    }
+
+    const usedMemoryDataset = response.match(/^used_memory_dataset:(\d+)$/m)?.[1]
+      ?? response.match(/^used_memory:(\d+)$/m)?.[1];
+    if (!usedMemoryDataset) {
+      throw new Error('Could not get used memory dataset');
+    }
+
+    return parseInt(usedMemoryDataset, 10);
   }
 }

@@ -90,6 +90,18 @@ const RDBImportSource = Yup.lazy((value) => {
         type: Yup.string().oneOf(['url']).required(),
         url: Yup.string().url().matches(/^https:\/\/[^\/@?#]+(?:[\/?#].*)?$/).required(),
       }).strict().noUnknown().required();
+    case 'instance':
+      return Yup.object({
+        type: Yup.string().oneOf(['instance']).required(),
+        instanceId: Yup.string().required(),
+        cloudProvider: Yup.string().oneOf(['gcp', 'aws']).required(),
+        clusterId: Yup.string().required(),
+        region: Yup.string().required(),
+        podId: Yup.string().required(),
+        podIds: Yup.array(Yup.string().required()).required(),
+        isCluster: Yup.boolean().required(),
+        tls: Yup.boolean().required(),
+      }).strict().noUnknown().required();
     default:
       return Yup.mixed().oneOf([]).required();
   }
