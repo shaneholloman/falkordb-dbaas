@@ -142,7 +142,7 @@ export class K8sRepository {
     this._options.logger.info({ instanceId, podId, command: this._sanitizeCommandForLogging(command) }, 'Executing command');
     const exec = new k8s.Exec(kubeConfig);
 
-    const stream = new Writable({
+    const outputStream = new Writable({
       write: (chunk, encoding, callback) => {
         callback();
       },
@@ -150,18 +150,51 @@ export class K8sRepository {
 
     return new Promise((resolve, reject) => {
       let fullResponse = '';
+      let settled = false;
+      let execStream: { close?: () => void; terminate?: () => void; removeAllListeners?: () => void } | undefined;
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        execStream?.removeAllListeners?.();
+        outputStream.destroy();
+      };
+
+      const settle = (callback: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        callback();
+      };
+
+      const timeoutId = setTimeout(() => {
+        execStream?.close?.();
+        execStream?.terminate?.();
+        const error = new Error(`Command timed out after ${timeout}s: ${this._sanitizeCommandForLogging(command).join(' ')}`);
+        error.name = 'TimeoutError';
+        settle(() => reject(error));
+      }, timeout * 1000);
 
       exec.exec(
         instanceId,
         podId,
         'service',
         command,
-        stream,
+        outputStream,
         null,
         null, // Stdin
         false // TTY
       ).then(
         (stream) => {
+          execStream = stream as typeof execStream;
+          if (settled) {
+            execStream?.close?.();
+            execStream?.terminate?.();
+            execStream?.removeAllListeners?.();
+            return;
+          }
+
           stream.on('message', (data: Buffer) => {
             fullResponse += data.toString('utf8');
           });
@@ -173,22 +206,22 @@ export class K8sRepository {
               // eslint-disable-next-line no-control-regex
               fullResponse = fullResponse.replace(/(\x01)|(\x03)/g, '')
               if (fullResponse.endsWith(successMarker)) {
-                resolve(fullResponse.slice(0, -successMarker.length));
+                settle(() => resolve(fullResponse.slice(0, -successMarker.length)));
               } else {
-                resolve(fullResponse);
+                settle(() => resolve(fullResponse));
               }
             } else {
-              reject(`Command failed with code ${code}, signal ${signal}:\n${fullResponse}`);
+              settle(() => reject(`Command failed with code ${code}, signal ${signal}:\n${fullResponse}`));
             }
           });
 
           stream.on('error', (err: Error) => {
-            reject(`Error executing command: ${err}`);
+            settle(() => reject(`Error executing command: ${err}`));
           });
         }
       ).catch(
         (err) => {
-          reject(`Error creating exec stream: ${err}`);
+          settle(() => reject(`Error creating exec stream: ${err}`));
         });
     });
   }
