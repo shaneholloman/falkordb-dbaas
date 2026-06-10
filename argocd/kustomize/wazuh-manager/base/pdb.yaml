@@ -1,6 +1,6 @@
-# PodDisruptionBudgets — Wazuh Manager components
-# Ensure at least one master is always available during voluntary disruptions.
-# Workers use maxUnavailable=1 so rolling upgrades proceed one at a time.
+# PodDisruptionBudget for the Wazuh master.
+# Worker and indexer PDBs are rendered by the Helm chart; duplicating them here
+# prevents the eviction subresource from draining nodes.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -12,26 +12,3 @@ spec:
     matchLabels:
       app: wazuh-manager
       node-type: master
----
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: wazuh-manager-worker-pdb
-  namespace: security
-spec:
-  maxUnavailable: 1
-  selector:
-    matchLabels:
-      app: wazuh-manager
-      node-type: worker
----
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: wazuh-indexer-pdb
-  namespace: security
-spec:
-  maxUnavailable: 1
-  selector:
-    matchLabels:
-      app: wazuh-indexer
