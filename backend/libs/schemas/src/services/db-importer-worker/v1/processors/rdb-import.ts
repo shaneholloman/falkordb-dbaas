@@ -8,6 +8,37 @@ export const RdbImportCopySourceToBucketProcessorDataSchema = Type.Object({
 });
 export type RdbImportCopySourceToBucketProcessorData = Static<typeof RdbImportCopySourceToBucketProcessorDataSchema>;
 
+export const RdbImportCopyInstanceSourceToBucketProcessorDataSchema = Type.Object({
+  taskId: Type.String(),
+  bucketName: Type.String(),
+  fileName: Type.String(),
+  podId: Type.String(),
+});
+export type RdbImportCopyInstanceSourceToBucketProcessorData = Static<typeof RdbImportCopyInstanceSourceToBucketProcessorDataSchema>;
+
+export const RdbImportRequestSourceRDBMergeProcessorDataSchema = Type.Object({
+  taskId: Type.String(),
+  projectId: Type.String(),
+  cloudProvider: SupportedCloudProviderSchema,
+  clusterId: Type.String(),
+  region: Type.String(),
+  namespace: Type.String(),
+  bucketName: Type.String(),
+  rdbFileNames: Type.Array(Type.String()),
+  outputRdbFileName: Type.String(),
+});
+export type RdbImportRequestSourceRDBMergeProcessorData = Static<typeof RdbImportRequestSourceRDBMergeProcessorDataSchema>;
+
+export const RdbImportMonitorSourceRDBMergeProcessorDataSchema = Type.Object({
+  taskId: Type.String(),
+  projectId: Type.String(),
+  cloudProvider: SupportedCloudProviderSchema,
+  clusterId: Type.String(),
+  region: Type.String(),
+  namespace: Type.String(),
+});
+export type RdbImportMonitorSourceRDBMergeProcessorData = Static<typeof RdbImportMonitorSourceRDBMergeProcessorDataSchema>;
+
 export const RdbImportValidateRDBSizeProcessorDataSchema = Type.Object({
   taskId: Type.String(),
   bucketName: Type.String(),
@@ -176,6 +207,9 @@ export type RdbImportRecoverFailedImportProcessorData = Static<typeof RdbImportR
 
 export enum RdbImportTaskNames {
   RdbImportCopySourceToBucket = 'rdb-import-copy-source-to-bucket',
+  RdbImportCopyInstanceSourceToBucket = 'rdb-import-copy-instance-source-to-bucket',
+  RdbImportRequestSourceRDBMerge = 'rdb-import-request-source-rdb-merge',
+  RdbImportMonitorSourceRDBMerge = 'rdb-import-monitor-source-rdb-merge',
   RdbImportValidateRDBSize = 'rdb-import-validate-rdb-size',
   RdbImportValidateRDBFormat = 'rdb-import-validate-rdb-format',
   RdbImportMonitorSizeValidationProgress = 'rdb-import-monitor-size-validation-progress',
@@ -194,6 +228,9 @@ export enum RdbImportTaskNames {
 
 export const RdbImportSchemaMap = {
   [RdbImportTaskNames.RdbImportCopySourceToBucket]: RdbImportCopySourceToBucketProcessorDataSchema,
+  [RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket]: RdbImportCopyInstanceSourceToBucketProcessorDataSchema,
+  [RdbImportTaskNames.RdbImportRequestSourceRDBMerge]: RdbImportRequestSourceRDBMergeProcessorDataSchema,
+  [RdbImportTaskNames.RdbImportMonitorSourceRDBMerge]: RdbImportMonitorSourceRDBMergeProcessorDataSchema,
   [RdbImportTaskNames.RdbImportValidateRDBSize]: RdbImportValidateRDBSizeProcessorDataSchema,
   [RdbImportTaskNames.RdbImportValidateRDBFormat]: RdbImportValidateRDBFormatProcessorDataSchema,
   [RdbImportTaskNames.RdbImportMonitorSizeValidationProgress]: RdbImportMonitorSizeValidationProgressProcessorDataSchema,

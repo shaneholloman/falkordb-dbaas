@@ -153,10 +153,36 @@ export class K8sRepository {
     return password.replace(/[\r\n]+$/, '');
   }
 
-  private async _executeCommand(kubeConfig: k8s.KubeConfig, instanceId: string, podId: string, command: string[], timeout = 60): Promise<string> {
+  private _sanitizeCommandForError(command: string[]): string {
+    const shellCommandIndex = command.findIndex((part, index) => part === '-c' && command[index - 1] === 'sh');
+
+    return command.map((part, index) => {
+      if (shellCommandIndex !== -1 && index > shellCommandIndex) {
+        return index === shellCommandIndex + 1 ? '[REDACTED_SCRIPT]' : '[REDACTED]';
+      }
+      if (command[index - 1] === '-a' || command[index - 1] === '--pass' || command[index - 1] === '--password') {
+        return '[REDACTED]';
+      }
+      if (part.startsWith('http://') || part.startsWith('https://')) {
+        return '[REDACTED_URL]';
+      }
+      if (part.includes('PASSWORD=') || part.includes('WRITE_URL=') || part.includes('redis-cli')) {
+        return '[REDACTED_SCRIPT]';
+      }
+      return part;
+    }).join(' ');
+  }
+
+  private _sanitizeCommandOutputForError(output: string): string {
+    return output
+      .replace(/https?:\/\/[^\s"'<>]+/g, '[REDACTED_URL]')
+      .replace(/((?:password|token|access[_-]?key|secret[_-]?key|signature)=)[^\s&"'<>]+/gi, '$1[REDACTED]');
+  }
+
+  private async _executeCommand(kubeConfig: k8s.KubeConfig, instanceId: string, podId: string, command: string[], timeoutMs = 60 * 1000): Promise<string> {
     const exec = new k8s.Exec(kubeConfig);
 
-    const stream = new Writable({
+    const outputStream = new Writable({
       write: (chunk, encoding, callback) => {
         callback();
       },
@@ -164,18 +190,50 @@ export class K8sRepository {
 
     return new Promise((resolve, reject) => {
       let fullResponse = '';
+      let settled = false;
+      let execStream: { close?: () => void; terminate?: () => void; removeAllListeners?: () => void } | undefined;
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        execStream?.removeAllListeners?.();
+        outputStream.destroy();
+      };
+
+      const settle = (callback: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        callback();
+      };
+
+      const timeoutId = setTimeout(() => {
+        execStream?.close?.();
+        execStream?.terminate?.();
+        const error = new Error(`Command timed out after ${timeoutMs}ms: ${this._sanitizeCommandForError(command)}`);
+        error.name = 'TimeoutError';
+        settle(() => reject(error));
+      }, timeoutMs);
 
       exec.exec(
         instanceId,
         podId,
         'service',
         command,
-        stream,
+        outputStream,
         null,
         null, // Stdin
         false // TTY
       ).then(
         (stream) => {
+          execStream = stream as typeof execStream;
+          if (settled) {
+            execStream?.close?.();
+            execStream?.terminate?.();
+            execStream?.removeAllListeners?.();
+            return;
+          }
           stream.on('message', (data: Buffer) => {
             fullResponse += data.toString('utf8');
           });
@@ -187,22 +245,22 @@ export class K8sRepository {
               // eslint-disable-next-line no-control-regex
               fullResponse = fullResponse.replace(/(\x01)|(\x03)/g, '')
               if (fullResponse.endsWith(successMarker)) {
-                resolve(fullResponse.slice(0, -successMarker.length));
+                settle(() => resolve(fullResponse.slice(0, -successMarker.length)));
               } else {
-                resolve(fullResponse);
+                settle(() => resolve(fullResponse));
               }
             } else {
-              reject(`Command failed with code ${code}, signal ${signal}:\n${fullResponse}`);
+              settle(() => reject(`Command failed with code ${code}, signal ${signal}:\n${this._sanitizeCommandOutputForError(fullResponse)}`));
             }
           });
 
           stream.on('error', (err: Error) => {
-            reject(`Error executing command: ${err}`);
+            settle(() => reject(`Error executing command: ${this._sanitizeCommandOutputForError(String(err))}`));
           });
         }
       ).catch(
         (err) => {
-          reject(`Error creating exec stream: ${err}`);
+          settle(() => reject(`Error creating exec stream: ${this._sanitizeCommandOutputForError(String(err))}`));
         });
     });
   }
@@ -480,6 +538,64 @@ export class K8sRepository {
     });
   }
 
+  async sendSaveAndUploadCommand(
+    cloudProvider: 'gcp' | 'aws',
+    clusterId: string,
+    region: string,
+    instanceId: string,
+    podId: string,
+    hasTLS: boolean,
+    signedWriteUrl: string,
+  ): Promise<void> {
+    this._options.logger.info({ clusterId, region, instanceId, podId }, 'Sending default-user save and upload command');
+
+    const kubeConfig = await this._getK8sConfig(cloudProvider, clusterId, region);
+    const password = await this._getDeploymentPassword(kubeConfig, instanceId, podId);
+    const tlsFlag = hasTLS ? '--tls' : '';
+    const shellCommand = `set -eu
+      PASSWORD="$1"
+      WRITE_URL="$2"
+
+      redis-cli -a "$PASSWORD" ${tlsFlag} --no-auth-warning bgsave >/tmp/bgsave.out 2>&1 || {
+        cat /tmp/bgsave.out >&2
+        exit 1
+      }
+
+      attempt=1
+      while [ $attempt -le 300 ]; do
+        INFO=$(redis-cli -a "$PASSWORD" ${tlsFlag} --no-auth-warning info persistence) || exit 1
+        case "$INFO" in
+          *rdb_bgsave_in_progress:0*) break ;;
+        esac
+        attempt=$((attempt + 1))
+        sleep 1
+      done
+
+      if [ $attempt -gt 300 ]; then
+        echo "ERROR: timed out waiting for source RDB save" >&2
+        exit 1
+      fi
+
+      if [ ! -s /data/dump.rdb ]; then
+        echo "ERROR: source RDB file is empty or missing" >&2
+        exit 1
+      fi
+
+      curl -fsS -X PUT -H 'Content-Type: application/octet-stream' --upload-file /data/dump.rdb "$WRITE_URL"
+    `;
+
+    await this._executeCommand(
+      kubeConfig,
+      instanceId,
+      podId,
+      ['sh', '-c', shellCommand, 'sh', password, signedWriteUrl],
+      10 * 60 * 1000,
+    ).catch((e) => {
+      this._options.logger.error(e, 'Error sending default-user save and upload command');
+      throw e;
+    });
+  }
+
   async createMergeRDBsJob(
     projectId: string,
     cloudProvider: 'gcp' | 'aws',
@@ -562,7 +678,7 @@ export class K8sRepository {
     downloadUrl: string,
   ): Promise<void> {
     this._options.logger.info({
-      clusterId, region, namespace, jobId, podId, hasTLS, downloadUrl
+      clusterId, region, namespace, jobId, podId, hasTLS,
     }, 'Creating import RDB job');
 
     const kubeConfig = await this._getK8sConfig(cloudProvider, clusterId, region, { projectId });
@@ -711,8 +827,9 @@ export class K8sRepository {
       # @, :, /, %, or whitespace cannot break the redis URI parser in rmt.
       ENC_PASS=$(printf '%s' "$PASS" | od -An -tx1 -v | tr -d ' \\n' | sed 's/../%&/g')
 
-      URL="${scheme}://:$ENC_PASS@$TARGET_HOST:6379"
-      rmt -s /data/dump.rdb -m "$URL" -r`;
+      URL="${scheme}://$TARGET_HOST:6379?authPassword=$ENC_PASS"
+      rmt -s /data/dump.rdb -m "$URL" -r \\
+        || { rc=$?; echo "ERROR: rmt import failed with exit code $rc" >&2; exit $rc; }`;
 
     const jobManifest: k8s.V1Job = {
       apiVersion: 'batch/v1',

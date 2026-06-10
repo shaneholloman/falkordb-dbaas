@@ -13,6 +13,7 @@ const SENSITIVE_KEYS = new Set([
   'accessKeyId',
   'credentials',
   'private_key',
+  'password',
   'secretAccessKey',
   'sessionToken',
   'url',
@@ -58,6 +59,11 @@ export const sanitizeRDBImportSource = (source?: RDBImportSourceType | RDBImport
     case 'url':
       return {
         type: 'url',
+      };
+    case 'instance':
+      return {
+        type: 'instance',
+        instanceId: source.instanceId,
       };
     default:
       return undefined;
