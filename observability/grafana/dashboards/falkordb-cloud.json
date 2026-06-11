@@ -134,8 +134,8 @@
           "showLegend": false
         },
         "tooltip": {
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "pluginVersion": "11.3.0",
@@ -323,11 +323,11 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "redis_memory_max_bytes{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}",
+          "expr": "max(redis_memory_max_bytes{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"})",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 2,
-          "legendFormat": "max, {{ pod }}",
+          "legendFormat": "max",
           "refId": "B",
           "step": 240
         },
@@ -336,11 +336,11 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "0.8 * redis_memory_max_bytes{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}",
+          "expr": "0.8 * max(redis_memory_max_bytes{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"})",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 2,
-          "legendFormat": "80% limit, {{ pod }}",
+          "legendFormat": "80% limit",
           "refId": "C",
           "step": 240
         }
