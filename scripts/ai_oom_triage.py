@@ -899,7 +899,7 @@ async def run_triage(args):
     try:
         session = await client.create_session(
             on_permission_request=PermissionHandler.approve_all,
-            model="claude-opus-4.6",
+            model="claude-opus-4.8",
             streaming=True,
             tools=ALL_TOOLS,
             system_message={
