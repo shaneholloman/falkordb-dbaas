@@ -23,10 +23,16 @@ export class TasksDBMongoRepository implements ITasksDBRepository {
 
   }
 
-  async createTask(type: TaskTypesType, payload: RDBExportTaskPayloadType | RDBImportTaskPayloadType): Promise<TaskDocumentType> {
-    this._options.logger.info({ type, payload: sanitizeForLogging(payload) }, 'Creating task');
+  async createTask(
+    type: TaskTypesType,
+    payload: RDBExportTaskPayloadType | RDBImportTaskPayloadType,
+    opts: { scheduleId?: string } = {},
+  ): Promise<TaskDocumentType> {
+    this._options.logger.info({ type, payload: sanitizeForLogging(payload), opts }, 'Creating task');
+    const scheduledTaskFields = opts.scheduleId ? { scheduleId: opts.scheduleId } : {};
     return await this._client.db(this._db).collection<TaskDocumentType>(this._collection).findOneAndUpdate({
       type,
+      ...scheduledTaskFields,
       payload,
       status: 'created',
       taskId: crypto.randomUUID(),
@@ -71,6 +77,21 @@ export class TasksDBMongoRepository implements ITasksDBRepository {
       pageSize,
       total,
     };
+  }
+
+  async listTasksByScheduleId(scheduleId: string, opts: { status?: TaskStatusType[], types?: TaskTypesType[] } = {}): Promise<TaskDocumentType[]> {
+    this._options.logger.info({ scheduleId, opts }, 'Listing tasks by schedule ID');
+    const query = {
+      scheduleId,
+    };
+    if (opts.status) {
+      query['status'] = { $in: opts.status };
+    }
+    if (opts.types) {
+      query['type'] = { $in: opts.types };
+    }
+    return this._client.db(this._db).collection<TaskDocumentType>(this._collection).find(query).sort({ updatedAt: -1 }).toArray()
+      .then((result) => result.map((task) => Value.Cast(TaskDocumentSchema, task)));
   }
 
   async updateTask(task: Partial<TaskDocumentType> & { taskId: string; errors?: string[] }): Promise<TaskDocumentType> {

@@ -6,7 +6,7 @@ import {
 import { listTasksHandler } from './handlers/listTasksHandler';
 
 export default fp(
-  async function handler(fastify, opts) {
+  async function handler(fastify) {
     fastify.get(
       '/tasks',
       {

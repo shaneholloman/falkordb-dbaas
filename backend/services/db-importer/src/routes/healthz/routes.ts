@@ -2,7 +2,7 @@ import fp from 'fastify-plugin';
 
 
 export default fp(
-  async function handler(fastify, opts) {
+  async function handler(fastify) {
     fastify.get(
       '/healthz',
       {
