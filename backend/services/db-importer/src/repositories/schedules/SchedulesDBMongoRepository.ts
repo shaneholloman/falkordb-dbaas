@@ -43,12 +43,8 @@ export class SchedulesDBMongoRepository implements ISchedulesDBRepository {
       updatedAt: now,
     };
 
-    const result = await this._client.db(this._db).collection<ScheduleDocument>(this._collection).findOneAndUpdate(
-      document,
-      { $set: {} },
-      { upsert: true, returnDocument: 'after' },
-    );
-    return Value.Cast(ScheduleDocumentSchema, result);
+    await this._client.db(this._db).collection<ScheduleDocument>(this._collection).insertOne(document);
+    return Value.Cast(ScheduleDocumentSchema, document);
   }
 
   async listSchedules(filters: { type?: ScheduleType; instanceId?: string } = {}): Promise<ScheduleDocument[]> {
