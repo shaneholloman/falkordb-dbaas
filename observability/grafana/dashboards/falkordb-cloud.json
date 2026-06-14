@@ -1468,7 +1468,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 7,
         "w": 12,
         "x": 0,
         "y": 53
@@ -1676,7 +1676,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 61
+        "y": 60
       },
       "id": 14,
       "options": {
@@ -1798,7 +1798,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 61
+        "y": 60
       },
       "id": 20,
       "options": {
@@ -1872,7 +1872,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 68
+        "y": 67
       },
       "id": 24,
       "options": {
@@ -1999,7 +1999,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 75
       },
       "id": 71,
       "panels": [],
@@ -2107,7 +2107,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 77
+        "y": 76
       },
       "id": 22,
       "options": {
@@ -2271,7 +2271,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 77
+        "y": 76
       },
       "id": 7,
       "options": {
@@ -2398,7 +2398,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 84
+        "y": 83
       },
       "id": 10,
       "options": {
@@ -2514,7 +2514,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 84
+        "y": 83
       },
       "id": 16,
       "options": {
@@ -2563,7 +2563,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 91
+        "y": 90
       },
       "id": 72,
       "panels": [],
@@ -2631,7 +2631,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 92
+        "y": 91
       },
       "id": 55,
       "options": {
@@ -2750,7 +2750,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 92
+        "y": 91
       },
       "id": 5,
       "options": {
@@ -2793,7 +2793,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 100
+        "y": 99
       },
       "id": 73,
       "panels": [],
@@ -2844,7 +2844,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 101
+        "y": 100
       },
       "id": 9,
       "maxDataPoints": 100,
@@ -2886,61 +2886,6 @@
       ],
       "title": "Max Uptime",
       "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 105
-      },
-      "id": 74,
-      "panels": [],
-      "title": "Logs",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "${vl_datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 106
-      },
-      "id": 25,
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": false,
-        "sortOrder": "Ascending",
-        "wrapLogMessage": false
-      },
-      "pluginVersion": "11.3.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "victoriametrics-logs-datasource",
-            "uid": "${vl_datasource}"
-          },
-          "editorMode": "code",
-          "expr": "namespace: \"$namespace\" AND pod:~\"$pod\" AND container:~\"$container\" AND -\"error:0A000126:SSL\"",
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "Logs",
-      "type": "logs"
     }
   ],
   "preload": false,
