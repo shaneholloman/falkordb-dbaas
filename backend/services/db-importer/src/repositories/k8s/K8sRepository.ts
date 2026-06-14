@@ -346,13 +346,12 @@ export class K8sRepository {
     region: string,
     instanceId: string,
     podId: string,
-    username: string,
-    password: string,
     tls = false,
   ): Promise<number> {
-    this._options.logger.info({ clusterId, region, instanceId, podId, username }, 'Getting used memory dataset');
+    this._options.logger.info({ clusterId, region, instanceId, podId }, 'Getting used memory dataset');
 
     const kubeConfig = await this._getK8sConfig(cloudProvider, clusterId, region);
+    const password = await this._getDeploymentPassword(kubeConfig, instanceId, podId);
 
     const response = await this._executeCommand(
       kubeConfig,
@@ -360,8 +359,6 @@ export class K8sRepository {
       podId,
       [
         'redis-cli',
-        '--user',
-        username,
         '-a',
         password,
         tls ? '--tls' : '',

@@ -4,7 +4,6 @@ import { ApiError } from "@falkordb/errors";
 import { ExportRDBController } from "../controllers/ExportRDBController";
 import { ITasksDBRepository } from "../../../repositories/tasks";
 import { OmnistrateRepository } from "../../../repositories/omnistrate/OmnistrateRepository";
-import { K8sRepository } from "../../../repositories/k8s/K8sRepository";
 import { decode, JwtPayload } from 'jsonwebtoken';
 import { ITaskQueueRepository } from "../../../repositories/tasksQueue/ITaskQueueRepository";
 
@@ -14,8 +13,6 @@ export const exportRDBHandler: RouteHandlerMethod<undefined, undefined, undefine
 }> = async (request, reply) => {
   const {
     instanceId,
-    username,
-    password,
     target,
   } = request.body;
 
@@ -23,13 +20,11 @@ export const exportRDBHandler: RouteHandlerMethod<undefined, undefined, undefine
 
   const tasksRepository = request.diScope.resolve<ITasksDBRepository>(ITasksDBRepository.name);
   const omnistrateRepository = request.diScope.resolve<OmnistrateRepository>(OmnistrateRepository.name);
-  const k8sRepository = request.diScope.resolve<K8sRepository>(K8sRepository.name);
   const taskQueueRepository = request.diScope.resolve<ITaskQueueRepository>(ITaskQueueRepository.name);
 
   const controller = new ExportRDBController(
     tasksRepository,
     omnistrateRepository,
-    k8sRepository,
     taskQueueRepository,
     process.env.EXPORT_BUCKET_NAME,
     {
@@ -42,8 +37,6 @@ export const exportRDBHandler: RouteHandlerMethod<undefined, undefined, undefine
     const { taskId } = await controller.exportRDB({
       requestorId: userID,
       instanceId,
-      username,
-      password,
       target,
     });
 

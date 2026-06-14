@@ -10,7 +10,6 @@ import { randomUUID } from 'crypto';
 import { ITasksDBRepository } from '../../../repositories/tasks';
 import { ISchedulesDBRepository } from '../../../repositories/schedules';
 import { OmnistrateRepository } from '../../../repositories/omnistrate/OmnistrateRepository';
-import { K8sRepository } from '../../../repositories/k8s/K8sRepository';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 import { OmnistrateInstanceSchemaType } from '../../../schemas/omnistrate-instance';
 import { RDBExportTaskService } from '../../../services/RDBExportTaskService';
@@ -32,7 +31,6 @@ export class ScheduleController {
     private schedulesRepository: ISchedulesDBRepository,
     private tasksRepository: ITasksDBRepository,
     private omnistrateRepository: OmnistrateRepository,
-    private k8sRepository: K8sRepository,
     private taskQueueRepository: ITaskQueueRepository,
     private _exportBucketName: string,
     private _scheduleOptions: {
@@ -157,34 +155,6 @@ export class ScheduleController {
     }
   }
 
-  private async _assertAdminCredentials(
-    instance: OmnistrateInstanceSchemaType,
-    podId: string,
-    username: string,
-    password: string,
-  ): Promise<void> {
-    let isAdmin = false;
-    try {
-      isAdmin = await this.k8sRepository.isUserAdmin(
-        instance.cloudProvider,
-        instance.clusterId,
-        instance.region,
-        instance.id,
-        podId,
-        username,
-        password,
-        instance.tls,
-      );
-    } catch (error) {
-      this._opts.logger.error({ error }, 'Error validating credentials');
-      throw ApiError.internalServerError('Error validating credentials', 'CREDENTIALS_ERROR');
-    }
-
-    if (!isAdmin) {
-      throw ApiError.unauthorized('Invalid credentials', 'INVALID_CREDENTIALS');
-    }
-  }
-
   private async _createRDBExportTask(schedule: ScheduleDocument): Promise<{ taskId: string }> {
     const exportTaskService = this._makeExportTaskService();
     const instance = await exportTaskService.getExportableInstance(schedule.payload.instanceId);
@@ -209,8 +179,8 @@ export class ScheduleController {
     type: 'RDBExport';
     payload: {
       instanceId: string;
-      username: string;
-      password: string;
+      username?: string;
+      password?: string;
       target?: RDBExportTargetType;
     };
     periodMinutes: number;
@@ -223,8 +193,6 @@ export class ScheduleController {
     await this._assertUserHasExportAccess(requestorId, instance);
     await this._assertInstanceScheduleLimit(type, payload.instanceId);
 
-    const podId = exportTaskService.resolvePrimaryPodId(instance);
-    await this._assertAdminCredentials(instance, podId, payload.username, payload.password);
     await exportTaskService.verifyTargetWriteAccess(payload.target, `exports/${instance.id}/schedule-validation-${randomUUID()}.rdb`);
 
     const schedule = await this.schedulesRepository.createSchedule({

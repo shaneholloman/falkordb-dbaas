@@ -32,7 +32,7 @@ export const importRDBConfirmUploadHandler: RouteHandlerMethod<undefined, undefi
     tasksRepository,
     storageRepository,
     taskQueueRepository,
-    process.env.IMPORT_BUCKET_NAME,
+    request.server.config.IMPORT_BUCKET_NAME,
     {
       logger,
     }

@@ -9,6 +9,7 @@ export const EnvSchema = Type.Object({
   OMNISTRATE_PASSWORD: Type.String({ default: '' }),
   OMNISTRATE_SERVICE_ID: Type.String({ default: '' }),
   OMNISTRATE_ENVIRONMENT_ID: Type.String({ default: '' }),
+  IMPORT_BUCKET_NAME: Type.String({ default: '' }),
   EXPORT_BUCKET_NAME: Type.String({ default: '' }),
   SCHEDULE_TRIGGER_TOKEN: Type.String({ default: '' }),
   SCHEDULE_RDB_EXPORT_ALLOWED_TIERS: Type.String({ default: 'FalkorDB Pro,FalkorDB Enterprise' }),

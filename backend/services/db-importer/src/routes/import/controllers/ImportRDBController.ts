@@ -175,19 +175,6 @@ export class ImportRDBController {
         }
         const sourcePodIds = this._resolveSourceExportPodIds(sourceInstance);
         const podId = sourcePodIds[0];
-        const isSourceAdmin = await this.k8sRepository.isUserAdmin(
-          sourceInstance.cloudProvider,
-          sourceInstance.clusterId,
-          sourceInstance.region,
-          sourceInstance.id,
-          podId,
-          source.username,
-          source.password,
-          sourceInstance.tls,
-        );
-        if (!isSourceAdmin) {
-          throw new Error('Invalid source instance credentials');
-        }
 
         const sourceUsedMemoryDatasets = await Promise.all(sourcePodIds.map((sourcePodId) => this.k8sRepository.getUsedMemoryDataset(
           sourceInstance.cloudProvider,
@@ -195,8 +182,6 @@ export class ImportRDBController {
           sourceInstance.region,
           sourceInstance.id,
           sourcePodId,
-          source.username,
-          source.password,
           sourceInstance.tls,
         )));
         const sourceUsedMemoryDataset = destinationIsCluster
@@ -250,14 +235,12 @@ export class ImportRDBController {
   async requestUploadUrl({
     requestorId,
     instanceId,
-    username,
-    password,
     source,
   }: {
     requestorId: string;
     instanceId: string;
-    username: string;
-    password: string;
+    username?: string;
+    password?: string;
     source?: RDBImportRequestSourceType;
   }): Promise<{ taskId: string; uploadUrl?: string }> {
     // Get instance details from omnistrate
@@ -294,28 +277,6 @@ export class ImportRDBController {
     }
 
     const podId = `${this._resolvePodPrefix(instance)}-0`;
-
-    // Validate credentials with k8s repository
-    let isAdmin = false;
-    try {
-      isAdmin = await this.k8sRepository.isUserAdmin(
-        instance.cloudProvider,
-        instance.clusterId,
-        instance.region,
-        instanceId,
-        podId,
-        username,
-        password,
-        instance.tls,
-      );
-    } catch (error) {
-      this._opts.logger.error({ error }, 'Error validating credentials');
-      throw ApiError.internalServerError('Error validating credentials', 'CREDENTIALS_ERROR');
-    }
-
-    if (!isAdmin) {
-      throw ApiError.unauthorized('Invalid credentials', 'INVALID_CREDENTIALS');
-    }
 
     let maxMemory: string | undefined;
     try {

@@ -14,7 +14,6 @@ import {
 import { ITasksDBRepository } from '../../../repositories/tasks';
 import { ISchedulesDBRepository } from '../../../repositories/schedules';
 import { OmnistrateRepository } from '../../../repositories/omnistrate/OmnistrateRepository';
-import { K8sRepository } from '../../../repositories/k8s/K8sRepository';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 import { ScheduleController } from '../controllers/ScheduleController';
 
@@ -30,14 +29,12 @@ const makeScheduleController = (request: FastifyRequest): ScheduleController => 
   const schedulesRepository = request.diScope.resolve<ISchedulesDBRepository>(ISchedulesDBRepository.name);
   const tasksRepository = request.diScope.resolve<ITasksDBRepository>(ITasksDBRepository.name);
   const omnistrateRepository = request.diScope.resolve<OmnistrateRepository>(OmnistrateRepository.name);
-  const k8sRepository = request.diScope.resolve<K8sRepository>(K8sRepository.name);
   const taskQueueRepository = request.diScope.resolve<ITaskQueueRepository>(ITaskQueueRepository.name);
 
   return new ScheduleController(
     schedulesRepository,
     tasksRepository,
     omnistrateRepository,
-    k8sRepository,
     taskQueueRepository,
     request.server.config.EXPORT_BUCKET_NAME,
     {

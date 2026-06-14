@@ -222,10 +222,15 @@ export const RDBImportInstanceSourceSchema = Type.Object({
 export const RDBImportRequestInstanceSourceSchema = Type.Object({
   type: Type.Literal('instance'),
   instanceId: Type.String(),
-  username: Type.String({
+  username: Type.Optional(Type.String({
     pattern: "^[a-zA-Z0-9._-]+$",
-  }),
-  password: Type.String(),
+    deprecated: true,
+    description: 'Deprecated. Source instance access is authorized by subscription role.',
+  })),
+  password: Type.Optional(Type.String({
+    deprecated: true,
+    description: 'Deprecated. Source instance access is authorized by subscription role.',
+  })),
 }, { additionalProperties: false });
 
 export const RDBImportRequestSourceSchema = Type.Union([

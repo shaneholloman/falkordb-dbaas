@@ -106,9 +106,6 @@ const makeController = ({
     }),
     checkIfUserHasAccessToInstance: jest.fn().mockResolvedValue(true),
   };
-  const k8sRepository = {
-    isUserAdmin: jest.fn().mockResolvedValue(true),
-  };
   const taskQueueRepository = {
     submitExportRDBTask: jest.fn().mockResolvedValue(undefined),
   };
@@ -118,7 +115,6 @@ const makeController = ({
       schedulesRepository as never,
       tasksRepository as never,
       omnistrateRepository as never,
-      k8sRepository as never,
       taskQueueRepository as never,
       'export-bucket',
       {
@@ -145,6 +141,15 @@ describe('scheduled export flow', () => {
   });
 
   it('validates minimum one hour period and quarter-hour schedule minute', () => {
+    expect(Value.Check(CreateScheduleRequestBodySchema, {
+      type: 'RDBExport',
+      payload: {
+        instanceId: 'instance-id',
+      },
+      periodMinutes: 60,
+      minuteOfHour: 15,
+    })).toBe(true);
+
     expect(Value.Check(CreateScheduleRequestBodySchema, {
       type: 'RDBExport',
       payload: {
@@ -187,8 +192,6 @@ describe('scheduled export flow', () => {
       type: 'RDBExport',
       payload: {
         instanceId: 'instance-id',
-        username: 'falkordb',
-        password: 'password',
         target: {
           type: 's3',
           bucketName: 'customer-bucket',

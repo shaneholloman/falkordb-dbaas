@@ -16,12 +16,16 @@ export type ScheduleMinuteOfHourType = Static<typeof ScheduleMinuteOfHourSchema>
 
 export const CreateRDBExportSchedulePayloadSchema = Type.Object({
   instanceId: Type.String(),
-  username: Type.String({
+  username: Type.Optional(Type.String({
     pattern: '^[a-zA-Z0-9._-]+$',
-  }),
-  password: Type.String({
+    deprecated: true,
+    description: 'Deprecated. Access is authorized by subscription role.',
+  })),
+  password: Type.Optional(Type.String({
     pattern: '^[a-zA-Z0-9._!\@\#\$\%\^\&\*]+$',
-  }),
+    deprecated: true,
+    description: 'Deprecated. Access is authorized by subscription role.',
+  })),
   target: Type.Optional(RDBExportTargetSchema),
 });
 

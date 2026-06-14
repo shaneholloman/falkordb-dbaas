@@ -145,9 +145,6 @@ const makeController = (createdTask: ExportRDBTaskType) => {
     }),
     checkIfUserHasAccessToInstance: jest.fn().mockResolvedValue(true),
   };
-  const k8sRepository = {
-    isUserAdmin: jest.fn().mockResolvedValue(true),
-  };
   const taskQueueRepository = {
     submitExportRDBTask: jest.fn().mockResolvedValue(undefined),
   };
@@ -156,7 +153,6 @@ const makeController = (createdTask: ExportRDBTaskType) => {
     controller: new ExportRDBController(
       tasksRepository as never,
       omnistrateRepository as never,
-      k8sRepository as never,
       taskQueueRepository as never,
       'falkordb-export-bucket',
       { logger: logger as never },
@@ -194,6 +190,9 @@ describe('export target flow', () => {
   it('rejects hyphens in export request passwords', () => {
     expect(Value.Check(ExportRDBRequestBodySchema, {
       instanceId: 'instance-id',
+    })).toBe(true);
+    expect(Value.Check(ExportRDBRequestBodySchema, {
+      instanceId: 'instance-id',
       username: 'falkordb',
       password: 'password',
     })).toBe(true);
@@ -216,8 +215,6 @@ describe('export target flow', () => {
     await controller.exportRDB({
       requestorId: 'user-id',
       instanceId: 'instance-id',
-      username: 'falkordb',
-      password: 'password',
       target,
     });
 
