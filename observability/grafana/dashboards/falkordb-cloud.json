@@ -24,93 +24,6 @@
   "panels": [
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "rgb(31, 120, 193)",
-            "mode": "fixed"
-          },
-          "decimals": 0,
-          "mappings": [
-            {
-              "options": {
-                "match": "null",
-                "result": {
-                  "text": "N/A"
-                }
-              },
-              "type": "special"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 9,
-      "maxDataPoints": 100,
-      "options": {
-        "colorMode": "none",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "11.3.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "max(max_over_time(redis_uptime_in_seconds{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[$__interval]))",
-          "format": "time_series",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "",
-          "metric": "",
-          "range": true,
-          "refId": "A",
-          "step": 1800
-        }
-      ],
-      "title": "Max Uptime",
-      "type": "stat"
-    },
-    {
-      "datasource": {
         "uid": "${datasource}"
       },
       "fieldConfig": {
@@ -137,9 +50,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 5,
         "x": 0,
-        "y": 4
+        "y": 0
       },
       "id": 21,
       "options": {
@@ -257,9 +170,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 4
+        "w": 5,
+        "x": 5,
+        "y": 0
       },
       "hideTimeOverride": true,
       "id": 12,
@@ -309,6 +222,93 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "fixedColor": "rgb(31, 120, 193)",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "N/A"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 10,
+        "y": 0
+      },
+      "id": 9,
+      "maxDataPoints": 100,
+      "options": {
+        "colorMode": "none",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max(max_over_time(redis_uptime_in_seconds{pod=~\"$pod\", namespace=~\"$namespace\", container=~\"$container\"}[$__interval]))",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "",
+          "metric": "",
+          "range": true,
+          "refId": "A",
+          "step": 1800
+        }
+      ],
+      "title": "Max Uptime",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
             "mode": "thresholds"
           },
           "decimals": 0,
@@ -348,9 +348,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 4
+        "w": 5,
+        "x": 14,
+        "y": 0
       },
       "hideTimeOverride": true,
       "id": 11,
@@ -421,9 +421,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 4
+        "w": 5,
+        "x": 19,
+        "y": 0
       },
       "id": 23,
       "options": {
@@ -467,7 +467,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 4
       },
       "id": 58,
       "panels": [],
@@ -536,7 +536,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 9
+        "y": 5
       },
       "id": 59,
       "options": {
@@ -596,7 +596,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 17
+        "y": 13
       },
       "id": 61,
       "options": {
@@ -733,7 +733,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 17
+        "y": 13
       },
       "id": 62,
       "options": {
@@ -817,7 +817,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 21
       },
       "id": 51,
       "panels": [],
@@ -890,7 +890,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 26
+        "y": 22
       },
       "id": 52,
       "options": {
@@ -1031,7 +1031,7 @@
         "h": 15,
         "w": 12,
         "x": 12,
-        "y": 26
+        "y": 22
       },
       "id": 54,
       "options": {
@@ -1207,7 +1207,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 41
+        "y": 37
       },
       "id": 56,
       "options": {
@@ -1280,7 +1280,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 45
       },
       "id": 70,
       "panels": [],
@@ -1353,7 +1353,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 50
+        "y": 46
       },
       "id": 18,
       "options": {
@@ -1455,7 +1455,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 50
+        "y": 46
       },
       "id": 28,
       "options": {
@@ -1558,7 +1558,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 57
+        "y": 53
       },
       "id": 29,
       "options": {
@@ -1661,7 +1661,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 57
+        "y": 53
       },
       "id": 27,
       "options": {
@@ -1763,7 +1763,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 60
       },
       "id": 14,
       "options": {
@@ -1885,7 +1885,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 60
       },
       "id": 20,
       "options": {
@@ -1959,7 +1959,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 67
       },
       "id": 24,
       "options": {
@@ -2086,7 +2086,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 79
+        "y": 75
       },
       "id": 71,
       "panels": [],
@@ -2194,7 +2194,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 80
+        "y": 76
       },
       "id": 22,
       "options": {
@@ -2358,7 +2358,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 80
+        "y": 76
       },
       "id": 7,
       "options": {
@@ -2485,7 +2485,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 87
+        "y": 83
       },
       "id": 10,
       "options": {
@@ -2601,7 +2601,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 87
+        "y": 83
       },
       "id": 16,
       "options": {
@@ -2650,7 +2650,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 94
+        "y": 90
       },
       "id": 72,
       "panels": [],
@@ -2718,7 +2718,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 95
+        "y": 91
       },
       "id": 55,
       "options": {
@@ -2837,7 +2837,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 95
+        "y": 91
       },
       "id": 5,
       "options": {
