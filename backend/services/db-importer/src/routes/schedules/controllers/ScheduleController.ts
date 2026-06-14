@@ -281,7 +281,7 @@ export class ScheduleController {
         });
       } catch (error) {
         this._opts.logger.warn({ error }, 'Invalid scheduled import source');
-        throw ApiError.badRequest('Invalid import source credentials or object access', 'INVALID_IMPORT_SOURCE');
+        throw ApiError.badRequest('Invalid scheduled import source', 'INVALID_IMPORT_SOURCE');
       }
       schedulePayload = {
         instanceId: payload.instanceId,

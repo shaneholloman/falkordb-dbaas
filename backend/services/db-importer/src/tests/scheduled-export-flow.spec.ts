@@ -456,6 +456,28 @@ describe('scheduled export flow', () => {
     expect(JSON.stringify(schedulesRepository.createSchedule.mock.calls[0][0])).not.toContain('password');
   });
 
+  it('rejects invalid scheduled import sources without credential wording', async () => {
+    const { controller, k8sRepository } = makeController();
+    k8sRepository.getUsedMemoryDataset.mockResolvedValue(2 * 1024 * 1024 * 1024);
+
+    await expect(controller.createSchedule({
+      requestorId: 'user-id',
+      type: 'RDBImport',
+      payload: {
+        instanceId: 'instance-id',
+        source: {
+          type: 'instance',
+          instanceId: 'source-instance-id',
+        },
+      },
+      periodMinutes: 60,
+      minuteOfHour: 30,
+    })).rejects.toMatchObject({
+      message: 'Invalid scheduled import source',
+      errorCode: 'INVALID_IMPORT_SOURCE',
+    });
+  });
+
   it('triggers due schedules by creating normal export tasks', async () => {
     const dueSchedule = makeSchedule({ nextRunAt: '2026-06-11T10:15:00.000Z' });
     const { controller, schedulesRepository, tasksRepository, taskQueueRepository } = makeController({
