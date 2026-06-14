@@ -16,6 +16,7 @@ import { ISchedulesDBRepository } from '../../../repositories/schedules';
 import { OmnistrateRepository } from '../../../repositories/omnistrate/OmnistrateRepository';
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 import { ScheduleController } from '../controllers/ScheduleController';
+import { K8sRepository } from '../../../repositories/k8s/K8sRepository';
 
 const getRequestorId = (authorization?: string): string => {
   const { userID } = decode(authorization?.split(' ').pop()) as JwtPayload;
@@ -29,14 +30,17 @@ const makeScheduleController = (request: FastifyRequest): ScheduleController => 
   const schedulesRepository = request.diScope.resolve<ISchedulesDBRepository>(ISchedulesDBRepository.name);
   const tasksRepository = request.diScope.resolve<ITasksDBRepository>(ITasksDBRepository.name);
   const omnistrateRepository = request.diScope.resolve<OmnistrateRepository>(OmnistrateRepository.name);
+  const k8sRepository = request.diScope.resolve<K8sRepository>(K8sRepository.name);
   const taskQueueRepository = request.diScope.resolve<ITaskQueueRepository>(ITaskQueueRepository.name);
 
   return new ScheduleController(
     schedulesRepository,
     tasksRepository,
     omnistrateRepository,
+    k8sRepository,
     taskQueueRepository,
     request.server.config.EXPORT_BUCKET_NAME,
+    request.server.config.IMPORT_BUCKET_NAME,
     {
       defaultFailureThreshold: request.server.config.SCHEDULE_FAILURE_THRESHOLD,
       rdbExportAllowedTiers: request.server.config.SCHEDULE_RDB_EXPORT_ALLOWED_TIERS,

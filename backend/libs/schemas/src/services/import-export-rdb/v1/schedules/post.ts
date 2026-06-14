@@ -1,8 +1,9 @@
 import { type Static, Type } from '@sinclair/typebox';
-import { RDBExportPublicTargetSchema, RDBExportTargetSchema } from '../../../../global';
+import { RDBExportPublicTargetSchema, RDBExportTargetSchema, RDBImportInstanceSourceSchema, RDBImportPublicInstanceSourceSchema, RDBImportRequestInstanceSourceSchema } from '../../../../global';
 
 export const ScheduleTypeSchema = Type.Union([
   Type.Literal('RDBExport'),
+  Type.Literal('RDBImport'),
 ]);
 export type ScheduleType = Static<typeof ScheduleTypeSchema>;
 
@@ -39,20 +40,49 @@ export const PublicRDBExportSchedulePayloadSchema = Type.Object({
   target: Type.Optional(RDBExportPublicTargetSchema),
 });
 
-export const CreateScheduleRequestBodySchema = Type.Object({
-  type: Type.Literal('RDBExport'),
-  payload: CreateRDBExportSchedulePayloadSchema,
-  periodMinutes: Type.Integer({ minimum: 60, multipleOf: 15 }),
-  minuteOfHour: ScheduleMinuteOfHourSchema,
-  failureThreshold: Type.Optional(Type.Integer({ minimum: 1 })),
+export const CreateRDBImportSchedulePayloadSchema = Type.Object({
+  instanceId: Type.String(),
+  source: RDBImportRequestInstanceSourceSchema,
 });
+
+export const RDBImportSchedulePayloadSchema = Type.Object({
+  instanceId: Type.String(),
+  source: RDBImportInstanceSourceSchema,
+});
+
+export const PublicRDBImportSchedulePayloadSchema = Type.Object({
+  instanceId: Type.String(),
+  source: RDBImportPublicInstanceSourceSchema,
+});
+
+export const CreateScheduleRequestBodySchema = Type.Union([
+  Type.Object({
+    type: Type.Literal('RDBExport'),
+    payload: CreateRDBExportSchedulePayloadSchema,
+    periodMinutes: Type.Integer({ minimum: 60, multipleOf: 15 }),
+    minuteOfHour: ScheduleMinuteOfHourSchema,
+    failureThreshold: Type.Optional(Type.Integer({ minimum: 1 })),
+  }),
+  Type.Object({
+    type: Type.Literal('RDBImport'),
+    payload: CreateRDBImportSchedulePayloadSchema,
+    periodMinutes: Type.Integer({ minimum: 60, multipleOf: 15 }),
+    minuteOfHour: ScheduleMinuteOfHourSchema,
+    failureThreshold: Type.Optional(Type.Integer({ minimum: 1 })),
+  }),
+]);
 export type CreateScheduleRequestBody = Static<typeof CreateScheduleRequestBodySchema>;
+
+export const SchedulePayloadSchema = Type.Union([
+  RDBExportSchedulePayloadSchema,
+  RDBImportSchedulePayloadSchema,
+]);
 
 export const ScheduleDocumentSchema = Type.Object({
   scheduleId: Type.String(),
   requestorId: Type.String(),
   type: ScheduleTypeSchema,
-  payload: RDBExportSchedulePayloadSchema,
+  payload: SchedulePayloadSchema,
   periodMinutes: Type.Integer({ minimum: 60, multipleOf: 15 }),
   minuteOfHour: ScheduleMinuteOfHourSchema,
   failureThreshold: Type.Integer({ minimum: 1 }),
@@ -63,11 +93,16 @@ export const ScheduleDocumentSchema = Type.Object({
 }, { additionalProperties: false });
 export type ScheduleDocument = Static<typeof ScheduleDocumentSchema>;
 
+export const PublicSchedulePayloadSchema = Type.Union([
+  PublicRDBExportSchedulePayloadSchema,
+  PublicRDBImportSchedulePayloadSchema,
+]);
+
 export const PublicScheduleSchema = Type.Object({
   scheduleId: Type.String(),
   requestorId: Type.String(),
   type: ScheduleTypeSchema,
-  payload: PublicRDBExportSchedulePayloadSchema,
+  payload: PublicSchedulePayloadSchema,
   periodMinutes: Type.Integer({ minimum: 60, multipleOf: 15 }),
   minuteOfHour: ScheduleMinuteOfHourSchema,
   failureThreshold: Type.Integer({ minimum: 1 }),

@@ -1,9 +1,11 @@
 import { FastifyBaseLogger } from 'fastify';
 import { ApiError } from '@falkordb/errors';
-import { PublicSchedule, ScheduleDocument } from '@falkordb/schemas/services/import-export-rdb/v1';
+import { PublicSchedule, ScheduleDocument, ScheduleType } from '@falkordb/schemas/services/import-export-rdb/v1';
 import {
   RDBExportPublicTargetType,
   RDBExportTargetType,
+  RDBImportRequestSourceType,
+  RDBImportSourceType,
   TaskTypesType,
 } from '@falkordb/schemas/global';
 import { randomUUID } from 'crypto';
@@ -13,8 +15,11 @@ import { OmnistrateRepository } from '../../../repositories/omnistrate/Omnistrat
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 import { OmnistrateInstanceSchemaType } from '../../../schemas/omnistrate-instance';
 import { RDBExportTaskService } from '../../../services/RDBExportTaskService';
+import { RDBImportTaskService } from '../../../services/RDBImportTaskService';
+import { K8sRepository } from '../../../repositories/k8s/K8sRepository';
 
 const EXPORT_TASK_TYPES: TaskTypesType[] = ['SingleShardRDBExport', 'MultiShardRDBExport'];
+const IMPORT_TASK_TYPES: TaskTypesType[] = ['RDBImport'];
 const RUNNING_TASK_STATUSES = ['created', 'pending', 'in_progress'] as const;
 const DEFAULT_RDB_EXPORT_ALLOWED_TIERS = ['FalkorDB Pro', 'FalkorDB Enterprise'];
 const MAX_SCHEDULES_PER_INSTANCE = 2;
@@ -26,13 +31,18 @@ type TriggerScheduleResult = {
   failed: { scheduleId: string; error: string }[];
 };
 
+type RDBExportSchedulePayload = { instanceId: string; target?: RDBExportTargetType };
+type RDBImportSchedulePayload = { instanceId: string; source: Extract<RDBImportSourceType, { type: 'instance' }> };
+
 export class ScheduleController {
   constructor(
     private schedulesRepository: ISchedulesDBRepository,
     private tasksRepository: ITasksDBRepository,
     private omnistrateRepository: OmnistrateRepository,
+    private k8sRepository: K8sRepository,
     private taskQueueRepository: ITaskQueueRepository,
     private _exportBucketName: string,
+    private _importBucketName: string,
     private _scheduleOptions: {
       defaultFailureThreshold: number;
       rdbExportAllowedTiers: string;
@@ -62,11 +72,26 @@ export class ScheduleController {
   }
 
   private _toPublicSchedule(schedule: ScheduleDocument): PublicSchedule {
+    if (schedule.type === 'RDBImport') {
+      const payload = schedule.payload as RDBImportSchedulePayload;
+      return {
+        ...schedule,
+        payload: {
+          instanceId: payload.instanceId,
+          source: {
+            type: 'instance',
+            instanceId: payload.source.instanceId,
+          },
+        },
+      };
+    }
+
+    const payload = schedule.payload as RDBExportSchedulePayload;
     return {
       ...schedule,
       payload: {
-        ...schedule.payload,
-        target: this._sanitizeTarget(schedule.payload.target),
+        ...payload,
+        target: this._sanitizeTarget(payload.target),
       },
     };
   }
@@ -100,6 +125,17 @@ export class ScheduleController {
       this.omnistrateRepository,
       this.taskQueueRepository,
       this._exportBucketName,
+      this._opts,
+    );
+  }
+
+  private _makeImportTaskService(): RDBImportTaskService {
+    return new RDBImportTaskService(
+      this.tasksRepository,
+      this.omnistrateRepository,
+      this.k8sRepository,
+      this.taskQueueRepository,
+      this._importBucketName,
       this._opts,
     );
   }
@@ -148,7 +184,7 @@ export class ScheduleController {
     }
   }
 
-  private async _assertInstanceScheduleLimit(type: 'RDBExport', instanceId: string): Promise<void> {
+  private async _assertInstanceScheduleLimit(type: ScheduleType, instanceId: string): Promise<void> {
     const existingSchedules = await this.schedulesRepository.listSchedules({ type, instanceId });
     if (existingSchedules.length >= MAX_SCHEDULES_PER_INSTANCE) {
       throw ApiError.badRequest('Maximum schedules per instance reached', 'MAX_SCHEDULES_PER_INSTANCE_REACHED');
@@ -157,14 +193,42 @@ export class ScheduleController {
 
   private async _createRDBExportTask(schedule: ScheduleDocument): Promise<{ taskId: string }> {
     const exportTaskService = this._makeExportTaskService();
-    const instance = await exportTaskService.getExportableInstance(schedule.payload.instanceId);
+    const payload = schedule.payload as RDBExportSchedulePayload;
+    const instance = await exportTaskService.getExportableInstance(payload.instanceId);
     this._assertRDBExportScheduleTier(instance);
 
     return exportTaskService.createAndSubmitTask({
       instance,
-      target: schedule.payload.target,
+      target: payload.target,
       scheduleId: schedule.scheduleId,
     });
+  }
+
+  private async _createRDBImportTask(schedule: ScheduleDocument): Promise<{ taskId: string }> {
+    if (schedule.type !== 'RDBImport') {
+      throw ApiError.badRequest('Invalid schedule type', 'INVALID_SCHEDULE_TYPE');
+    }
+
+    const importTaskService = this._makeImportTaskService();
+    const payload = schedule.payload as RDBImportSchedulePayload;
+    const instance = await importTaskService.getImportableInstanceWithoutAccessCheck(payload.instanceId);
+    return importTaskService.createAndSubmitTask({
+      instance,
+      source: payload.source,
+      scheduleId: schedule.scheduleId,
+    });
+  }
+
+  private _taskTypesForSchedule(type: ScheduleType): TaskTypesType[] {
+    return type === 'RDBImport' ? IMPORT_TASK_TYPES : EXPORT_TASK_TYPES;
+  }
+
+  private async _createTaskForSchedule(schedule: ScheduleDocument): Promise<{ taskId: string }> {
+    if (schedule.type === 'RDBImport') {
+      return this._createRDBImportTask(schedule);
+    }
+
+    return this._createRDBExportTask(schedule);
   }
 
   async createSchedule({
@@ -176,32 +240,69 @@ export class ScheduleController {
     failureThreshold,
   }: {
     requestorId: string;
-    type: 'RDBExport';
+    type: ScheduleType;
     payload: {
       instanceId: string;
       username?: string;
       password?: string;
       target?: RDBExportTargetType;
+      source?: Extract<RDBImportRequestSourceType, { type: 'instance' }>;
     };
     periodMinutes: number;
     minuteOfHour: 0 | 15 | 30 | 45;
     failureThreshold?: number;
   }): Promise<PublicSchedule> {
-    const exportTaskService = this._makeExportTaskService();
-    const instance = await exportTaskService.getExportableInstance(payload.instanceId);
-    this._assertRDBExportScheduleTier(instance);
-    await this._assertUserHasExportAccess(requestorId, instance);
     await this._assertInstanceScheduleLimit(type, payload.instanceId);
 
-    await exportTaskService.verifyTargetWriteAccess(payload.target, `exports/${instance.id}/schedule-validation-${randomUUID()}.rdb`);
+    let schedulePayload: { instanceId: string; target?: RDBExportTargetType } | { instanceId: string; source: Extract<RDBImportSourceType, { type: 'instance' }> };
+    if (type === 'RDBImport') {
+      if (!payload.source || payload.source.type !== 'instance') {
+        throw ApiError.badRequest('Scheduled imports only support instance sources', 'INVALID_SCHEDULE_IMPORT_SOURCE');
+      }
+
+      const importTaskService = this._makeImportTaskService();
+      const instance = await importTaskService.getImportableInstance(requestorId, payload.instanceId);
+      const pendingTasks = await importTaskService.getPendingImportTasks(payload.instanceId);
+      if (pendingTasks.length > 0) {
+        throw ApiError.conflict('There is already a task in progress', 'TASK_IN_PROGRESS');
+      }
+      const maxMemory = await importTaskService.getMaxMemory(instance);
+      if (!maxMemory) {
+        throw ApiError.internalServerError('Instance size is not set', 'INSTANCE_SIZE_NOT_SET');
+      }
+      let source: Extract<RDBImportSourceType, { type: 'instance' }>;
+      try {
+        source = await importTaskService.prepareInstanceSource({
+          source: payload.source,
+          requestorId,
+          destinationInstanceId: payload.instanceId,
+          destinationMaxMemoryBytes: parseInt(maxMemory, 10),
+          destinationIsCluster: instance.deploymentType.startsWith('Cluster'),
+        });
+      } catch (error) {
+        this._opts.logger.warn({ error }, 'Invalid scheduled import source');
+        throw ApiError.badRequest('Invalid import source credentials or object access', 'INVALID_IMPORT_SOURCE');
+      }
+      schedulePayload = {
+        instanceId: payload.instanceId,
+        source,
+      };
+    } else {
+      const exportTaskService = this._makeExportTaskService();
+      const instance = await exportTaskService.getExportableInstance(payload.instanceId);
+      this._assertRDBExportScheduleTier(instance);
+      await this._assertUserHasExportAccess(requestorId, instance);
+      await exportTaskService.verifyTargetWriteAccess(payload.target, `exports/${instance.id}/schedule-validation-${randomUUID()}.rdb`);
+      schedulePayload = {
+        instanceId: payload.instanceId,
+        target: payload.target,
+      };
+    }
 
     const schedule = await this.schedulesRepository.createSchedule({
       requestorId,
       type,
-      payload: {
-        instanceId: payload.instanceId,
-        target: payload.target,
-      },
+      payload: schedulePayload,
       periodMinutes,
       minuteOfHour,
       failureThreshold: failureThreshold ?? this._defaultFailureThreshold(),
@@ -211,7 +312,7 @@ export class ScheduleController {
     return this._toPublicSchedule(schedule);
   }
 
-  async listSchedules(requestorId: string, filters: { type?: 'RDBExport'; instanceId?: string }): Promise<PublicSchedule[]> {
+  async listSchedules(requestorId: string, filters: { type?: ScheduleType; instanceId?: string }): Promise<PublicSchedule[]> {
     if (filters.instanceId) {
       await this._assertScheduleAccess(requestorId, filters.instanceId);
     }
@@ -231,14 +332,15 @@ export class ScheduleController {
 
   private async _triggerSchedule(schedule: ScheduleDocument, now: Date): Promise<TriggerScheduleResult> {
     try {
+      const taskTypes = this._taskTypesForSchedule(schedule.type);
       const [runningTasks, failedTasks] = await Promise.all([
         this.tasksRepository.listTasksByScheduleId(schedule.scheduleId, {
           status: [...RUNNING_TASK_STATUSES],
-          types: EXPORT_TASK_TYPES,
+          types: taskTypes,
         }),
         this.tasksRepository.listTasksByScheduleId(schedule.scheduleId, {
           status: ['failed'],
-          types: EXPORT_TASK_TYPES,
+          types: taskTypes,
         }),
       ]);
 
@@ -261,16 +363,7 @@ export class ScheduleController {
         };
       }
 
-      if (schedule.type !== 'RDBExport') {
-        return {
-          triggered: [],
-          skipped: [{ scheduleId: schedule.scheduleId, reason: 'unsupported schedule type' }],
-          disabled: [],
-          failed: [],
-        };
-      }
-
-      const { taskId } = await this._createRDBExportTask(schedule);
+      const { taskId } = await this._createTaskForSchedule(schedule);
       await this.schedulesRepository.updateNextRunAt(schedule.scheduleId, this._nextRunAfter(schedule, now));
 
       return {
@@ -281,7 +374,7 @@ export class ScheduleController {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this._opts.logger.error({ error, scheduleId: schedule.scheduleId }, 'Error triggering scheduled export');
+      this._opts.logger.error({ error, scheduleId: schedule.scheduleId, type: schedule.type }, 'Error triggering schedule');
       return {
         triggered: [],
         skipped: [],

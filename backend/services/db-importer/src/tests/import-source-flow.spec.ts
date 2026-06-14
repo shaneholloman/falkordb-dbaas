@@ -411,6 +411,12 @@ describe('import RDB customer source flow', () => {
     });
 
     expect(result).toEqual({ taskId: 'task-id' });
+    expect(omnistrateRepository.checkIfUserHasAccessToInstance).toHaveBeenCalledWith(
+      'user-id',
+      expect.objectContaining({ id: 'instance-id' }),
+      undefined,
+      ['root', 'editor'],
+    );
     expect(omnistrateRepository.getInstance).toHaveBeenCalledWith('source-instance-id');
     expect(omnistrateRepository.checkIfUserHasAccessToInstance).toHaveBeenCalledWith(
       'user-id',

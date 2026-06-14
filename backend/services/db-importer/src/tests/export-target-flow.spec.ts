@@ -158,6 +158,7 @@ const makeController = (createdTask: ExportRDBTaskType) => {
       { logger: logger as never },
     ),
     tasksRepository,
+    omnistrateRepository,
   };
 };
 
@@ -210,7 +211,7 @@ describe('export target flow', () => {
       bucketName: 'customer-bucket',
       credentials: serviceAccountCredentials,
     };
-    const { controller, tasksRepository } = makeController(makeSingleShardTask(target));
+    const { controller, tasksRepository, omnistrateRepository } = makeController(makeSingleShardTask(target));
 
     await controller.exportRDB({
       requestorId: 'user-id',
@@ -218,6 +219,12 @@ describe('export target flow', () => {
       target,
     });
 
+    expect(omnistrateRepository.checkIfUserHasAccessToInstance).toHaveBeenCalledWith(
+      'user-id',
+      expect.objectContaining({ id: 'instance-id' }),
+      undefined,
+      ['root', 'editor', 'reader'],
+    );
     expect(gcsSaveMock).toHaveBeenCalledWith(Buffer.alloc(0), {
       contentType: 'application/octet-stream',
       resumable: false,

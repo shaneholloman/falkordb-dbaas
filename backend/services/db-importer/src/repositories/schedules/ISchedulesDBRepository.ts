@@ -1,10 +1,14 @@
-import { RDBExportTargetType } from '@falkordb/schemas/global';
+import { RDBExportTargetType, RDBImportSourceType } from '@falkordb/schemas/global';
 import { ScheduleDocument, ScheduleType } from '@falkordb/schemas/services/import-export-rdb/v1';
 
 export type SchedulePayloadByType = {
   RDBExport: {
     instanceId: string;
     target?: RDBExportTargetType;
+  };
+  RDBImport: {
+    instanceId: string;
+    source: Extract<RDBImportSourceType, { type: 'instance' }>;
   };
 };
 

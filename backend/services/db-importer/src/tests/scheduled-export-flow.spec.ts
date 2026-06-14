@@ -1,5 +1,5 @@
 import { Value } from '@sinclair/typebox/value';
-import { ExportRDBTaskType } from '@falkordb/schemas/global';
+import { ExportRDBTaskType, ImportRDBTaskType, TaskDocumentType } from '@falkordb/schemas/global';
 import { CreateScheduleRequestBodySchema, ScheduleDocument } from '@falkordb/schemas/services/import-export-rdb/v1';
 import { ScheduleController } from '../routes/schedules/controllers/ScheduleController';
 
@@ -42,6 +42,42 @@ const makeTask = (taskId = 'task-id', status: ExportRDBTaskType['status'] = 'cre
   },
 });
 
+const makeImportTask = (taskId = 'import-task-id', status: ImportRDBTaskType['status'] = 'created', scheduleId?: string): ImportRDBTaskType => ({
+  taskId,
+  type: 'RDBImport',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  status,
+  scheduleId,
+  payload: {
+    cloudProvider: 'gcp',
+    clusterId: 'cluster-id',
+    region: 'us-central1',
+    instanceId: 'instance-id',
+    podIds: ['node-f-0'],
+    hasTLS: false,
+    bucketName: 'import-bucket',
+    fileName: 'imports/instance-id/import.rdb',
+    rdbSizeFileName: 'imports/instance-id/import-size.txt',
+    rdbKeyNumberFileName: 'imports/instance-id/import-keys.txt',
+    deploymentSizeInMb: 1024,
+    aofEnabled: false,
+    backupPath: '/data/backup/dump.rdb',
+    isCluster: false,
+    source: {
+      type: 'instance',
+      instanceId: 'source-instance-id',
+      cloudProvider: 'gcp',
+      clusterId: 'source-cluster-id',
+      region: 'us-central1',
+      podId: 'node-f-0',
+      podIds: ['node-f-0'],
+      isCluster: false,
+      tls: false,
+    },
+  },
+});
+
 const makeSchedule = (overrides: Partial<ScheduleDocument> = {}): ScheduleDocument => ({
   scheduleId: 'schedule-id',
   requestorId: 'user-id',
@@ -60,6 +96,25 @@ const makeSchedule = (overrides: Partial<ScheduleDocument> = {}): ScheduleDocume
   ...overrides,
 });
 
+const makeImportSchedule = (overrides: Partial<ScheduleDocument> = {}): ScheduleDocument => makeSchedule({
+  type: 'RDBImport',
+  payload: {
+    instanceId: 'instance-id',
+    source: {
+      type: 'instance',
+      instanceId: 'source-instance-id',
+      cloudProvider: 'gcp',
+      clusterId: 'source-cluster-id',
+      region: 'us-central1',
+      podId: 'node-f-0',
+      podIds: ['node-f-0'],
+      isCluster: false,
+      tls: false,
+    },
+  },
+  ...overrides,
+});
+
 const makeController = ({
   dueSchedules = [],
   existingSchedules = [],
@@ -69,9 +124,9 @@ const makeController = ({
 }: {
   dueSchedules?: ScheduleDocument[];
   existingSchedules?: ScheduleDocument[];
-  runningTasks?: ExportRDBTaskType[];
-  failedTasks?: ExportRDBTaskType[];
-  createdTask?: ExportRDBTaskType;
+  runningTasks?: TaskDocumentType[];
+  failedTasks?: TaskDocumentType[];
+  createdTask?: TaskDocumentType;
 } = {}) => {
   const schedulesRepository = {
     createSchedule: jest.fn().mockImplementation(async (schedule) => makeSchedule(schedule)),
@@ -93,21 +148,28 @@ const makeController = ({
     updateTask: jest.fn().mockResolvedValue({ ...createdTask, status: 'pending' }),
   };
   const omnistrateRepository = {
-    getInstance: jest.fn().mockResolvedValue({
-      id: 'instance-id',
+    getInstance: jest.fn().mockImplementation(async (instanceId = 'instance-id') => ({
+      id: instanceId,
       cloudProvider: 'gcp',
-      clusterId: 'cluster-id',
+      clusterId: instanceId === 'source-instance-id' ? 'source-cluster-id' : 'cluster-id',
       region: 'us-central1',
       tls: false,
       status: 'RUNNING',
       productTierName: 'FalkorDB Pro',
       deploymentType: 'Free',
       subscriptionId: 'subscription-id',
-    }),
+      podIds: ['node-f-0'],
+      aofEnabled: false,
+    })),
     checkIfUserHasAccessToInstance: jest.fn().mockResolvedValue(true),
   };
   const taskQueueRepository = {
     submitExportRDBTask: jest.fn().mockResolvedValue(undefined),
+    submitImportRDBTask: jest.fn().mockResolvedValue(undefined),
+  };
+  const k8sRepository = {
+    getMaxMemory: jest.fn().mockResolvedValue(String(1024 * 1024 * 1024)),
+    getUsedMemoryDataset: jest.fn().mockResolvedValue(128 * 1024 * 1024),
   };
 
   return {
@@ -115,8 +177,10 @@ const makeController = ({
       schedulesRepository as never,
       tasksRepository as never,
       omnistrateRepository as never,
+      k8sRepository as never,
       taskQueueRepository as never,
       'export-bucket',
+      'import-bucket',
       {
         defaultFailureThreshold: 3,
         rdbExportAllowedTiers: process.env.SCHEDULE_RDB_EXPORT_ALLOWED_TIERS ?? '',
@@ -125,6 +189,8 @@ const makeController = ({
     ),
     schedulesRepository,
     tasksRepository,
+    omnistrateRepository,
+    k8sRepository,
     taskQueueRepository,
   };
 };
@@ -184,8 +250,38 @@ describe('scheduled export flow', () => {
     })).toBe(false);
   });
 
+  it('validates import schedules only support instance sources', () => {
+    expect(Value.Check(CreateScheduleRequestBodySchema, {
+      type: 'RDBImport',
+      payload: {
+        instanceId: 'instance-id',
+        source: {
+          type: 'instance',
+          instanceId: 'source-instance-id',
+          username: 'falkordb',
+          password: 'password',
+        },
+      },
+      periodMinutes: 60,
+      minuteOfHour: 15,
+    })).toBe(true);
+
+    expect(Value.Check(CreateScheduleRequestBodySchema, {
+      type: 'RDBImport',
+      payload: {
+        instanceId: 'instance-id',
+        source: {
+          type: 'url',
+          url: 'https://example.com/dump.rdb',
+        },
+      },
+      periodMinutes: 60,
+      minuteOfHour: 15,
+    })).toBe(false);
+  });
+
   it('creates a schedule without exposing target credentials in the response', async () => {
-    const { controller, schedulesRepository } = makeController();
+    const { controller, schedulesRepository, omnistrateRepository } = makeController();
 
     const schedule = await controller.createSchedule({
       requestorId: 'user-id',
@@ -204,12 +300,22 @@ describe('scheduled export flow', () => {
       minuteOfHour: 30,
     });
 
+    expect(omnistrateRepository.checkIfUserHasAccessToInstance).toHaveBeenCalledWith(
+      'user-id',
+      expect.objectContaining({ id: 'instance-id' }),
+      undefined,
+      ['root', 'editor', 'reader'],
+    );
     expect(schedulesRepository.createSchedule).toHaveBeenCalledWith(expect.objectContaining({
       periodMinutes: 60,
       minuteOfHour: 30,
       failureThreshold: 3,
     }));
-    expect(schedule.payload.target).toEqual({
+    expect(schedule.type).toBe('RDBExport');
+    if (schedule.type !== 'RDBExport') {
+      throw new Error(`Expected RDBExport schedule, got ${schedule.type}`);
+    }
+    expect((schedule.payload as { target?: unknown }).target).toEqual({
       type: 's3',
       bucketName: 'customer-bucket',
       region: 'us-east-1',
@@ -259,6 +365,59 @@ describe('scheduled export flow', () => {
     expect(schedulesRepository.createSchedule).not.toHaveBeenCalled();
   });
 
+  it('creates an import schedule with sanitized prepared instance source metadata', async () => {
+    const { controller, schedulesRepository, omnistrateRepository } = makeController();
+
+    const schedule = await controller.createSchedule({
+      requestorId: 'user-id',
+      type: 'RDBImport',
+      payload: {
+        instanceId: 'instance-id',
+        source: {
+          type: 'instance',
+          instanceId: 'source-instance-id',
+          username: 'falkordb',
+          password: 'password',
+        },
+      },
+      periodMinutes: 60,
+      minuteOfHour: 30,
+    });
+
+    expect(omnistrateRepository.checkIfUserHasAccessToInstance).toHaveBeenCalledWith(
+      'user-id',
+      expect.objectContaining({ id: 'instance-id' }),
+      undefined,
+      ['root', 'editor'],
+    );
+    expect(omnistrateRepository.checkIfUserHasAccessToInstance).toHaveBeenCalledWith(
+      'user-id',
+      expect.objectContaining({ id: 'source-instance-id' }),
+      undefined,
+      ['root', 'editor', 'reader'],
+    );
+    expect(schedulesRepository.createSchedule).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'RDBImport',
+      payload: expect.objectContaining({
+        instanceId: 'instance-id',
+        source: expect.objectContaining({
+          type: 'instance',
+          instanceId: 'source-instance-id',
+          clusterId: 'source-cluster-id',
+          podIds: ['node-f-0'],
+        }),
+      }),
+    }));
+    expect(schedule.payload).toEqual({
+      instanceId: 'instance-id',
+      source: {
+        type: 'instance',
+        instanceId: 'source-instance-id',
+      },
+    });
+    expect(JSON.stringify(schedulesRepository.createSchedule.mock.calls[0][0])).not.toContain('password');
+  });
+
   it('triggers due schedules by creating normal export tasks', async () => {
     const dueSchedule = makeSchedule({ nextRunAt: '2026-06-11T10:15:00.000Z' });
     const { controller, schedulesRepository, tasksRepository, taskQueueRepository } = makeController({
@@ -279,6 +438,37 @@ describe('scheduled export flow', () => {
       '2026-06-11T11:15:00.000Z',
     );
     expect(result.triggered).toEqual([{ scheduleId: 'schedule-id', taskId: 'scheduled-task-id' }]);
+  });
+
+  it('triggers due import schedules by creating normal import tasks', async () => {
+    const dueSchedule = makeImportSchedule({ nextRunAt: '2026-06-11T10:15:00.000Z' });
+    const { controller, schedulesRepository, tasksRepository, omnistrateRepository, taskQueueRepository } = makeController({
+      dueSchedules: [dueSchedule],
+      createdTask: makeImportTask('scheduled-import-task-id'),
+    });
+
+    const result = await controller.triggerDueSchedules(new Date('2026-06-11T10:15:00.000Z'));
+
+    expect(tasksRepository.listTasksByScheduleId).toHaveBeenCalledWith('schedule-id', expect.objectContaining({
+      types: ['RDBImport'],
+    }));
+    expect(tasksRepository.createTask).toHaveBeenCalledWith('RDBImport', expect.objectContaining({
+      instanceId: 'instance-id',
+      source: expect.objectContaining({
+        type: 'instance',
+        instanceId: 'source-instance-id',
+      }),
+    }), { scheduleId: 'schedule-id' });
+    expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'scheduled-import-task-id',
+      status: 'in_progress',
+    }));
+    expect(omnistrateRepository.checkIfUserHasAccessToInstance).not.toHaveBeenCalled();
+    expect(schedulesRepository.updateNextRunAt).toHaveBeenCalledWith(
+      'schedule-id',
+      '2026-06-11T11:15:00.000Z',
+    );
+    expect(result.triggered).toEqual([{ scheduleId: 'schedule-id', taskId: 'scheduled-import-task-id' }]);
   });
 
   it('disables schedules when failed tasks reach the threshold', async () => {
