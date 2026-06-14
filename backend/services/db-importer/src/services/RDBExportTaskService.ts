@@ -244,7 +244,7 @@ export class RDBExportTaskService {
       await this.taskQueueRepository.submitExportRDBTask(task);
     } catch (error) {
       this._opts.logger.error({ error }, 'Error submitting task');
-      this.tasksRepository.updateTask({
+      await this.tasksRepository.updateTask({
         taskId: task.taskId,
         status: 'failed',
         errors: ['Error submitting task'],

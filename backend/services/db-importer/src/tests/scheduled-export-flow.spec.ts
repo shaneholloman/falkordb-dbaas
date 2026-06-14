@@ -2,6 +2,8 @@ import { Value } from '@sinclair/typebox/value';
 import { ExportRDBTaskType, ImportRDBTaskType, TaskDocumentType } from '@falkordb/schemas/global';
 import { CreateScheduleRequestBodySchema, ScheduleDocument } from '@falkordb/schemas/services/import-export-rdb/v1';
 import { ScheduleController } from '../routes/schedules/controllers/ScheduleController';
+import { getRequestorId } from '../routes/schedules/handlers/auth';
+import { sign } from 'jsonwebtoken';
 
 const s3SendMock = jest.fn();
 
@@ -206,6 +208,22 @@ describe('scheduled export flow', () => {
     delete process.env.SCHEDULE_RDB_EXPORT_ALLOWED_TIERS;
   });
 
+  it('returns 401-style errors for missing or malformed authorization tokens', () => {
+    expect(getRequestorId(`Bearer ${sign({ userID: 'user-id' }, 'secret')}`)).toBe('user-id');
+    expect(() => getRequestorId()).toThrow(expect.objectContaining({
+      statusCode: 401,
+      errorCode: 'INVALID_TOKEN',
+    }));
+    expect(() => getRequestorId('Bearer not-a-jwt')).toThrow(expect.objectContaining({
+      statusCode: 401,
+      errorCode: 'INVALID_TOKEN',
+    }));
+    expect(() => getRequestorId(`Bearer ${sign('string-payload', 'secret')}`)).toThrow(expect.objectContaining({
+      statusCode: 401,
+      errorCode: 'INVALID_TOKEN',
+    }));
+  });
+
   it('validates minimum one hour period and quarter-hour schedule minute', () => {
     expect(Value.Check(CreateScheduleRequestBodySchema, {
       type: 'RDBExport',
@@ -340,6 +358,26 @@ describe('scheduled export flow', () => {
     });
 
     expect(schedulesRepository.createSchedule).toHaveBeenCalled();
+  });
+
+  it('uses the configured period when computing the first run time', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-11T10:30:00.000Z'));
+    const { controller, schedulesRepository } = makeController();
+
+    await controller.createSchedule({
+      requestorId: 'user-id',
+      type: 'RDBExport',
+      payload: {
+        instanceId: 'instance-id',
+      },
+      periodMinutes: 120,
+      minuteOfHour: 15,
+    });
+
+    expect(schedulesRepository.createSchedule).toHaveBeenCalledWith(expect.objectContaining({
+      nextRunAt: '2026-06-11T12:15:00.000Z',
+    }));
+    jest.useRealTimers();
   });
 
   it('rejects schedule creation when an instance already has two schedules', async () => {

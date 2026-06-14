@@ -144,8 +144,8 @@ export class ScheduleController {
     const next = new Date(from);
     next.setUTCSeconds(0, 0);
     next.setUTCMinutes(minuteOfHour);
-    if (next <= from) {
-      next.setUTCHours(next.getUTCHours() + 1);
+    while (next <= from) {
+      next.setTime(next.getTime() + periodMinutes * 60 * 1000);
     }
     return next.toISOString();
   }

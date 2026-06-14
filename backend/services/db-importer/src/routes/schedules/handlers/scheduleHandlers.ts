@@ -1,5 +1,4 @@
 import { FastifyRequest, RouteHandlerMethod } from 'fastify';
-import { decode, JwtPayload } from 'jsonwebtoken';
 import { ApiError } from '@falkordb/errors';
 import {
   CreateScheduleRequestBody,
@@ -17,14 +16,7 @@ import { OmnistrateRepository } from '../../../repositories/omnistrate/Omnistrat
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 import { ScheduleController } from '../controllers/ScheduleController';
 import { K8sRepository } from '../../../repositories/k8s/K8sRepository';
-
-const getRequestorId = (authorization?: string): string => {
-  const { userID } = decode(authorization?.split(' ').pop()) as JwtPayload;
-  if (!userID) {
-    throw ApiError.unauthorized('Invalid token', 'INVALID_TOKEN');
-  }
-  return userID;
-};
+import { getRequestorId } from './auth';
 
 const makeScheduleController = (request: FastifyRequest): ScheduleController => {
   const schedulesRepository = request.diScope.resolve<ISchedulesDBRepository>(ISchedulesDBRepository.name);

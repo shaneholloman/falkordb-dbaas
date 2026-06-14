@@ -26,7 +26,7 @@ export const exportRDBHandler: RouteHandlerMethod<undefined, undefined, undefine
     tasksRepository,
     omnistrateRepository,
     taskQueueRepository,
-    process.env.EXPORT_BUCKET_NAME,
+    request.server.config.EXPORT_BUCKET_NAME,
     {
       logger,
     }
