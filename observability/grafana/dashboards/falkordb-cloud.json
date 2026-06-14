@@ -1570,7 +1570,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(20, sum(rate(redis_commands_duration_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\.(query|ro_query|profile|explain)$\"}[5m])) by (cmd))",
+          "expr": "topk(20, sum(rate(redis_commands_duration_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\..+\"}[5m])) by (cmd))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
@@ -1782,7 +1782,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(redis_commands_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\.(query|ro_query|profile|explain)$\"}[5m])) by (cmd, pod)",
+          "expr": "sum(rate(redis_commands_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\..+\"}[5m])) by (cmd, pod)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
@@ -1799,7 +1799,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Average latency per graph command per pod. graph.QUERY, graph.RO_QUERY, graph.PROFILE and graph.EXPLAIN only.",
+      "description": "Average latency per graph command per pod. All GRAPH.* commands (QUERY, RO_QUERY, LIST, MEMORY, PROFILE, EXPLAIN, etc.).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1885,7 +1885,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(redis_commands_duration_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\.(query|ro_query|profile|explain)$\"}[5m])) by (cmd, pod)\n/ clamp_min(sum(rate(redis_commands_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\.(query|ro_query|profile|explain)$\"}[5m])) by (cmd, pod), 1e-9)",
+          "expr": "sum(rate(redis_commands_duration_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\..+\"}[5m])) by (cmd, pod)\n/ clamp_min(sum(rate(redis_commands_total{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", cmd=~\"(?i)^graph\\\\..+\"}[5m])) by (cmd, pod), 1e-9)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
