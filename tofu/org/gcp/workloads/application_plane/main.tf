@@ -23,6 +23,7 @@ module "project" {
     "storage.googleapis.com",
     "cloudkms.googleapis.com",
     "dns.googleapis.com",
+    "artifactregistry.googleapis.com",
     "containersecurity.googleapis.com",
     "logging.googleapis.com",
   ]
@@ -139,6 +140,60 @@ resource "google_storage_bucket_iam_member" "omnistrate_metering_data" {
   bucket = google_storage_bucket.omnistrate_metering_data.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:omnistrate-billing@omnistrate-prod.iam.gserviceaccount.com"
+}
+
+resource "google_artifact_registry_repository" "cloud" {
+  project       = module.project.project_id
+  location      = var.artifact_registry_region
+  repository_id = "cloud"
+  format        = "DOCKER"
+
+  depends_on = [module.project]
+}
+
+resource "google_service_account" "cloud_artifact_registry_reader" {
+  account_id   = "cloud-artifact-registry-reader"
+  display_name = "Cloud Artifact Registry Reader Service Account"
+  description  = "Service account for pulling images from the cloud Artifact Registry repository."
+  project      = module.project.project_id
+}
+
+resource "google_artifact_registry_repository_iam_member" "cloud_artifact_registry_reader" {
+  repository = google_artifact_registry_repository.cloud.id
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.cloud_artifact_registry_reader.email}"
+}
+
+resource "google_service_account_key" "cloud_artifact_registry_reader" {
+  service_account_id = google_service_account.cloud_artifact_registry_reader.name
+}
+
+resource "google_service_account" "cloud_artifact_registry_writer" {
+  account_id   = "cloud-artifact-registry-writer"
+  display_name = "Cloud Artifact Registry Writer Service Account"
+  description  = "Service account for pushing images to the cloud Artifact Registry repository."
+  project      = module.project.project_id
+}
+
+resource "google_artifact_registry_repository_iam_member" "cloud_artifact_registry_writer" {
+  repository = google_artifact_registry_repository.cloud.id
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${google_service_account.cloud_artifact_registry_writer.email}"
+}
+
+module "cloud_artifact_registry_writer_gh_oidc" {
+  source                = "terraform-google-modules/github-actions-runners/google//modules/gh-oidc"
+  project_id            = module.project.project_id
+  pool_id               = "cloud-artifact-registry-pool"
+  provider_id           = "github-actions"
+  provider_display_name = "github-actions"
+  sa_mapping = {
+    "cloud-artifact-registry-writer" = {
+      sa_name   = google_service_account.cloud_artifact_registry_writer.name
+      attribute = "attribute.repository/${var.cloud_artifact_registry_writer_repo_name}"
+    }
+  }
+  attribute_condition = "assertion.repository_owner=='FalkorDB'"
 }
 
 resource "google_project_iam_member" "argocd_sa_k8s_dev" {

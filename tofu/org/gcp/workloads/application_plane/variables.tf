@@ -40,6 +40,17 @@ variable "argocd_sa_email" {
   type = string
 }
 
+variable "artifact_registry_region" {
+  type    = string
+  default = "us-central1"
+}
+
+variable "cloud_artifact_registry_writer_repo_name" {
+  type        = string
+  default     = "FalkorDB/falkordb-omnistrate"
+  description = "GitHub repository allowed to impersonate the cloud Artifact Registry writer service account."
+}
+
 variable "gh_workload_identity_pool_name" {
   type        = string
   description = "Full resource name of the GitHub Actions workload identity pool from the control plane project"
