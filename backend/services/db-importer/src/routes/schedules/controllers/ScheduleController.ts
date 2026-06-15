@@ -6,6 +6,8 @@ import {
   RDBExportTargetType,
   RDBImportRequestSourceType,
   RDBImportSourceType,
+  TaskDocumentType,
+  TaskStatusType,
   TaskTypesType,
 } from '@falkordb/schemas/global';
 import { randomUUID } from 'crypto';
@@ -33,6 +35,14 @@ type TriggerScheduleResult = {
 
 type RDBExportSchedulePayload = { instanceId: string; target?: RDBExportTargetType };
 type RDBImportSchedulePayload = { instanceId: string; source: Extract<RDBImportSourceType, { type: 'instance' }> };
+type PublicScheduleRunState = {
+  lastRunAt?: string;
+  lastTaskId?: string;
+  lastTaskStatus?: TaskStatusType;
+  lastFailure?: string;
+  lastFailureAt?: string;
+  consecutiveFailures?: number;
+};
 
 export class ScheduleController {
   constructor(
@@ -71,11 +81,12 @@ export class ScheduleController {
     return target;
   }
 
-  private _toPublicSchedule(schedule: ScheduleDocument): PublicSchedule {
+  private _toPublicSchedule(schedule: ScheduleDocument, runState: PublicScheduleRunState = {}): PublicSchedule {
     if (schedule.type === 'RDBImport') {
       const payload = schedule.payload as RDBImportSchedulePayload;
       return {
         ...schedule,
+        ...runState,
         payload: {
           instanceId: payload.instanceId,
           source: {
@@ -89,6 +100,7 @@ export class ScheduleController {
     const payload = schedule.payload as RDBExportSchedulePayload;
     return {
       ...schedule,
+      ...runState,
       payload: {
         ...payload,
         target: this._sanitizeTarget(payload.target),
@@ -223,6 +235,36 @@ export class ScheduleController {
     return type === 'RDBImport' ? IMPORT_TASK_TYPES : EXPORT_TASK_TYPES;
   }
 
+  private _getLastTaskFailure(task?: TaskDocumentType): string | undefined {
+    if (!task || task.status !== 'failed') {
+      return undefined;
+    }
+
+    return task.errors?.at(-1) ?? task.error;
+  }
+
+  private async _getScheduleRunState(schedule: ScheduleDocument): Promise<PublicScheduleRunState> {
+    const tasks = await this.tasksRepository.listTasksByScheduleId(schedule.scheduleId, {
+      types: this._taskTypesForSchedule(schedule.type),
+    });
+    const latestTask = tasks[0];
+    const failedTasks = tasks.filter((task) => task.status === 'failed');
+    const latestFailedTask = failedTasks[0];
+
+    return {
+      lastRunAt: latestTask?.createdAt,
+      lastTaskId: latestTask?.taskId,
+      lastTaskStatus: latestTask?.status,
+      lastFailure: this._getLastTaskFailure(latestFailedTask),
+      lastFailureAt: latestFailedTask?.updatedAt,
+      consecutiveFailures: failedTasks.length,
+    };
+  }
+
+  private async _toPublicScheduleWithRunState(schedule: ScheduleDocument): Promise<PublicSchedule> {
+    return this._toPublicSchedule(schedule, await this._getScheduleRunState(schedule));
+  }
+
   private async _createTaskForSchedule(schedule: ScheduleDocument): Promise<{ taskId: string }> {
     if (schedule.type === 'RDBImport') {
       return this._createRDBImportTask(schedule);
@@ -317,7 +359,7 @@ export class ScheduleController {
       await this._assertScheduleAccess(requestorId, filters.instanceId);
     }
     const schedules = await this.schedulesRepository.listSchedules(filters);
-    return schedules.map((schedule) => this._toPublicSchedule(schedule));
+    return Promise.all(schedules.map((schedule) => this._toPublicScheduleWithRunState(schedule)));
   }
 
   async updateSchedule(requestorId: string, scheduleId: string, update: { enabled?: boolean }): Promise<PublicSchedule> {
@@ -327,7 +369,7 @@ export class ScheduleController {
     }
     await this._assertScheduleAccess(requestorId, schedule.payload.instanceId);
     const updated = await this.schedulesRepository.updateSchedule(scheduleId, update);
-    return this._toPublicSchedule(updated);
+    return this._toPublicScheduleWithRunState(updated);
   }
 
   private async _triggerSchedule(schedule: ScheduleDocument, now: Date): Promise<TriggerScheduleResult> {

@@ -1,6 +1,6 @@
 import { Value } from '@sinclair/typebox/value';
 import { ExportRDBTaskType, ImportRDBTaskType, TaskDocumentType } from '@falkordb/schemas/global';
-import { CreateScheduleRequestBodySchema, ScheduleDocument } from '@falkordb/schemas/services/import-export-rdb/v1';
+import { CreateScheduleRequestBodySchema, PublicScheduleSchema, ScheduleDocument } from '@falkordb/schemas/services/import-export-rdb/v1';
 import { ScheduleController } from '../routes/schedules/controllers/ScheduleController';
 import { getRequestorId } from '../routes/schedules/handlers/auth';
 import { sign } from 'jsonwebtoken';
@@ -24,8 +24,8 @@ const logger = {
 const makeTask = (taskId = 'task-id', status: ExportRDBTaskType['status'] = 'created', scheduleId?: string): ExportRDBTaskType => ({
   taskId,
   type: 'SingleShardRDBExport',
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
+  createdAt: '2026-06-11T10:00:00.000Z',
+  updatedAt: '2026-06-11T10:00:30.000Z',
   status,
   scheduleId,
   payload: {
@@ -122,12 +122,14 @@ const makeController = ({
   existingSchedules = [],
   runningTasks = [],
   failedTasks = [],
+  scheduledTasks,
   createdTask = makeTask(),
 }: {
   dueSchedules?: ScheduleDocument[];
   existingSchedules?: ScheduleDocument[];
   runningTasks?: TaskDocumentType[];
   failedTasks?: TaskDocumentType[];
+  scheduledTasks?: TaskDocumentType[];
   createdTask?: TaskDocumentType;
 } = {}) => {
   const schedulesRepository = {
@@ -141,6 +143,9 @@ const makeController = ({
   const tasksRepository = {
     listTasks: jest.fn().mockResolvedValue({ data: [] }),
     listTasksByScheduleId: jest.fn().mockImplementation(async (_scheduleId, opts) => {
+      if (!opts?.status) {
+        return scheduledTasks ?? runningTasks.concat(failedTasks);
+      }
       if (opts.status?.includes('failed')) {
         return failedTasks;
       }
@@ -476,6 +481,35 @@ describe('scheduled export flow', () => {
       message: 'Invalid scheduled import source',
       errorCode: 'INVALID_IMPORT_SOURCE',
     });
+  });
+
+  it('lists schedules with latest task status and failure details', async () => {
+    const failedTask = makeImportTask('failed-import-task-id', 'failed', 'schedule-id');
+    failedTask.errors = ['this field has unspecified keys: scheduleId'];
+    failedTask.createdAt = '2026-06-15T08:19:01.041Z';
+    failedTask.updatedAt = '2026-06-15T08:19:01.388Z';
+    const { controller, tasksRepository } = makeController({
+      existingSchedules: [makeImportSchedule()],
+      failedTasks: [failedTask],
+      scheduledTasks: [failedTask],
+    });
+
+    const schedules = await controller.listSchedules('user-id', {});
+
+    expect(tasksRepository.listTasksByScheduleId).toHaveBeenCalledWith('schedule-id', {
+      types: ['RDBImport'],
+    });
+    expect(schedules[0]).toEqual(expect.objectContaining({
+      scheduleId: 'schedule-id',
+      type: 'RDBImport',
+      lastRunAt: '2026-06-15T08:19:01.041Z',
+      lastTaskId: 'failed-import-task-id',
+      lastTaskStatus: 'failed',
+      lastFailure: 'this field has unspecified keys: scheduleId',
+      lastFailureAt: '2026-06-15T08:19:01.388Z',
+      consecutiveFailures: 1,
+    }));
+    expect(Value.Check(PublicScheduleSchema, schedules[0])).toBe(true);
   });
 
   it('triggers due schedules by creating normal export tasks', async () => {

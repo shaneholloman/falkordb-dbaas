@@ -1,5 +1,5 @@
 import { type Static, Type } from '@sinclair/typebox';
-import { RDBExportPublicTargetSchema, RDBExportTargetSchema, RDBImportInstanceSourceSchema, RDBImportPublicInstanceSourceSchema, RDBImportRequestInstanceSourceSchema } from '../../../../global';
+import { RDBExportPublicTargetSchema, RDBExportTargetSchema, RDBImportInstanceSourceSchema, RDBImportPublicInstanceSourceSchema, RDBImportRequestInstanceSourceSchema, TaskStatusSchema } from '../../../../global';
 
 export const ScheduleTypeSchema = Type.Union([
   Type.Literal('RDBExport'),
@@ -108,6 +108,12 @@ export const PublicScheduleSchema = Type.Object({
   failureThreshold: Type.Integer({ minimum: 1 }),
   enabled: Type.Boolean(),
   nextRunAt: Type.String(),
+  lastRunAt: Type.Optional(Type.String()),
+  lastTaskId: Type.Optional(Type.String()),
+  lastTaskStatus: Type.Optional(TaskStatusSchema),
+  lastFailure: Type.Optional(Type.String()),
+  lastFailureAt: Type.Optional(Type.String()),
+  consecutiveFailures: Type.Optional(Type.Integer({ minimum: 0 })),
   createdAt: Type.String(),
   updatedAt: Type.String(),
 }, { additionalProperties: false });
