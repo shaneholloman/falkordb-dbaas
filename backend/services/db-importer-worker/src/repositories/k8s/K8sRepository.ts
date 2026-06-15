@@ -7,8 +7,20 @@ import { STSClient, AssumeRoleWithWebIdentityCommand } from '@aws-sdk/client-sts
 import { EKSClient, DescribeClusterCommand } from '@aws-sdk/client-eks';
 import axios from 'axios';
 
+const DEFAULT_REDIS_RDB_CLI_IMAGE = 'dudizimber/redis-rdb-cli@sha256:d279e342203d5018b1c803ff2690709d72eafd8f32595942e3224791e94d042e';
+const IMAGE_PULL_FAILURE_REASONS = new Set([
+  'CreateContainerConfigError',
+  'ErrImagePull',
+  'ImagePullBackOff',
+  'InvalidImageName',
+]);
+
 export class K8sRepository {
   constructor(private _options: { logger: Logger }) { }
+
+  private _redisRdbCliImage(): string {
+    return process.env.REDIS_RDB_CLI_IMAGE ?? DEFAULT_REDIS_RDB_CLI_IMAGE;
+  }
 
   private async _getGKECredentials(clusterId: string, region: string, opts?: {
     projectId?: string,
@@ -634,7 +646,7 @@ export class K8sRepository {
             containers: [
               {
                 name: 'merge-rdbs',
-                image: 'dudizimber/redis-rdb-cli:latest',
+                image: this._redisRdbCliImage(),
                 command: ['rdt', '-m', ...rdbFileNames.map(n => `/data/${n}`), '-o', `/data/${outputRdbFileName}`],
                 volumeMounts: [
                   {
@@ -847,7 +859,7 @@ export class K8sRepository {
             containers: [
               {
                 name: 'import-rdb',
-                image: 'dudizimber/redis-rdb-cli:latest',
+                image: this._redisRdbCliImage(),
                 command: ['sh', '-c', shellCommand],
                 volumeMounts: [
                   {
@@ -921,7 +933,7 @@ export class K8sRepository {
             containers: [
               {
                 name: 'redis-rdb-cli',
-                image: 'dudizimber/redis-rdb-cli:latest',
+                image: this._redisRdbCliImage(),
                 command: ['sh', '-c', shellCommand],
                 volumeMounts: [
                   {
@@ -1065,6 +1077,16 @@ export class K8sRepository {
 
     if (status?.succeeded > 0) {
       return ['completed'];
+    }
+
+    const pods = await k8sCoreApi.listNamespacedPod(namespace, undefined, undefined, undefined, undefined, `job-name=${body.metadata?.name}`);
+    const waitingState = pods.body.items
+      .flatMap((pod) => pod.status?.containerStatuses ?? [])
+      .map((containerStatus) => containerStatus.state?.waiting)
+      .find((waiting) => waiting?.reason && IMAGE_PULL_FAILURE_REASONS.has(waiting.reason));
+
+    if (waitingState) {
+      return ['failed', waitingState.message ?? waitingState.reason];
     }
 
     return ['pending'];

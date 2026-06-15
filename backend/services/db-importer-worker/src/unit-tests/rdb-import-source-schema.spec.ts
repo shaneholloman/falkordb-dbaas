@@ -2,7 +2,7 @@ import { RDBTask, TaskTypes } from '../schemas/rdb-task';
 import { RDBImportRequestSourceSchema, RDBImportSourceSchema } from '@falkordb/schemas/global';
 import { Value } from '@sinclair/typebox/value';
 
-const makeImportTask = (source: Record<string, unknown>) => ({
+const makeImportTask = (source: Record<string, unknown>, overrides: Record<string, unknown> = {}) => ({
   taskId: 'task-id',
   type: TaskTypes.RDBImport,
   createdAt: new Date().toISOString(),
@@ -25,6 +25,7 @@ const makeImportTask = (source: Record<string, unknown>) => ({
     isCluster: false,
     source,
   },
+  ...overrides,
 });
 
 describe('RDB import source task schema', () => {
@@ -39,7 +40,7 @@ describe('RDB import source task schema', () => {
       podIds: ['node-s-0'],
       isCluster: false,
       tls: false,
-    }))).not.toThrow();
+    }, { scheduleId: 'schedule-id' }))).not.toThrow();
   });
 
   it('accepts prepared cluster instance sources', () => {

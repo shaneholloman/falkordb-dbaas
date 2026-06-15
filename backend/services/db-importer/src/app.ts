@@ -2,7 +2,7 @@ import { configDotenv } from 'dotenv';
 configDotenv();
 
 import { init } from '@falkordb/configs';
-init(process.env.SERVICE_NAME, process.env.NODE_ENV);
+init(process.env.SERVICE_NAME ?? 'db-importer', process.env.NODE_ENV ?? 'production');
 
 import { type FastifyInstance, type FastifyPluginOptions } from 'fastify';
 import AutoLoad from '@fastify/autoload';
@@ -77,7 +77,7 @@ export default async function (fastify: FastifyInstance, opts: FastifyPluginOpti
   });
 
   fastify.addHook('onRequest', (request, _, done) => {
-    setupContainer(request);
+    setupContainer();
 
     done();
   });
@@ -85,7 +85,7 @@ export default async function (fastify: FastifyInstance, opts: FastifyPluginOpti
   fastify.addHook('preHandler', (request, reply, done) => {
     // Add trace ID
     const { activeSpan } = request.openTelemetry();
-    if (activeSpan.spanContext().traceId) {
+    if (activeSpan && activeSpan.spanContext().traceId) {
       reply.header('x-trace-id', activeSpan.spanContext().traceId);
     }
     done();

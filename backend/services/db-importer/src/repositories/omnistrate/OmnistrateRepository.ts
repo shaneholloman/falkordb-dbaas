@@ -59,7 +59,7 @@ export class OmnistrateRepository {
 
     try {
 
-      const response = await axios.get(
+      await axios.get(
         `https://api.omnistrate.cloud/2022-09-01-00/user`,
         {
           headers: {

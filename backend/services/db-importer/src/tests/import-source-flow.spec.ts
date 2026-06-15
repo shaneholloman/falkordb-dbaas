@@ -170,7 +170,7 @@ describe('import RDB customer source flow', () => {
         type: 'url',
         url: 'https://customer.example.com/imports/customer.rdb?token=secret-token',
       },
-    })).toBe(false);
+    })).toBe(true);
     expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
       instanceId: 'instance-id',
       username: 'falkordb',
@@ -189,6 +189,15 @@ describe('import RDB customer source flow', () => {
         url: 'https://user:pass@customer.example.com/imports/customer.rdb',
       },
     })).toBe(false);
+    expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
+      instanceId: 'instance-id',
+      username: 'falkordb',
+      password: 'password',
+      source: {
+        type: 'instance',
+        instanceId: 'source-instance-id',
+      },
+    })).toBe(true);
     expect(Value.Check(ImportRDBRequestUploadURLRequestBodySchema, {
       instanceId: 'instance-id',
       username: 'falkordb',
@@ -232,17 +241,16 @@ describe('import RDB customer source flow', () => {
       fileName: 'imports/customer.rdb',
       credentials: serviceAccountCredentials,
     };
-    const { controller, storageRepository, tasksRepository, taskQueueRepository } = makeController();
+    const { controller, k8sRepository, storageRepository, tasksRepository, taskQueueRepository } = makeController();
 
     const result = await controller.requestUploadUrl({
       requestorId: 'user-id',
       instanceId: 'instance-id',
-      username: 'falkordb',
-      password: 'password',
       source,
     });
 
     expect(result).toEqual({ taskId: 'task-id' });
+    expect(k8sRepository.isUserAdmin).not.toHaveBeenCalled();
     expect(mockGcsExists).toHaveBeenCalledTimes(1);
     expect(storageRepository.getWriteUrl).not.toHaveBeenCalled();
 
@@ -387,12 +395,10 @@ describe('import RDB customer source flow', () => {
     }));
   });
 
-  it('creates an instance source import task after access, credentials, and size checks', async () => {
+  it('creates an instance source import task after access and size checks', async () => {
     const source = {
       type: 'instance' as const,
       instanceId: 'source-instance-id',
-      username: 'source-user',
-      password: 'source-password',
     };
     const { controller, omnistrateRepository, k8sRepository, storageRepository, tasksRepository, taskQueueRepository } = makeController();
 
@@ -405,6 +411,12 @@ describe('import RDB customer source flow', () => {
     });
 
     expect(result).toEqual({ taskId: 'task-id' });
+    expect(omnistrateRepository.checkIfUserHasAccessToInstance).toHaveBeenCalledWith(
+      'user-id',
+      expect.objectContaining({ id: 'instance-id' }),
+      undefined,
+      ['root', 'editor'],
+    );
     expect(omnistrateRepository.getInstance).toHaveBeenCalledWith('source-instance-id');
     expect(omnistrateRepository.checkIfUserHasAccessToInstance).toHaveBeenCalledWith(
       'user-id',
@@ -412,24 +424,13 @@ describe('import RDB customer source flow', () => {
       undefined,
       ['root', 'editor', 'reader'],
     );
-    expect(k8sRepository.isUserAdmin).toHaveBeenCalledWith(
-      'gcp',
-      'source-cluster-id',
-      'us-central1',
-      'source-instance-id',
-      'node-s-0',
-      'source-user',
-      'source-password',
-      false,
-    );
+    expect(k8sRepository.isUserAdmin).not.toHaveBeenCalled();
     expect(k8sRepository.getUsedMemoryDataset).toHaveBeenCalledWith(
       'gcp',
       'source-cluster-id',
       'us-central1',
       'source-instance-id',
       'node-s-0',
-      'source-user',
-      'source-password',
       false,
     );
     expect(storageRepository.getWriteUrl).not.toHaveBeenCalled();

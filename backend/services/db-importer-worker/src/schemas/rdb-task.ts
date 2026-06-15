@@ -181,6 +181,7 @@ export type RDBImportOutputType = Yup.InferType<typeof RDBImportOutput>;
 
 export interface IExportRDBTask {
   taskId: string;
+  scheduleId?: string;
   type: TaskTypes;
   createdAt: string;
   updatedAt: string;
@@ -193,6 +194,7 @@ export interface IExportRDBTask {
 
 export const RDBTask = Yup.object({
   taskId: Yup.string().required(),
+  scheduleId: Yup.string().optional(),
   type: Yup.string().oneOf(Object.values(TaskTypes)).required(),
   createdAt: Yup.string().required(),
   updatedAt: Yup.string().required(),

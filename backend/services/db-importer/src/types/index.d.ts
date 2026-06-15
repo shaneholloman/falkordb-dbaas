@@ -1,5 +1,5 @@
 import { EnvSchemaType } from '../schemas/dotenv';
-import { TObject, Static } from '@sinclair/typebox';
+import { TObject } from '@sinclair/typebox';
 declare module 'fastify' {
   export interface FastifyRequest { }
   export interface FastifyInstance {

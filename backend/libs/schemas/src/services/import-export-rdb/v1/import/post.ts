@@ -3,12 +3,16 @@ import { RDBImportRequestSourceSchema } from '../../../../global';
 
 export const ImportRDBRequestUploadURLRequestBodySchema = Type.Object({
   instanceId: Type.String(),
-  username: Type.String({
+  username: Type.Optional(Type.String({
     pattern: "^[a-zA-Z0-9._-]+$",
-  }),
-  password: Type.String({
-    pattern: "^[a-zA-Z0-9._!\@\#\$\%\^\&\*]+$"
-  }),
+    deprecated: true,
+    description: 'Deprecated. Destination access is authorized by subscription role.',
+  })),
+  password: Type.Optional(Type.String({
+    pattern: "^[a-zA-Z0-9._!\@\#\$\%\^\&\*]+$",
+    deprecated: true,
+    description: 'Deprecated. Destination access is authorized by subscription role.',
+  })),
   source: Type.Optional(RDBImportRequestSourceSchema),
 });
 

@@ -12,6 +12,7 @@ import { ImportRDBTaskType, RDBImportRequestSourceType, RDBImportSourceType, RDB
 import { ITaskQueueRepository } from '../../../repositories/tasksQueue/ITaskQueueRepository';
 import { randomUUID } from 'crypto';
 import { validateImportSourceUrl } from '@falkordb/security';
+import { RDBImportTaskService } from '../../../services/RDBImportTaskService';
 
 const IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS = parseInt(process.env.RDB_IMPORT_SOURCE_URL_VALIDATION_TIMEOUT_MS ?? '', 10) || 30 * 1000;
 
@@ -30,26 +31,19 @@ export class ImportRDBController {
     assert(_importBucketName, 'ImportRDBController: importBucketName is required');
   }
 
+  private _makeImportTaskService(): RDBImportTaskService {
+    return new RDBImportTaskService(
+      this.tasksRepository,
+      this.omnistrateRepository,
+      this.k8sRepository,
+      this.taskQueueRepository,
+      this._importBucketName,
+      this._opts,
+    );
+  }
+
   async _getPendingImportTasks(instanceId: string): Promise<TaskDocumentType[]> {
-    try {
-      const tasks = await this.tasksRepository
-        .listTasks(instanceId, {
-          page: 1,
-          pageSize: 1,
-          status: ['created', 'pending', 'in_progress'],
-          types: ['RDBImport'],
-        })
-        .then((result) => result.data);
-      // filter out expired tasks
-      const now = Date.now();
-      const pendingTasks = tasks.filter((task) => {
-        return new Date(task.createdAt).getTime() + 60 * 60 * 1000 > now; // 1 hour
-      });
-      return pendingTasks;
-    } catch (error) {
-      this._opts.logger.error({ error }, 'Error getting pending tasks');
-      throw ApiError.internalServerError('Error getting pending tasks', 'PENDING_TASKS_ERROR');
-    }
+    return this._makeImportTaskService().getPendingImportTasks(instanceId);
   }
 
   private _resolvePodPrefix(instance: OmnistrateInstanceSchemaType): string {
@@ -67,15 +61,6 @@ export class ImportRDBController {
       default:
         return 'node-f';
     }
-  }
-
-  private _resolveSourceExportPodIds(instance: OmnistrateInstanceSchemaType): string[] {
-    const podPrefix = this._resolvePodPrefix(instance);
-    if (instance.deploymentType.startsWith('Cluster')) {
-      return [0, 2, 4].map((index) => `${podPrefix}-${index}`);
-    }
-
-    return [`${podPrefix}-0`];
   }
 
   private _createTaskPayload(
@@ -150,73 +135,13 @@ export class ImportRDBController {
       }
 
       if (source.type === 'instance') {
-        if (source.instanceId === destinationInstanceId) {
-          throw new Error('Source instance must be different from destination instance');
-        }
-
-        const sourceInstance = await this.omnistrateRepository.getInstance(source.instanceId);
-        if (!sourceInstance) {
-          throw new Error(`Source instance ${source.instanceId} was not found`);
-        }
-
-        const hasAccess = await this.omnistrateRepository.checkIfUserHasAccessToInstance(requestorId, sourceInstance, undefined, [
-          'root',
-          'editor',
-          'reader',
-        ]);
-        if (!hasAccess) {
-          throw new Error(`User does not have access to source instance ${source.instanceId}`);
-        }
-        if (sourceInstance.status !== 'RUNNING') {
-          throw new Error(`Source instance ${source.instanceId} is not running`);
-        }
-        if (sourceInstance.productTierName === 'FalkorDB BYOA') {
-          throw new Error('BYOA source instances are not supported');
-        }
-        const sourcePodIds = this._resolveSourceExportPodIds(sourceInstance);
-        const podId = sourcePodIds[0];
-        const isSourceAdmin = await this.k8sRepository.isUserAdmin(
-          sourceInstance.cloudProvider,
-          sourceInstance.clusterId,
-          sourceInstance.region,
-          sourceInstance.id,
-          podId,
-          source.username,
-          source.password,
-          sourceInstance.tls,
-        );
-        if (!isSourceAdmin) {
-          throw new Error('Invalid source instance credentials');
-        }
-
-        const sourceUsedMemoryDatasets = await Promise.all(sourcePodIds.map((sourcePodId) => this.k8sRepository.getUsedMemoryDataset(
-          sourceInstance.cloudProvider,
-          sourceInstance.clusterId,
-          sourceInstance.region,
-          sourceInstance.id,
-          sourcePodId,
-          source.username,
-          source.password,
-          sourceInstance.tls,
-        )));
-        const sourceUsedMemoryDataset = destinationIsCluster
-          ? Math.max(...sourceUsedMemoryDatasets)
-          : sourceUsedMemoryDatasets.reduce((total, usedMemoryDataset) => total + usedMemoryDataset, 0);
-        if (destinationMaxMemoryBytes !== 0 && sourceUsedMemoryDataset > destinationMaxMemoryBytes) {
-          throw new Error(`Source instance dataset size ${sourceUsedMemoryDataset} exceeds destination maxmemory ${destinationMaxMemoryBytes}`);
-        }
-
-        return {
-          type: source.type,
-          instanceId: source.instanceId,
-          cloudProvider: sourceInstance.cloudProvider,
-          clusterId: sourceInstance.clusterId,
-          region: sourceInstance.region,
-          podId,
-          podIds: sourcePodIds,
-          isCluster: sourceInstance.deploymentType.startsWith('Cluster'),
-          tls: sourceInstance.tls,
-        };
+        return await this._makeImportTaskService().prepareInstanceSource({
+          source,
+          requestorId,
+          destinationInstanceId,
+          destinationMaxMemoryBytes,
+          destinationIsCluster,
+        });
       }
 
       const s3Client = new S3Client({
@@ -250,14 +175,12 @@ export class ImportRDBController {
   async requestUploadUrl({
     requestorId,
     instanceId,
-    username,
-    password,
     source,
   }: {
     requestorId: string;
     instanceId: string;
-    username: string;
-    password: string;
+    username?: string;
+    password?: string;
     source?: RDBImportRequestSourceType;
   }): Promise<{ taskId: string; uploadUrl?: string }> {
     // Get instance details from omnistrate
@@ -295,28 +218,6 @@ export class ImportRDBController {
 
     const podId = `${this._resolvePodPrefix(instance)}-0`;
 
-    // Validate credentials with k8s repository
-    let isAdmin = false;
-    try {
-      isAdmin = await this.k8sRepository.isUserAdmin(
-        instance.cloudProvider,
-        instance.clusterId,
-        instance.region,
-        instanceId,
-        podId,
-        username,
-        password,
-        instance.tls,
-      );
-    } catch (error) {
-      this._opts.logger.error({ error }, 'Error validating credentials');
-      throw ApiError.internalServerError('Error validating credentials', 'CREDENTIALS_ERROR');
-    }
-
-    if (!isAdmin) {
-      throw ApiError.unauthorized('Invalid credentials', 'INVALID_CREDENTIALS');
-    }
-
     let maxMemory: string | undefined;
     try {
       maxMemory = await this.k8sRepository.getMaxMemory(
@@ -342,46 +243,20 @@ export class ImportRDBController {
       ? await this._prepareImportSource(source, requestorId, instanceId, destinationMaxMemoryBytes, instance.deploymentType.startsWith('Cluster'))
       : undefined;
 
-    let task: ImportRDBTaskType | undefined;
-    const payload = this._createTaskPayload(
-      instance,
-      this._convertMaxMemoryToMB(maxMemory),
-      preparedSource,
-    );
+    if (preparedSource) {
+      return this._makeImportTaskService().createAndSubmitTask({
+        instance,
+        source: preparedSource,
+      });
+    }
 
+    let task: ImportRDBTaskType | undefined;
+    const payload = this._createTaskPayload(instance, this._convertMaxMemoryToMB(maxMemory));
     try {
       task = (await this.tasksRepository.createTask('RDBImport', payload)) as ImportRDBTaskType;
     } catch (error) {
       this._opts.logger.error({ error }, 'Error creating task');
       throw ApiError.internalServerError('Error creating task', 'TASK_CREATION_ERROR');
-    }
-
-    if (source) {
-      await this.tasksRepository.updateTask({
-        taskId: task.taskId,
-        status: 'in_progress',
-        updatedAt: new Date().toISOString(),
-      });
-
-      try {
-        await this.taskQueueRepository.submitImportRDBTask({
-          ...task,
-          status: 'in_progress',
-        });
-      } catch (error) {
-        this._opts.logger.error({ error, taskId: task.taskId }, 'Error submitting RDB import task to queue');
-        await this.tasksRepository.updateTask({
-          taskId: task.taskId,
-          status: 'failed',
-          errors: ['Failed to submit import task to queue'],
-          updatedAt: new Date().toISOString(),
-        });
-        throw ApiError.internalServerError('Error submitting task', 'TASK_SUBMISSION_ERROR');
-      }
-
-      return {
-        taskId: task.taskId,
-      };
     }
 
     let uploadUrl = '';

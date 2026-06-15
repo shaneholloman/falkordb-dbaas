@@ -23,26 +23,27 @@ const processor: Processor<RdbImportCopyInstanceSourceToBucketProcessorData> = a
   logger.debug(`Processing 'rdb-import-copy-instance-source-to-bucket' job ${job.id} with data: ${JSON.stringify(job.data, null, 2)}`);
 
   try {
-    Value.Assert(RdbImportCopyInstanceSourceToBucketProcessorDataSchema, job.data);
+    const data = Value.Clean(RdbImportCopyInstanceSourceToBucketProcessorDataSchema, job.data);
+    Value.Assert(RdbImportCopyInstanceSourceToBucketProcessorDataSchema, data);
 
-    const task = await tasksRepository.getTaskById(job.data.taskId) as ImportRDBTaskType;
+    const task = await tasksRepository.getTaskById(data.taskId) as ImportRDBTaskType;
     if (!task || task.type !== 'RDBImport') {
-      throw new Error(`Task ${job.data.taskId} not found or is not an RDB import task`);
+      throw new Error(`Task ${data.taskId} not found or is not an RDB import task`);
     }
     const source = task.payload.source;
     if (!source || source.type !== 'instance') {
-      throw new Error(`Task ${job.data.taskId} is not an instance-source RDB import task`);
+      throw new Error(`Task ${data.taskId} is not an instance-source RDB import task`);
     }
     if (!source.cloudProvider || !source.clusterId || !source.region || !source.podIds || source.isCluster === undefined || source.tls === undefined) {
       throw new Error('Instance import source is missing prepared instance metadata');
     }
-    if (!source.podIds.includes(job.data.podId)) {
-      throw new Error(`Pod ${job.data.podId} is not part of source instance ${source.instanceId}`);
+    if (!source.podIds.includes(data.podId)) {
+      throw new Error(`Pod ${data.podId} is not part of source instance ${source.instanceId}`);
     }
 
     const destinationWriteUrl = await blobStorageRepository.getWriteUrl(
-      job.data.bucketName,
-      job.data.fileName,
+      data.bucketName,
+      data.fileName,
       'application/octet-stream',
       60 * 60 * 1000,
     );
@@ -52,7 +53,7 @@ const processor: Processor<RdbImportCopyInstanceSourceToBucketProcessorData> = a
       source.clusterId,
       source.region,
       source.instanceId,
-      job.data.podId,
+      data.podId,
       source.tls,
       destinationWriteUrl,
     );
