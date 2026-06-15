@@ -41,3 +41,28 @@ output "ctrl_plane_argocd_sa_id" {
 output "ctrl_plane_argocd_sa_email" {
   value = module.control_plane.argocd_sa_email
 }
+
+output "application_plane_cloud_artifact_registry_reader_service_account_email" {
+  value = module.application_plane.cloud_artifact_registry_reader_service_account_email
+}
+
+output "application_plane_cloud_artifact_registry_reader_service_account_json_key" {
+  value     = module.application_plane.cloud_artifact_registry_reader_service_account_json_key
+  sensitive = true
+}
+
+output "application_plane_cloud_artifact_registry_host" {
+  value = module.application_plane.cloud_artifact_registry_host
+}
+
+output "application_plane_cloud_artifact_registry_writer_service_account_email" {
+  value = module.application_plane.cloud_artifact_registry_writer_service_account_email
+}
+
+output "application_plane_cloud_artifact_registry_writer_workload_identity_provider" {
+  value = module.application_plane.cloud_artifact_registry_writer_workload_identity_provider
+}
+
+output "application_plane_cloud_artifact_registry_writer_workload_identity_pool_name" {
+  value = module.application_plane.cloud_artifact_registry_writer_workload_identity_pool_name
+}
