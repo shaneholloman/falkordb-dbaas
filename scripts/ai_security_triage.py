@@ -533,7 +533,7 @@ async def run_triage(args: argparse.Namespace) -> str | None:
     try:
         session = await client.create_session(
             on_permission_request=PermissionHandler.approve_all,
-            model="claude-opus-4.6",
+            model="claude-opus-4.8",
             streaming=True,
             tools=INVESTIGATION_TOOLS,
             system_message={"mode": "append", "content": SYSTEM_MESSAGE},
