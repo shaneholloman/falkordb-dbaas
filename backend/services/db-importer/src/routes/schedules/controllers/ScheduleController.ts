@@ -112,7 +112,7 @@ export class ScheduleController {
 
   private _assertRDBExportScheduleTier(instance: OmnistrateInstanceSchemaType): void {
     const allowedTiers = this._getRDBExportScheduleAllowedTiers();
-    if (allowedTiers.length === 0 || allowedTiers.includes(instance.productTierName)) {
+    if (allowedTiers.length === 0 || allowedTiers.includes('all') || allowedTiers.includes(instance.productTierName)) {
       return;
     }
 
