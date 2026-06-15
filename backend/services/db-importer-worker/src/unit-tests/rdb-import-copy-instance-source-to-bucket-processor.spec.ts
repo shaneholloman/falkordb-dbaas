@@ -70,6 +70,7 @@ describe('RDB import copy instance source to bucket processor', () => {
       id: 'job-id',
       data: {
         taskId: 'task-id',
+        scheduleId: 'schedule-id',
         bucketName: 'falkordb-import-bucket',
         fileName: 'imports/instance-id/import.rdb',
         podId: 'node-s-0',
@@ -93,6 +94,7 @@ describe('RDB import copy instance source to bucket processor', () => {
     );
     expect(JSON.stringify(k8sRepository.sendSaveAndUploadCommand.mock.calls)).not.toContain('source-user');
     expect(JSON.stringify(k8sRepository.sendSaveAndUploadCommand.mock.calls)).not.toContain('source-password');
+    expect(JSON.stringify(k8sRepository.sendSaveAndUploadCommand.mock.calls)).not.toContain('schedule-id');
     expect(tasksRepository.updateTask).not.toHaveBeenCalled();
   });
 });
