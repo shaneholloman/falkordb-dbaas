@@ -15,8 +15,6 @@ export const importRDBRequestUrlHandler: RouteHandlerMethod<undefined, undefined
 }> = async (request, reply) => {
   const {
     instanceId,
-    username,
-    password,
     source,
   } = request.body;
 
@@ -34,7 +32,7 @@ export const importRDBRequestUrlHandler: RouteHandlerMethod<undefined, undefined
     tasksRepository,
     storageRepository,
     taskQueueRepository,
-    process.env.IMPORT_BUCKET_NAME,
+    request.server.config.IMPORT_BUCKET_NAME,
     {
       logger,
     }
@@ -45,8 +43,6 @@ export const importRDBRequestUrlHandler: RouteHandlerMethod<undefined, undefined
     const { uploadUrl, taskId } = await controller.requestUploadUrl({
       requestorId: userID,
       instanceId,
-      username,
-      password,
       source,
     });
 

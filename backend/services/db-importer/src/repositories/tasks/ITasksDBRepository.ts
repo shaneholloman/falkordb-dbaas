@@ -2,7 +2,11 @@ import { RDBExportTaskPayloadType, RDBImportTaskPayloadType, TaskDocumentType, T
 
 export abstract class ITasksDBRepository {
 
-  abstract createTask(type: TaskTypesType, payload: RDBExportTaskPayloadType | RDBImportTaskPayloadType): Promise<TaskDocumentType>;
+  abstract createTask(
+    type: TaskTypesType,
+    payload: RDBExportTaskPayloadType | RDBImportTaskPayloadType,
+    opts?: { scheduleId?: string },
+  ): Promise<TaskDocumentType>;
 
   abstract listTasks(
     instanceId: string,
@@ -18,6 +22,14 @@ export abstract class ITasksDBRepository {
     pageSize: number;
     total: number;
   }>;
+
+  abstract listTasksByScheduleId(
+    scheduleId: string,
+    opts?: {
+      status?: TaskStatusType[],
+      types?: TaskTypesType[],
+    }
+  ): Promise<TaskDocumentType[]>;
 
   abstract updateTask(
     task: Partial<TaskDocumentType> & {

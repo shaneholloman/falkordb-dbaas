@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-importer-schedule-trigger
+  namespace: api
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            node_pool: backend
+          containers:
+            - name: schedule-trigger
+              image: curlimages/curl:8.7.1
+              imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  cpu: "10m"
+                  memory: "32Mi"
+                limits:
+                  cpu: "100m"
+                  memory: "128Mi"
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              env:
+                - name: SCHEDULE_TRIGGER_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-importer-env
+                      key: SCHEDULE_TRIGGER_TOKEN
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  curl --fail --silent --show-error \
+                    --request POST \
+                    --header "x-scheduler-token: ${SCHEDULE_TRIGGER_TOKEN}" \
+                    http://db-importer:3000/schedules/trigger

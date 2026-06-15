@@ -4,7 +4,7 @@ import { importRDBRequestUrlHandler } from './handlers/importRDBRequestUrlHandle
 import { importRDBConfirmUploadHandler } from './handlers/importRDBConfirmUploadHandler';
 
 export default fp(
-    async function handler(fastify, opts) {
+    async function handler(fastify) {
         fastify.post(
             '/import/request-url',
             {

@@ -145,9 +145,6 @@ const makeController = (createdTask: ExportRDBTaskType) => {
     }),
     checkIfUserHasAccessToInstance: jest.fn().mockResolvedValue(true),
   };
-  const k8sRepository = {
-    isUserAdmin: jest.fn().mockResolvedValue(true),
-  };
   const taskQueueRepository = {
     submitExportRDBTask: jest.fn().mockResolvedValue(undefined),
   };
@@ -156,12 +153,12 @@ const makeController = (createdTask: ExportRDBTaskType) => {
     controller: new ExportRDBController(
       tasksRepository as never,
       omnistrateRepository as never,
-      k8sRepository as never,
       taskQueueRepository as never,
       'falkordb-export-bucket',
       { logger: logger as never },
     ),
     tasksRepository,
+    omnistrateRepository,
   };
 };
 
@@ -194,6 +191,9 @@ describe('export target flow', () => {
   it('rejects hyphens in export request passwords', () => {
     expect(Value.Check(ExportRDBRequestBodySchema, {
       instanceId: 'instance-id',
+    })).toBe(true);
+    expect(Value.Check(ExportRDBRequestBodySchema, {
+      instanceId: 'instance-id',
       username: 'falkordb',
       password: 'password',
     })).toBe(true);
@@ -211,16 +211,20 @@ describe('export target flow', () => {
       bucketName: 'customer-bucket',
       credentials: serviceAccountCredentials,
     };
-    const { controller, tasksRepository } = makeController(makeSingleShardTask(target));
+    const { controller, tasksRepository, omnistrateRepository } = makeController(makeSingleShardTask(target));
 
     await controller.exportRDB({
       requestorId: 'user-id',
       instanceId: 'instance-id',
-      username: 'falkordb',
-      password: 'password',
       target,
     });
 
+    expect(omnistrateRepository.checkIfUserHasAccessToInstance).toHaveBeenCalledWith(
+      'user-id',
+      expect.objectContaining({ id: 'instance-id' }),
+      undefined,
+      ['root', 'editor', 'reader'],
+    );
     expect(gcsSaveMock).toHaveBeenCalledWith(Buffer.alloc(0), {
       contentType: 'application/octet-stream',
       resumable: false,

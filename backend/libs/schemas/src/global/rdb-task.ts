@@ -222,10 +222,15 @@ export const RDBImportInstanceSourceSchema = Type.Object({
 export const RDBImportRequestInstanceSourceSchema = Type.Object({
   type: Type.Literal('instance'),
   instanceId: Type.String(),
-  username: Type.String({
+  username: Type.Optional(Type.String({
     pattern: "^[a-zA-Z0-9._-]+$",
-  }),
-  password: Type.String(),
+    deprecated: true,
+    description: 'Deprecated. Source instance access is authorized by subscription role.',
+  })),
+  password: Type.Optional(Type.String({
+    deprecated: true,
+    description: 'Deprecated. Source instance access is authorized by subscription role.',
+  })),
 }, { additionalProperties: false });
 
 export const RDBImportRequestSourceSchema = Type.Union([
@@ -285,6 +290,7 @@ export type TaskStatusType = Static<typeof TaskStatusSchema>;
 
 export const SingleShardExportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
+  scheduleId: Type.Optional(Type.String()),
   type: Type.Literal('SingleShardRDBExport'),
   createdAt: Type.String(),
   updatedAt: Type.String(),
@@ -300,6 +306,7 @@ export const SingleShardExportRDBTaskSchema = Type.Object({
 
 export const MultiShardExportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
+  scheduleId: Type.Optional(Type.String()),
   type: Type.Literal('MultiShardRDBExport'),
   createdAt: Type.String(),
   updatedAt: Type.String(),
@@ -321,6 +328,7 @@ export type ExportRDBTaskType = Static<typeof ExportRDBTaskSchema>;
 
 export const PublicSingleShardExportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
+  scheduleId: Type.Optional(Type.String()),
   type: Type.Literal('SingleShardRDBExport'),
   createdAt: Type.String(),
   updatedAt: Type.String(),
@@ -336,6 +344,7 @@ export const PublicSingleShardExportRDBTaskSchema = Type.Object({
 
 export const PublicMultiShardExportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
+  scheduleId: Type.Optional(Type.String()),
   type: Type.Literal('MultiShardRDBExport'),
   createdAt: Type.String(),
   updatedAt: Type.String(),
@@ -400,6 +409,7 @@ export type RDBImportPublicTaskPayloadType = Static<typeof RDBImportPublicTaskPa
 
 export const ImportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
+  scheduleId: Type.Optional(Type.String()),
   type: Type.Literal('RDBImport'),
   createdAt: Type.String(),
   updatedAt: Type.String(),
@@ -416,6 +426,7 @@ export type ImportRDBTaskType = Static<typeof ImportRDBTaskSchema>;
 
 export const PublicImportRDBTaskSchema = Type.Object({
   taskId: Type.String(),
+  scheduleId: Type.Optional(Type.String()),
   type: Type.Literal('RDBImport'),
   createdAt: Type.String(),
   updatedAt: Type.String(),
