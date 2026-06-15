@@ -1,6 +1,7 @@
 import { Value } from '@sinclair/typebox/value';
 import { ExportRDBTaskType, ImportRDBTaskType, TaskDocumentType } from '@falkordb/schemas/global';
 import { CreateScheduleRequestBodySchema, PublicScheduleSchema, ScheduleDocument } from '@falkordb/schemas/services/import-export-rdb/v1';
+import { ApiError } from '@falkordb/errors';
 import { ScheduleController } from '../routes/schedules/controllers/ScheduleController';
 import { getRequestorId } from '../routes/schedules/handlers/auth';
 import { sign } from 'jsonwebtoken';
@@ -270,6 +271,24 @@ describe('scheduled export flow', () => {
       },
       periodMinutes: 60,
       minuteOfHour: 10,
+    })).toBe(false);
+  });
+
+  it('rejects export schedules with empty target bucket names', () => {
+    expect(Value.Check(CreateScheduleRequestBodySchema, {
+      type: 'RDBExport',
+      payload: {
+        instanceId: 'instance-id',
+        target: {
+          type: 's3',
+          bucketName: '',
+          region: 'us-east-1',
+          accessKeyId: 'access-key',
+          secretAccessKey: 'secret-key',
+        },
+      },
+      periodMinutes: 60,
+      minuteOfHour: 15,
     })).toBe(false);
   });
 
@@ -582,5 +601,21 @@ describe('scheduled export flow', () => {
       { enabled: false },
     );
     expect(result.disabled).toEqual([{ scheduleId: 'schedule-id', reason: 'failure threshold reached' }]);
+  });
+
+  it('reports messages from ApiError-like schedule trigger failures', async () => {
+    const dueSchedule = makeSchedule({
+      nextRunAt: '2026-06-11T10:15:00.000Z',
+    });
+    const { controller, tasksRepository } = makeController({
+      dueSchedules: [dueSchedule],
+    });
+    jest.spyOn(tasksRepository, 'listTasksByScheduleId').mockRejectedValueOnce(
+      ApiError.badRequest('Invalid export target credentials', 'INVALID_EXPORT_TARGET_CREDENTIALS'),
+    );
+
+    const result = await controller.triggerDueSchedules(new Date('2026-06-11T10:15:00.000Z'));
+
+    expect(result.failed).toEqual([{ scheduleId: 'schedule-id', error: 'Invalid export target credentials' }]);
   });
 });

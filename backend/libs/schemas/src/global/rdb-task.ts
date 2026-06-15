@@ -36,13 +36,13 @@ export type GCPServiceAccountKeyType = Static<typeof GCPServiceAccountKeySchema>
 
 export const RDBExportGCSTargetSchema = Type.Object({
   type: Type.Literal('gcs'),
-  bucketName: Type.String(),
+  bucketName: Type.String({ minLength: 1 }),
   credentials: GCPServiceAccountKeySchema,
 }, { additionalProperties: false });
 
 export const RDBExportS3TargetSchema = Type.Object({
   type: Type.Literal('s3'),
-  bucketName: Type.String(),
+  bucketName: Type.String({ minLength: 1 }),
   region: Type.String(),
   accessKeyId: Type.String(),
   secretAccessKey: Type.String(),

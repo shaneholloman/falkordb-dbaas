@@ -44,6 +44,10 @@ type PublicScheduleRunState = {
   consecutiveFailures?: number;
 };
 
+type ErrorLike = {
+  message?: unknown;
+};
+
 export class ScheduleController {
   constructor(
     private schedulesRepository: ISchedulesDBRepository,
@@ -265,6 +269,17 @@ export class ScheduleController {
     return this._toPublicSchedule(schedule, await this._getScheduleRunState(schedule));
   }
 
+  private _errorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    const message = error && typeof error === 'object' ? (error as ErrorLike).message : undefined;
+    if (typeof message === 'string') {
+      return message;
+    }
+    return String(error);
+  }
+
   private async _createTaskForSchedule(schedule: ScheduleDocument): Promise<{ taskId: string }> {
     if (schedule.type === 'RDBImport') {
       return this._createRDBImportTask(schedule);
@@ -415,7 +430,7 @@ export class ScheduleController {
         failed: [],
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = this._errorMessage(error);
       this._opts.logger.error({ error, scheduleId: schedule.scheduleId, type: schedule.type }, 'Error triggering schedule');
       return {
         triggered: [],
