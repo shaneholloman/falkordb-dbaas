@@ -618,4 +618,23 @@ describe('scheduled export flow', () => {
 
     expect(result.failed).toEqual([{ scheduleId: 'schedule-id', error: 'Invalid export target credentials' }]);
   });
+
+  it('disables schedules immediately for non-transient trigger failures', async () => {
+    const dueSchedule = makeSchedule({
+      nextRunAt: '2026-06-11T10:15:00.000Z',
+      failureThreshold: 10,
+    });
+    const { controller, schedulesRepository, tasksRepository } = makeController({
+      dueSchedules: [dueSchedule],
+    });
+    jest.spyOn(tasksRepository, 'listTasksByScheduleId').mockRejectedValueOnce(
+      ApiError.badRequest('Invalid export target credentials', 'INVALID_EXPORT_TARGET_CREDENTIALS'),
+    );
+
+    const result = await controller.triggerDueSchedules(new Date('2026-06-11T10:15:00.000Z'));
+
+    expect(schedulesRepository.updateSchedule).toHaveBeenCalledWith('schedule-id', { enabled: false });
+    expect(result.disabled).toEqual([{ scheduleId: 'schedule-id', reason: 'Invalid export target credentials' }]);
+    expect(result.failed).toEqual([{ scheduleId: 'schedule-id', error: 'Invalid export target credentials' }]);
+  });
 });

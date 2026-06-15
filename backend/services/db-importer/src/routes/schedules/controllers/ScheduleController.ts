@@ -25,6 +25,15 @@ const IMPORT_TASK_TYPES: TaskTypesType[] = ['RDBImport'];
 const RUNNING_TASK_STATUSES = ['created', 'pending', 'in_progress'] as const;
 const DEFAULT_RDB_EXPORT_ALLOWED_TIERS = ['FalkorDB Pro', 'FalkorDB Enterprise'];
 const MAX_SCHEDULES_PER_INSTANCE = 2;
+const NON_TRANSIENT_SCHEDULE_ERROR_CODES = new Set([
+  'BYOA_NOT_SUPPORTED',
+  'INSTANCE_NOT_FOUND',
+  'INVALID_EXPORT_TARGET_CREDENTIALS',
+  'INVALID_IMPORT_SOURCE',
+  'INVALID_SCHEDULE_IMPORT_SOURCE',
+  'INVALID_SCHEDULE_TYPE',
+  'SCHEDULED_EXPORT_TIER_NOT_ALLOWED',
+]);
 
 type TriggerScheduleResult = {
   triggered: { scheduleId: string; taskId: string }[];
@@ -46,6 +55,7 @@ type PublicScheduleRunState = {
 
 type ErrorLike = {
   message?: unknown;
+  errorCode?: unknown;
 };
 
 export class ScheduleController {
@@ -280,6 +290,16 @@ export class ScheduleController {
     return String(error);
   }
 
+  private _errorCode(error: unknown): string | undefined {
+    const errorCode = error && typeof error === 'object' ? (error as ErrorLike).errorCode : undefined;
+    return typeof errorCode === 'string' ? errorCode : undefined;
+  }
+
+  private _isNonTransientScheduleError(error: unknown): boolean {
+    const errorCode = this._errorCode(error);
+    return !!errorCode && NON_TRANSIENT_SCHEDULE_ERROR_CODES.has(errorCode);
+  }
+
   private async _createTaskForSchedule(schedule: ScheduleDocument): Promise<{ taskId: string }> {
     if (schedule.type === 'RDBImport') {
       return this._createRDBImportTask(schedule);
@@ -432,6 +452,15 @@ export class ScheduleController {
     } catch (error) {
       const message = this._errorMessage(error);
       this._opts.logger.error({ error, scheduleId: schedule.scheduleId, type: schedule.type }, 'Error triggering schedule');
+      if (this._isNonTransientScheduleError(error)) {
+        await this.schedulesRepository.updateSchedule(schedule.scheduleId, { enabled: false });
+        return {
+          triggered: [],
+          skipped: [],
+          disabled: [{ scheduleId: schedule.scheduleId, reason: message }],
+          failed: [{ scheduleId: schedule.scheduleId, error: message }],
+        };
+      }
       return {
         triggered: [],
         skipped: [],
