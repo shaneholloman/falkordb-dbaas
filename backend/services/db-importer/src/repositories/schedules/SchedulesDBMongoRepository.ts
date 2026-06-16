@@ -93,4 +93,12 @@ export class SchedulesDBMongoRepository implements ISchedulesDBRepository {
       nextRunAt,
     });
   }
+
+  async deleteSchedule(scheduleId: string): Promise<ScheduleDocument> {
+    const result = await this._client.db(this._db).collection<ScheduleDocument>(this._collection).findOneAndDelete({ scheduleId });
+    if (!result) {
+      throw new Error(`Schedule ${scheduleId} not found`);
+    }
+    return Value.Cast(ScheduleDocumentSchema, result);
+  }
 }
