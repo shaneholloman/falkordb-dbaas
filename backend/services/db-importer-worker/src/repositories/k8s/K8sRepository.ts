@@ -165,6 +165,12 @@ export class K8sRepository {
     return password.replace(/[\r\n]+$/, '');
   }
 
+  private _hasRedisAuthError(response: string): boolean {
+    return response
+      .split(/\r?\n/)
+      .some((line) => /^(NOAUTH|WRONGPASS|AUTH failed|ERR invalid password)\b/i.test(line.trim()));
+  }
+
   private _sanitizeCommandForError(command: string[]): string {
     const shellCommandIndex = command.findIndex((part, index) => part === '-c' && command[index - 1] === 'sh');
 
@@ -301,7 +307,7 @@ export class K8sRepository {
       throw e;
     });
 
-    if (response.includes("NOAUTH")) {
+    if (this._hasRedisAuthError(response)) {
       throw new Error('Failed to authenticate to FalkorDB');
     }
 
@@ -332,7 +338,7 @@ export class K8sRepository {
       throw e;
     });
 
-    if (response.includes("NOAUTH")) {
+    if (this._hasRedisAuthError(response)) {
       throw new Error('Failed to authenticate to FalkorDB');
     }
   }
@@ -361,7 +367,7 @@ export class K8sRepository {
       throw e;
     });
 
-    if (response.includes("NOAUTH")) {
+    if (this._hasRedisAuthError(response)) {
       throw new Error('Failed to authenticate to FalkorDB');
     }
   }
@@ -390,7 +396,7 @@ export class K8sRepository {
       throw e;
     });
 
-    if (response.includes("NOAUTH")) {
+    if (this._hasRedisAuthError(response)) {
       throw new Error('Failed to authenticate to FalkorDB');
     }
 
@@ -421,7 +427,7 @@ export class K8sRepository {
       throw e;
     });
 
-    if (response.includes("NOAUTH")) {
+    if (this._hasRedisAuthError(response)) {
       throw new Error('Failed to authenticate to FalkorDB');
     }
 
@@ -748,9 +754,10 @@ export class K8sRepository {
         echo "ERROR: empty INFO response from ${podId}" >&2
         exit 1
       fi
-      case "$INFO" in
-        *NOAUTH*) echo "ERROR: authentication to ${podId} failed (NOAUTH)" >&2; exit 1 ;;
-      esac
+      if printf '%s\n' "$INFO" | grep -Eiq '^(NOAUTH|WRONGPASS|AUTH failed|ERR invalid password)\b'; then
+        echo "ERROR: authentication to ${podId} failed" >&2
+        exit 1
+      fi
 
       TARGET_HOST="${podId}"
       if echo "$INFO" | grep -q "redis_mode:standalone" && echo "$INFO" | grep -q "role:slave"; then
