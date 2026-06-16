@@ -2,6 +2,8 @@ import fp from 'fastify-plugin';
 import {
   CreateScheduleRequestBodySchema,
   CreateScheduleResponseBodySchema,
+  DeleteScheduleRequestParamsSchema,
+  DeleteScheduleResponseBodySchema,
   ListSchedulesRequestQuerySchema,
   ListSchedulesResponseBodySchema,
   TriggerSchedulesResponseBodySchema,
@@ -11,6 +13,7 @@ import {
 } from '@falkordb/schemas/services/import-export-rdb/v1';
 import {
   createScheduleHandler,
+  deleteScheduleHandler,
   listSchedulesHandler,
   triggerSchedulesHandler,
   updateScheduleHandler,
@@ -65,6 +68,22 @@ export default fp(
         },
       },
       updateScheduleHandler,
+    );
+
+    fastify.delete(
+      '/schedules/:scheduleId',
+      {
+        preHandler: async (request) => {
+          await fastify.authenticateOmnistrate(request);
+        },
+        schema: {
+          tags: ['schedules'],
+          params: DeleteScheduleRequestParamsSchema,
+          response: { 200: DeleteScheduleResponseBodySchema },
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      deleteScheduleHandler,
     );
 
     fastify.post(
