@@ -36,6 +36,7 @@ const makeScheduleController = (request: FastifyRequest): ScheduleController => 
     {
       defaultFailureThreshold: request.server.config.SCHEDULE_FAILURE_THRESHOLD,
       rdbExportAllowedTiers: request.server.config.SCHEDULE_RDB_EXPORT_ALLOWED_TIERS,
+      rdbExportMaxPerInstance: request.server.config.SCHEDULE_RDB_EXPORT_MAX_PER_INSTANCE,
     },
     { logger: request.log },
   );
