@@ -192,6 +192,7 @@ const makeController = ({
       {
         defaultFailureThreshold: 3,
         rdbExportAllowedTiers: process.env.SCHEDULE_RDB_EXPORT_ALLOWED_TIERS ?? '',
+        rdbExportMaxPerInstance: Number(process.env.SCHEDULE_RDB_EXPORT_MAX_PER_INSTANCE ?? 2),
       },
       { logger: logger as never },
     ),
@@ -208,10 +209,12 @@ describe('scheduled export flow', () => {
     jest.clearAllMocks();
     s3SendMock.mockResolvedValue({});
     process.env.SCHEDULE_RDB_EXPORT_ALLOWED_TIERS = 'FalkorDB Pro,FalkorDB Enterprise';
+    process.env.SCHEDULE_RDB_EXPORT_MAX_PER_INSTANCE = '2';
   });
 
   afterEach(() => {
     delete process.env.SCHEDULE_RDB_EXPORT_ALLOWED_TIERS;
+    delete process.env.SCHEDULE_RDB_EXPORT_MAX_PER_INSTANCE;
   });
 
   it('returns 401-style errors for missing or malformed authorization tokens', () => {
@@ -404,11 +407,37 @@ describe('scheduled export flow', () => {
     jest.useRealTimers();
   });
 
-  it('rejects schedule creation when an instance already has two schedules', async () => {
+  it('rejects import schedule creation when an instance already has one import schedule', async () => {
+    const { controller, schedulesRepository } = makeController({
+      existingSchedules: [makeImportSchedule({ scheduleId: 'schedule-id-1' })],
+    });
+
+    await expect(controller.createSchedule({
+      requestorId: 'user-id',
+      type: 'RDBImport',
+      payload: {
+        instanceId: 'instance-id',
+        source: {
+          type: 'instance',
+          instanceId: 'source-instance-id',
+          username: 'falkordb',
+          password: 'password',
+        },
+      },
+      periodMinutes: 60,
+      minuteOfHour: 30,
+    })).rejects.toMatchObject({ errorCode: 'MAX_SCHEDULES_PER_INSTANCE_REACHED' });
+
+    expect(schedulesRepository.createSchedule).not.toHaveBeenCalled();
+  });
+
+  it('rejects export schedule creation when an instance reaches the configured export schedule limit', async () => {
+    process.env.SCHEDULE_RDB_EXPORT_MAX_PER_INSTANCE = '3';
     const { controller, schedulesRepository } = makeController({
       existingSchedules: [
         makeSchedule({ scheduleId: 'schedule-id-1' }),
         makeSchedule({ scheduleId: 'schedule-id-2' }),
+        makeSchedule({ scheduleId: 'schedule-id-3' }),
       ],
     });
 

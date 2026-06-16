@@ -24,7 +24,7 @@ const EXPORT_TASK_TYPES: TaskTypesType[] = ['SingleShardRDBExport', 'MultiShardR
 const IMPORT_TASK_TYPES: TaskTypesType[] = ['RDBImport'];
 const RUNNING_TASK_STATUSES = ['created', 'pending', 'in_progress'] as const;
 const DEFAULT_RDB_EXPORT_ALLOWED_TIERS = ['FalkorDB Pro', 'FalkorDB Enterprise'];
-const MAX_SCHEDULES_PER_INSTANCE = 2;
+const RDB_IMPORT_MAX_SCHEDULES_PER_INSTANCE = 1;
 const NON_TRANSIENT_SCHEDULE_ERROR_CODES = new Set([
   'BYOA_NOT_SUPPORTED',
   'INSTANCE_NOT_FOUND',
@@ -70,6 +70,7 @@ export class ScheduleController {
     private _scheduleOptions: {
       defaultFailureThreshold: number;
       rdbExportAllowedTiers: string;
+      rdbExportMaxPerInstance: number;
     },
     private _opts: { logger: FastifyBaseLogger },
   ) { }
@@ -125,6 +126,11 @@ export class ScheduleController {
   private _defaultFailureThreshold(): number {
     const value = this._scheduleOptions.defaultFailureThreshold;
     return Number.isInteger(value) && value > 0 ? value : 3;
+  }
+
+  private _rdbExportMaxSchedulesPerInstance(): number {
+    const value = this._scheduleOptions.rdbExportMaxPerInstance;
+    return Number.isInteger(value) && value > 0 ? value : 2;
   }
 
   private _getRDBExportScheduleAllowedTiers(): string[] {
@@ -212,7 +218,10 @@ export class ScheduleController {
 
   private async _assertInstanceScheduleLimit(type: ScheduleType, instanceId: string): Promise<void> {
     const existingSchedules = await this.schedulesRepository.listSchedules({ type, instanceId });
-    if (existingSchedules.length >= MAX_SCHEDULES_PER_INSTANCE) {
+    const maxSchedules = type === 'RDBImport'
+      ? RDB_IMPORT_MAX_SCHEDULES_PER_INSTANCE
+      : this._rdbExportMaxSchedulesPerInstance();
+    if (existingSchedules.length >= maxSchedules) {
       throw ApiError.badRequest('Maximum schedules per instance reached', 'MAX_SCHEDULES_PER_INSTANCE_REACHED');
     }
   }
