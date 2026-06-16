@@ -40,6 +40,7 @@ def get_dashboard_json(instance_id: str):
         res = f.read()
 
     dashboard = json.loads(res)
+    dashboard["id"] = None
     dashboard["uid"] = instance_id
     dashboard["title"] = "FalkorDB dashboard for " + instance_id
 
@@ -132,6 +133,17 @@ def create_grafana_datasource(
         },
     )
 
+    grafana.post(
+        f"{grafana_url}/datasources",
+        json={
+            "type": "victoriametrics-logs-datasource",
+            "access": "proxy",
+            "isDefault": False,
+            "name": "VictoriaLogs",
+            "url": "http://victorialogs-server.observability.svc.cluster.local:9428",
+        },
+    )
+
 
 def create_grafana_folder(
     org_id: int,
@@ -142,6 +154,14 @@ def create_grafana_folder(
         f"{grafana_url}/folders?orgId={org_id}",
         json={"title": folder_name},
     )
+
+    if res.status_code == 409:
+        logging.debug(f"Folder {folder_name} already exists")
+        folders = grafana.get(f"{grafana_url}/folders").json()
+        for folder in folders:
+            if folder.get("title") == folder_name:
+                return folder.get("uid")
+        raise Exception(f"Folder {folder_name} exists but could not be found")
 
     return res.json().get("uid")
 
@@ -157,6 +177,7 @@ def create_grafana_dashboard(
         json={
             "dashboard": dashboard_json,
             "folderUid": folder_uid,
+            "overwrite": True,
         },
     )
 
