@@ -120,6 +120,11 @@ def create_grafana_datasource(
         f"{grafana_url}/user/using/{orgId}",
     )
 
+    if res.status_code != 200:
+        raise Exception(
+            f"Error switching to org {orgId}: {res.status_code} {res.text}"
+        )
+
     logging.debug(f"Using org {orgId}: {res.text}")
 
     def _create_datasource(payload: dict):
@@ -173,6 +178,11 @@ def create_grafana_folder(
             if folder.get("title") == folder_name:
                 return folder.get("uid")
         raise Exception(f"Folder {folder_name} exists but could not be found")
+
+    if res.status_code != 200:
+        raise Exception(
+            f"Error creating folder {folder_name} for org {org_id}: {res.status_code} {res.text}"
+        )
 
     return res.json().get("uid")
 
