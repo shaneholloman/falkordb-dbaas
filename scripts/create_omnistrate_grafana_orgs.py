@@ -122,26 +122,33 @@ def create_grafana_datasource(
 
     logging.debug(f"Using org {orgId}: {res.text}")
 
-    grafana.post(
-        f"{grafana_url}/datasources",
-        json={
+    def _create_datasource(payload: dict):
+        ds_res = grafana.post(f"{grafana_url}/datasources", json=payload)
+        # 409 means the datasource already exists, which is fine for idempotent re-runs.
+        if ds_res.status_code not in (200, 409):
+            raise Exception(
+                f"Error creating datasource {payload.get('name')} for org {orgId}: "
+                f"{ds_res.status_code} {ds_res.text}"
+            )
+
+    _create_datasource(
+        {
             "type": "prometheus",
             "access": "proxy",
             "isDefault": True,
             "name": "VictoriaMetrics",
             "url": "http://vmsingle-vm.observability.svc.cluster.local:8429",
-        },
+        }
     )
 
-    grafana.post(
-        f"{grafana_url}/datasources",
-        json={
+    _create_datasource(
+        {
             "type": "victoriametrics-logs-datasource",
             "access": "proxy",
             "isDefault": False,
             "name": "VictoriaLogs",
             "url": "http://victorialogs-server.observability.svc.cluster.local:9428",
-        },
+        }
     )
 
 
@@ -157,8 +164,12 @@ def create_grafana_folder(
 
     if res.status_code == 409:
         logging.debug(f"Folder {folder_name} already exists")
-        folders = grafana.get(f"{grafana_url}/folders").json()
-        for folder in folders:
+        folders_res = grafana.get(f"{grafana_url}/folders?orgId={org_id}")
+        if folders_res.status_code != 200:
+            raise Exception(
+                f"Error listing folders for org {org_id}: {folders_res.status_code} {folders_res.text}"
+            )
+        for folder in folders_res.json():
             if folder.get("title") == folder_name:
                 return folder.get("uid")
         raise Exception(f"Folder {folder_name} exists but could not be found")
