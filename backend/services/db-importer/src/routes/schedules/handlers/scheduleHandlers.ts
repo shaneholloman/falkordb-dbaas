@@ -3,6 +3,8 @@ import { ApiError } from '@falkordb/errors';
 import {
   CreateScheduleRequestBody,
   CreateScheduleResponseBody,
+  DeleteScheduleRequestParams,
+  DeleteScheduleResponseBody,
   ListSchedulesRequestQuery,
   ListSchedulesResponseBody,
   TriggerSchedulesResponseBody,
@@ -97,6 +99,24 @@ export const updateScheduleHandler: RouteHandlerMethod<undefined, undefined, und
     reply.send({ schedule });
   } catch (error) {
     request.log.error(error, 'Error updating schedule');
+    if (error instanceof ApiError) {
+      throw error.toFastify(request.server);
+    }
+    throw error;
+  }
+};
+
+export const deleteScheduleHandler: RouteHandlerMethod<undefined, undefined, undefined, {
+  Params: DeleteScheduleRequestParams;
+  Reply: DeleteScheduleResponseBody;
+}> = async (request, reply) => {
+  try {
+    const requestorId = getRequestorId((request.headers as unknown)?.['authorization'] as string);
+    const controller = makeScheduleController(request);
+    const schedule = await controller.deleteSchedule(requestorId, request.params.scheduleId);
+    reply.send({ schedule });
+  } catch (error) {
+    request.log.error(error, 'Error deleting schedule');
     if (error instanceof ApiError) {
       throw error.toFastify(request.server);
     }

@@ -121,25 +121,32 @@ const makeImportSchedule = (overrides: Partial<ScheduleDocument> = {}): Schedule
 const makeController = ({
   dueSchedules = [],
   existingSchedules = [],
+  scheduleToGet = makeSchedule(),
   runningTasks = [],
   failedTasks = [],
   scheduledTasks,
   createdTask = makeTask(),
+  instanceStatuses = {},
+  userHasAccess = true,
 }: {
   dueSchedules?: ScheduleDocument[];
   existingSchedules?: ScheduleDocument[];
+  scheduleToGet?: ScheduleDocument | null;
   runningTasks?: TaskDocumentType[];
   failedTasks?: TaskDocumentType[];
   scheduledTasks?: TaskDocumentType[];
   createdTask?: TaskDocumentType;
+  instanceStatuses?: Record<string, 'RUNNING' | 'FAILED' | 'STOPPED' | 'DEPLOYING'>;
+  userHasAccess?: boolean;
 } = {}) => {
   const schedulesRepository = {
     createSchedule: jest.fn().mockImplementation(async (schedule) => makeSchedule(schedule)),
     listSchedules: jest.fn().mockResolvedValue(existingSchedules),
-    getSchedule: jest.fn().mockResolvedValue(makeSchedule()),
+    getSchedule: jest.fn().mockResolvedValue(scheduleToGet),
     listDueSchedules: jest.fn().mockResolvedValue(dueSchedules),
     updateSchedule: jest.fn().mockImplementation(async (scheduleId, update) => makeSchedule({ scheduleId, ...update })),
     updateNextRunAt: jest.fn().mockImplementation(async (scheduleId, nextRunAt) => makeSchedule({ scheduleId, nextRunAt })),
+    deleteSchedule: jest.fn().mockImplementation(async (scheduleId) => makeSchedule({ scheduleId })),
   };
   const tasksRepository = {
     listTasks: jest.fn().mockResolvedValue({ data: [] }),
@@ -162,14 +169,14 @@ const makeController = ({
       clusterId: instanceId === 'source-instance-id' ? 'source-cluster-id' : 'cluster-id',
       region: 'us-central1',
       tls: false,
-      status: 'RUNNING',
+      status: instanceStatuses[instanceId] ?? 'RUNNING',
       productTierName: 'FalkorDB Pro',
       deploymentType: 'Free',
       subscriptionId: 'subscription-id',
       podIds: ['node-f-0'],
       aofEnabled: false,
     })),
-    checkIfUserHasAccessToInstance: jest.fn().mockResolvedValue(true),
+    checkIfUserHasAccessToInstance: jest.fn().mockResolvedValue(userHasAccess),
   };
   const taskQueueRepository = {
     submitExportRDBTask: jest.fn().mockResolvedValue(undefined),
@@ -560,6 +567,53 @@ describe('scheduled export flow', () => {
     expect(Value.Check(PublicScheduleSchema, schedules[0])).toBe(true);
   });
 
+  it('deletes schedules after checking instance access', async () => {
+    const schedule = makeSchedule({ scheduleId: 'delete-schedule-id' });
+    const { controller, schedulesRepository, omnistrateRepository } = makeController({
+      scheduleToGet: schedule,
+    });
+
+    const deleted = await controller.deleteSchedule('user-id', 'delete-schedule-id');
+
+    expect(schedulesRepository.getSchedule).toHaveBeenCalledWith('delete-schedule-id');
+    expect(omnistrateRepository.checkIfUserHasAccessToInstance).toHaveBeenCalledWith('user-id', undefined, 'instance-id', [
+      'root',
+      'editor',
+      'reader',
+    ]);
+    expect(schedulesRepository.deleteSchedule).toHaveBeenCalledWith('delete-schedule-id');
+    expect(deleted).toEqual(expect.objectContaining({
+      scheduleId: 'delete-schedule-id',
+      payload: expect.objectContaining({ instanceId: 'instance-id' }),
+    }));
+    expect(Value.Check(PublicScheduleSchema, deleted)).toBe(true);
+  });
+
+  it('returns not found when deleting a missing schedule', async () => {
+    const { controller, schedulesRepository, omnistrateRepository } = makeController({
+      scheduleToGet: null,
+    });
+
+    await expect(controller.deleteSchedule('user-id', 'missing-schedule-id')).rejects.toMatchObject({
+      message: 'Schedule not found',
+      errorCode: 'SCHEDULE_NOT_FOUND',
+    });
+    expect(omnistrateRepository.checkIfUserHasAccessToInstance).not.toHaveBeenCalled();
+    expect(schedulesRepository.deleteSchedule).not.toHaveBeenCalled();
+  });
+
+  it('does not delete schedules without instance access', async () => {
+    const { controller, schedulesRepository } = makeController({
+      userHasAccess: false,
+    });
+
+    await expect(controller.deleteSchedule('user-id', 'schedule-id')).rejects.toMatchObject({
+      message: "You don't have access to this instance",
+      errorCode: 'FORBIDDEN',
+    });
+    expect(schedulesRepository.deleteSchedule).not.toHaveBeenCalled();
+  });
+
   it('triggers due schedules by creating normal export tasks', async () => {
     const dueSchedule = makeSchedule({ nextRunAt: '2026-06-11T10:15:00.000Z' });
     const { controller, schedulesRepository, tasksRepository, taskQueueRepository } = makeController({
@@ -611,6 +665,59 @@ describe('scheduled export flow', () => {
       '2026-06-11T11:15:00.000Z',
     );
     expect(result.triggered).toEqual([{ scheduleId: 'schedule-id', taskId: 'scheduled-import-task-id' }]);
+  });
+
+  it('disables due export schedules when the target instance is not running', async () => {
+    const dueSchedule = makeSchedule({ nextRunAt: '2026-06-11T10:15:00.000Z' });
+    const { controller, schedulesRepository, tasksRepository, taskQueueRepository } = makeController({
+      dueSchedules: [dueSchedule],
+      instanceStatuses: { 'instance-id': 'STOPPED' },
+    });
+
+    const result = await controller.triggerDueSchedules(new Date('2026-06-11T10:15:00.000Z'));
+
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitExportRDBTask).not.toHaveBeenCalled();
+    expect(schedulesRepository.updateSchedule).toHaveBeenCalledWith('schedule-id', { enabled: false });
+    expect(schedulesRepository.updateNextRunAt).not.toHaveBeenCalled();
+    expect(result.disabled).toEqual([{ scheduleId: 'schedule-id', reason: 'instance instance-id is STOPPED' }]);
+    expect(result.failed).toEqual([]);
+  });
+
+  it('disables due import schedules when the destination instance is not running', async () => {
+    const dueSchedule = makeImportSchedule({ nextRunAt: '2026-06-11T10:15:00.000Z' });
+    const { controller, schedulesRepository, tasksRepository, taskQueueRepository } = makeController({
+      dueSchedules: [dueSchedule],
+      instanceStatuses: { 'instance-id': 'DEPLOYING' },
+    });
+
+    const result = await controller.triggerDueSchedules(new Date('2026-06-11T10:15:00.000Z'));
+
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+    expect(schedulesRepository.updateSchedule).toHaveBeenCalledWith('schedule-id', { enabled: false });
+    expect(schedulesRepository.updateNextRunAt).not.toHaveBeenCalled();
+    expect(result.disabled).toEqual([{ scheduleId: 'schedule-id', reason: 'instance instance-id is DEPLOYING' }]);
+    expect(result.failed).toEqual([]);
+  });
+
+  it('disables due import schedules when the source instance is not running', async () => {
+    const dueSchedule = makeImportSchedule({ nextRunAt: '2026-06-11T10:15:00.000Z' });
+    const { controller, schedulesRepository, tasksRepository, omnistrateRepository, taskQueueRepository } = makeController({
+      dueSchedules: [dueSchedule],
+      instanceStatuses: { 'source-instance-id': 'FAILED' },
+    });
+
+    const result = await controller.triggerDueSchedules(new Date('2026-06-11T10:15:00.000Z'));
+
+    expect(omnistrateRepository.getInstance).toHaveBeenCalledWith('instance-id');
+    expect(omnistrateRepository.getInstance).toHaveBeenCalledWith('source-instance-id');
+    expect(tasksRepository.createTask).not.toHaveBeenCalled();
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+    expect(schedulesRepository.updateSchedule).toHaveBeenCalledWith('schedule-id', { enabled: false });
+    expect(schedulesRepository.updateNextRunAt).not.toHaveBeenCalled();
+    expect(result.disabled).toEqual([{ scheduleId: 'schedule-id', reason: 'source instance source-instance-id is FAILED' }]);
+    expect(result.failed).toEqual([]);
   });
 
   it('disables schedules when failed tasks reach the threshold', async () => {

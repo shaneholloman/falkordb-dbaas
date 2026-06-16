@@ -140,6 +140,11 @@ export const UpdateScheduleRequestParamsSchema = Type.Object({
 });
 export type UpdateScheduleRequestParams = Static<typeof UpdateScheduleRequestParamsSchema>;
 
+export const DeleteScheduleRequestParamsSchema = Type.Object({
+  scheduleId: Type.String(),
+});
+export type DeleteScheduleRequestParams = Static<typeof DeleteScheduleRequestParamsSchema>;
+
 export const UpdateScheduleRequestBodySchema = Type.Object({
   enabled: Type.Optional(Type.Boolean()),
 });
@@ -149,6 +154,11 @@ export const UpdateScheduleResponseBodySchema = Type.Object({
   schedule: PublicScheduleSchema,
 });
 export type UpdateScheduleResponseBody = Static<typeof UpdateScheduleResponseBodySchema>;
+
+export const DeleteScheduleResponseBodySchema = Type.Object({
+  schedule: PublicScheduleSchema,
+});
+export type DeleteScheduleResponseBody = Static<typeof DeleteScheduleResponseBodySchema>;
 
 export const TriggerSchedulesResponseBodySchema = Type.Object({
   triggered: Type.Array(Type.Object({ scheduleId: Type.String(), taskId: Type.String() })),

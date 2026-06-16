@@ -32,4 +32,6 @@ export abstract class ISchedulesDBRepository {
   abstract updateSchedule(scheduleId: string, update: Partial<ScheduleDocument>): Promise<ScheduleDocument>;
 
   abstract updateNextRunAt(scheduleId: string, nextRunAt: string): Promise<ScheduleDocument>;
+
+  abstract deleteSchedule(scheduleId: string): Promise<ScheduleDocument>;
 }

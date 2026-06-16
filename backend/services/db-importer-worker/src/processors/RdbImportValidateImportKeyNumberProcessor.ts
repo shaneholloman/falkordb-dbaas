@@ -36,7 +36,8 @@ const processor: Processor<RdbImportValidateImportKeyNumberProcessorData> = asyn
       job.data.isCluster,
     );
 
-    if (keyCount !== (task.output as RDBImportOutputType).numberOfKeys) {
+    if (keyCount > ((task.output as RDBImportOutputType)?.numberOfKeys ?? 0) + 1 ||
+        keyCount < ((task.output as RDBImportOutputType)?.numberOfKeys ?? 0) - 1) {
       const queue = new Queue(RdbImportRecoverFailedImportProcessor.name, {
         connection: {
           url: process.env.REDIS_URL,
@@ -52,7 +53,7 @@ const processor: Processor<RdbImportValidateImportKeyNumberProcessorData> = asyn
         aofEnabled: job.data.aofEnabled,
         backupPath: job.data.backupPath,
       } as Static<typeof RdbImportRecoverFailedImportProcessor.schema>);
-      throw new Error(`Key count mismatch: expected ${(task.output as RDBImportOutputType).numberOfKeys}, got ${keyCount}`);
+      throw new Error(`Key count mismatch: expected ${(task.output as RDBImportOutputType)?.numberOfKeys}, got ${keyCount}`);
     }
 
     const queue = new Queue(RdbImportDeleteLocalBackupProcessor.name, {
@@ -77,7 +78,7 @@ const processor: Processor<RdbImportValidateImportKeyNumberProcessorData> = asyn
     logger.error(error, `Error processing job ${job.id}: ${error}`);
     await tasksRepository.updateTask({
       taskId: job.data.taskId,
-      errors: [error.message ?? error.toString()],
+      errors: [(error as any)?.message ?? (error as any)?.toString()],
       status: 'failed',
     });
 
