@@ -309,6 +309,24 @@ export class ScheduleController {
     return !!errorCode && NON_TRANSIENT_SCHEDULE_ERROR_CODES.has(errorCode);
   }
 
+  private async _nonRunningScheduleInstanceReason(schedule: ScheduleDocument): Promise<string | undefined> {
+    const payload = schedule.payload as RDBExportSchedulePayload | RDBImportSchedulePayload;
+    const instance = await this.omnistrateRepository.getInstance(payload.instanceId);
+    if (instance.status !== 'RUNNING') {
+      return `instance ${payload.instanceId} is ${instance.status}`;
+    }
+
+    if (schedule.type === 'RDBImport') {
+      const sourceInstanceId = (payload as RDBImportSchedulePayload).source.instanceId;
+      const sourceInstance = await this.omnistrateRepository.getInstance(sourceInstanceId);
+      if (sourceInstance.status !== 'RUNNING') {
+        return `source instance ${sourceInstanceId} is ${sourceInstance.status}`;
+      }
+    }
+
+    return undefined;
+  }
+
   private async _createTaskForSchedule(schedule: ScheduleDocument): Promise<{ taskId: string }> {
     if (schedule.type === 'RDBImport') {
       return this._createRDBImportTask(schedule);
@@ -416,6 +434,16 @@ export class ScheduleController {
     return this._toPublicScheduleWithRunState(updated);
   }
 
+  async deleteSchedule(requestorId: string, scheduleId: string): Promise<PublicSchedule> {
+    const schedule = await this.schedulesRepository.getSchedule(scheduleId);
+    if (!schedule) {
+      throw ApiError.notFound('Schedule not found', 'SCHEDULE_NOT_FOUND');
+    }
+    await this._assertScheduleAccess(requestorId, schedule.payload.instanceId);
+    const deleted = await this.schedulesRepository.deleteSchedule(scheduleId);
+    return this._toPublicSchedule(deleted);
+  }
+
   private async _triggerSchedule(schedule: ScheduleDocument, now: Date): Promise<TriggerScheduleResult> {
     try {
       const taskTypes = this._taskTypesForSchedule(schedule.type);
@@ -445,6 +473,17 @@ export class ScheduleController {
           triggered: [],
           skipped: [],
           disabled: [{ scheduleId: schedule.scheduleId, reason: 'failure threshold reached' }],
+          failed: [],
+        };
+      }
+
+      const nonRunningInstanceReason = await this._nonRunningScheduleInstanceReason(schedule);
+      if (nonRunningInstanceReason) {
+        await this.schedulesRepository.updateSchedule(schedule.scheduleId, { enabled: false });
+        return {
+          triggered: [],
+          skipped: [],
+          disabled: [{ scheduleId: schedule.scheduleId, reason: nonRunningInstanceReason }],
           failed: [],
         };
       }

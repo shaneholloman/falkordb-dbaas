@@ -39,9 +39,18 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
+  ignoreDifferences:
+    # PVC size changes must be applied by resizing the live PVC first; Kubernetes forbids
+    # patching StatefulSet volumeClaimTemplates after creation.
+    - group: apps
+      kind: StatefulSet
+      name: victorialogs-server
+      jsonPointers:
+        - /spec/volumeClaimTemplates/0/spec/resources/requests/storage
   syncPolicy:
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true
     automated:
       prune: true
       selfHeal: true
