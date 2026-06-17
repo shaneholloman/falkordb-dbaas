@@ -1,5 +1,5 @@
 import { ImportRDBController } from '../routes/import/controllers/ImportRDBController';
-import { sanitizeTaskDocument } from '@falkordb/schemas/global';
+import { ImportRDBTaskSchema, PublicImportRDBTaskSchema, sanitizeTaskDocument } from '@falkordb/schemas/global';
 import { TaskQueueBullMQRepository } from '../repositories/tasksQueue/TaskQueueBullMQRepository';
 import { RdbImportTaskNames } from '@falkordb/schemas/services/db-importer-worker/v1';
 import { ImportRDBRequestUploadURLRequestBodySchema } from '@falkordb/schemas/services/import-export-rdb/v1';
@@ -843,6 +843,58 @@ describe('import RDB customer source flow', () => {
     expect(taskQueueRepository.submitImportRDBTask).toHaveBeenCalledWith(task);
   });
 
+  it('creates a schema-valid import task payload for direct file uploads', async () => {
+    const { controller, tasksRepository, storageRepository, taskQueueRepository } = makeController();
+
+    const result = await controller.requestUploadUrl({
+      requestorId: 'user-id',
+      instanceId: 'instance-id',
+    });
+
+    expect(result).toEqual({ taskId: 'task-id', uploadUrl: 'https://managed-write-url' });
+    const createdPayload = tasksRepository.createTask.mock.calls[0][1];
+    expect(createdPayload.source).toEqual({ type: 'file' });
+    expect(storageRepository.getWriteUrl).toHaveBeenCalledWith(
+      'falkordb-import-bucket',
+      createdPayload.fileName,
+      'application/octet-stream',
+      60 * 60 * 1000,
+    );
+
+    const task = {
+      taskId: 'task-id',
+      type: 'RDBImport' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'pending' as const,
+      payload: createdPayload,
+    };
+    expect(Value.Check(ImportRDBTaskSchema, task)).toBe(true);
+    const publicTask = sanitizeTaskDocument(task);
+    expect(publicTask.type).toBe('RDBImport');
+    if (publicTask.type !== 'RDBImport') {
+      throw new Error(`Expected RDBImport task, got ${publicTask.type}`);
+    }
+    expect(publicTask.payload.source).toEqual({ type: 'file' });
+    expect(Value.Check(PublicImportRDBTaskSchema, publicTask)).toBe(true);
+
+    const legacyPayload = { ...createdPayload };
+    delete legacyPayload.source;
+    const legacyTask = {
+      ...task,
+      payload: legacyPayload,
+    };
+    expect(Value.Check(ImportRDBTaskSchema, legacyTask)).toBe(true);
+    const legacyPublicTask = sanitizeTaskDocument(legacyTask);
+    expect(legacyPublicTask.type).toBe('RDBImport');
+    if (legacyPublicTask.type !== 'RDBImport') {
+      throw new Error(`Expected RDBImport task, got ${legacyPublicTask.type}`);
+    }
+    expect(legacyPublicTask.payload.source).toEqual({ type: 'file' });
+
+    expect(taskQueueRepository.submitImportRDBTask).not.toHaveBeenCalled();
+  });
+
   it('builds the direct upload import tree with parallel RDB size and format validation', () => {
     process.env.APPLICATION_PLANE_PROJECT_ID = 'app-plane-project';
     process.env.CTRL_PLANE_PROJECT_ID = 'ctrl-plane-project';
@@ -930,8 +982,10 @@ describe('import RDB customer source flow', () => {
 
     const jobs = collectJobs(flow);
     const copyJobs = jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportCopySourceToBucket);
+    const monitorCopyJobs = jobs.filter((job) => job.name === RdbImportTaskNames.RdbImportMonitorCopySourceToBucket);
 
     expect(copyJobs).toHaveLength(1);
+    expect(monitorCopyJobs).toHaveLength(1);
     for (const copyJob of copyJobs) {
       expect(copyJob.data).toEqual({
         taskId: 'task-id',
@@ -942,6 +996,15 @@ describe('import RDB customer source flow', () => {
       expect(JSON.stringify(copyJob)).not.toContain('session-token');
       expect(JSON.stringify(copyJob)).not.toContain('secret-token');
     }
+    expect(monitorCopyJobs[0].data).toEqual({
+      taskId: 'task-id',
+      cloudProvider: 'gcp',
+      projectId: 'ctrl-plane-project',
+      clusterId: 'ctrl-plane-cluster',
+      region: 'us-central1',
+      namespace: 'db-importer',
+    });
+    expect(monitorCopyJobs[0].children?.[0].name).toBe(RdbImportTaskNames.RdbImportCopySourceToBucket);
 
     const sendSaveJob = jobs.find((job) => job.name === RdbImportTaskNames.RdbImportSendSaveCommand);
     expect(sendSaveJob?.children).toHaveLength(1);
@@ -953,7 +1016,7 @@ describe('import RDB customer source flow', () => {
     expect(formatMonitorJob?.name).toBe(RdbImportTaskNames.RdbImportMonitorFormatValidationProgress);
     const formatValidationJob = formatMonitorJob?.children?.[0];
     expect(formatValidationJob?.name).toBe(RdbImportTaskNames.RdbImportValidateRDBFormat);
-    expect(formatValidationJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportCopySourceToBucket);
+    expect(formatValidationJob?.children?.[0].name).toBe(RdbImportTaskNames.RdbImportMonitorCopySourceToBucket);
   });
 
   it('builds standalone instance source tree with one source copy, format validation, and no RDB size validation', () => {

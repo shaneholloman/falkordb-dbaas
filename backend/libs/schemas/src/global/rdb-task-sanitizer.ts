@@ -42,7 +42,17 @@ export const sanitizeRDBExportTarget = (target?: RDBExportTargetType): RDBExport
 };
 
 export const sanitizeRDBImportSource = (source?: RDBImportSourceType | RDBImportPublicSourceType): RDBImportPublicSourceType | undefined => {
+  if (!source) {
+    return {
+      type: 'file',
+    };
+  }
+
   switch (source?.type) {
+    case 'file':
+      return {
+        type: 'file',
+      };
     case 'gcs':
       return {
         type: 'gcs',

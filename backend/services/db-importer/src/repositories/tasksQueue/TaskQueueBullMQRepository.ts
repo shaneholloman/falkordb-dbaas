@@ -268,17 +268,35 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
 
   private _createImportCustomerSourcePrerequisite(task: ImportRDBTaskType): FlowJob {
     return this._makeJobNode(
-      RdbImportTaskNames.RdbImportCopySourceToBucket,
-      ProcessorsSchemaMap[RdbImportTaskNames.RdbImportCopySourceToBucket],
+      RdbImportTaskNames.RdbImportMonitorCopySourceToBucket,
+      ProcessorsSchemaMap[RdbImportTaskNames.RdbImportMonitorCopySourceToBucket],
       {
         taskId: task.taskId,
-        bucketName: task.payload.bucketName,
-        fileName: task.payload.fileName,
+        cloudProvider: 'gcp',
+        projectId: process.env.CTRL_PLANE_PROJECT_ID,
+        clusterId: process.env.CTRL_PLANE_CLUSTER_ID,
+        region: process.env.CTRL_PLANE_REGION,
+        namespace: process.env.NAMESPACE,
       },
       {
         failParentOnFailure: true,
-        jobId: `${task.taskId}-copy-source-to-bucket`,
+        jobId: `${task.taskId}-monitor-copy-source-to-bucket`,
       },
+      [
+        this._makeJobNode(
+          RdbImportTaskNames.RdbImportCopySourceToBucket,
+          ProcessorsSchemaMap[RdbImportTaskNames.RdbImportCopySourceToBucket],
+          {
+            taskId: task.taskId,
+            bucketName: task.payload.bucketName,
+            fileName: task.payload.fileName,
+          },
+          {
+            failParentOnFailure: true,
+            jobId: `${task.taskId}-copy-source-to-bucket`,
+          },
+        ),
+      ],
     );
   }
 
@@ -360,7 +378,7 @@ export class TaskQueueBullMQRepository implements ITaskQueueRepository {
   }
 
   private _createImportSourcePrerequisite(task: ImportRDBTaskType): FlowJob | undefined {
-    if (!task.payload.source) {
+    if (!task.payload.source || task.payload.source.type === 'file') {
       return undefined;
     }
 

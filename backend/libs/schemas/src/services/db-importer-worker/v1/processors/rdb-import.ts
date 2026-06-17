@@ -8,6 +8,16 @@ export const RdbImportCopySourceToBucketProcessorDataSchema = Type.Object({
 });
 export type RdbImportCopySourceToBucketProcessorData = Static<typeof RdbImportCopySourceToBucketProcessorDataSchema>;
 
+export const RdbImportMonitorCopySourceToBucketProcessorDataSchema = Type.Object({
+  taskId: Type.String(),
+  projectId: Type.String(),
+  cloudProvider: SupportedCloudProviderSchema,
+  clusterId: Type.String(),
+  region: Type.String(),
+  namespace: Type.String(),
+});
+export type RdbImportMonitorCopySourceToBucketProcessorData = Static<typeof RdbImportMonitorCopySourceToBucketProcessorDataSchema>;
+
 export const RdbImportCopyInstanceSourceToBucketProcessorDataSchema = Type.Object({
   taskId: Type.String(),
   bucketName: Type.String(),
@@ -207,6 +217,7 @@ export type RdbImportRecoverFailedImportProcessorData = Static<typeof RdbImportR
 
 export enum RdbImportTaskNames {
   RdbImportCopySourceToBucket = 'rdb-import-copy-source-to-bucket',
+  RdbImportMonitorCopySourceToBucket = 'rdb-import-monitor-copy-source-to-bucket',
   RdbImportCopyInstanceSourceToBucket = 'rdb-import-copy-instance-source-to-bucket',
   RdbImportRequestSourceRDBMerge = 'rdb-import-request-source-rdb-merge',
   RdbImportMonitorSourceRDBMerge = 'rdb-import-monitor-source-rdb-merge',
@@ -228,6 +239,7 @@ export enum RdbImportTaskNames {
 
 export const RdbImportSchemaMap = {
   [RdbImportTaskNames.RdbImportCopySourceToBucket]: RdbImportCopySourceToBucketProcessorDataSchema,
+  [RdbImportTaskNames.RdbImportMonitorCopySourceToBucket]: RdbImportMonitorCopySourceToBucketProcessorDataSchema,
   [RdbImportTaskNames.RdbImportCopyInstanceSourceToBucket]: RdbImportCopyInstanceSourceToBucketProcessorDataSchema,
   [RdbImportTaskNames.RdbImportRequestSourceRDBMerge]: RdbImportRequestSourceRDBMergeProcessorDataSchema,
   [RdbImportTaskNames.RdbImportMonitorSourceRDBMerge]: RdbImportMonitorSourceRDBMergeProcessorDataSchema,

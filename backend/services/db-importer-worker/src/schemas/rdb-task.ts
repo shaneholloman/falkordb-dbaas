@@ -68,6 +68,10 @@ const RDBExportOutputTarget = Yup.lazy((value) => {
 
 const RDBImportSource = Yup.lazy((value) => {
   switch (value?.type) {
+    case 'file':
+      return Yup.object({
+        type: Yup.string().oneOf(['file']).required(),
+      }).strict().noUnknown().required();
     case 'gcs':
       return Yup.object({
         type: Yup.string().oneOf(['gcs']).required(),
