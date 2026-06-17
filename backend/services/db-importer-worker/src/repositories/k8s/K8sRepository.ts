@@ -7,7 +7,7 @@ import { STSClient, AssumeRoleWithWebIdentityCommand } from '@aws-sdk/client-sts
 import { EKSClient, DescribeClusterCommand } from '@aws-sdk/client-eks';
 import axios from 'axios';
 
-const DEFAULT_REDIS_RDB_CLI_IMAGE = 'us-central1-docker.pkg.dev/falkordb-public/public/redis-rdb-cli:v0.9.10';
+const DEFAULT_REDIS_RDB_CLI_IMAGE = 'us-central1-docker.pkg.dev/falkordb-public/public/redis-rdb-cli:v0.9.11';
 const IMAGE_PULL_FAILURE_REASONS = new Set([
   'CreateContainerConfigError',
   'ErrImagePull',
@@ -658,6 +658,7 @@ export class K8sRepository {
               {
                 name: 'merge-rdbs',
                 image: this._redisRdbCliImage(),
+                imagePullPolicy: 'Always',
                 command: ['rdt', '-m', ...rdbFileNames.map(n => `/data/${n}`), '-o', `/data/${outputRdbFileName}`],
                 volumeMounts: [
                   {
@@ -750,6 +751,7 @@ export class K8sRepository {
               {
                 name: 'copy-source-to-bucket',
                 image: this._redisRdbCliImage(),
+                imagePullPolicy: 'Always',
                 command: ['sh', '-c', shellCommand, 'sh', sourceReadUrl, destinationWriteUrl],
                 resources: {
                   requests: {
@@ -962,6 +964,7 @@ export class K8sRepository {
               {
                 name: 'import-rdb',
                 image: this._redisRdbCliImage(),
+                imagePullPolicy: 'Always',
                 command: ['sh', '-c', shellCommand],
                 volumeMounts: [
                   {
@@ -1036,6 +1039,7 @@ export class K8sRepository {
               {
                 name: 'redis-rdb-cli',
                 image: this._redisRdbCliImage(),
+                imagePullPolicy: 'Always',
                 command: ['sh', '-c', shellCommand],
                 volumeMounts: [
                   {
