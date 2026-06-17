@@ -197,6 +197,11 @@ export class K8sRepository {
       .replace(/((?:password|token|access[_-]?key|secret[_-]?key|signature)=)[^\s&"'<>]+/gi, '$1[REDACTED]');
   }
 
+  private _isK8sAlreadyExistsError(error: unknown): boolean {
+    const maybeError = error as { statusCode?: number; response?: { statusCode?: number }; body?: { reason?: string } };
+    return maybeError.statusCode === 409 || maybeError.response?.statusCode === 409 || maybeError.body?.reason === 'AlreadyExists';
+  }
+
   private async _executeCommand(kubeConfig: k8s.KubeConfig, instanceId: string, podId: string, command: string[], timeoutMs = 60 * 1000): Promise<string> {
     const exec = new k8s.Exec(kubeConfig);
 
@@ -682,6 +687,96 @@ export class K8sRepository {
 
     const k8sApi = kubeConfig.makeApiClient(k8s.BatchV1Api);
     await k8sApi.createNamespacedJob(namespace, jobManifest);
+  }
+
+  async createCopySourceToBucketJob(
+    projectId: string,
+    cloudProvider: 'gcp' | 'aws',
+    clusterId: string,
+    region: string,
+    namespace: string,
+    jobId: string,
+    sourceReadUrl: string,
+    destinationWriteUrl: string,
+    timeoutMs: number,
+  ): Promise<void> {
+    this._options.logger.info({ clusterId, region, namespace, jobId }, 'Creating copy source to bucket job');
+
+    const kubeConfig = await this._getK8sConfig(cloudProvider, clusterId, region, { projectId });
+    const activeDeadlineSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+    const shellCommand = `set -eu
+      SOURCE_URL="$1"
+      DESTINATION_URL="$2"
+      PIPE=/tmp/source-rdb.pipe
+
+      apk --update add curl >/dev/null \
+        || { echo "ERROR: failed to install curl" >&2; exit 1; }
+
+      mkfifo "$PIPE"
+      curl -fsSL "$SOURCE_URL" > "$PIPE" &
+      SOURCE_PID=$!
+
+      if curl -fsS -X PUT -H 'Content-Type: application/octet-stream' --upload-file "$PIPE" "$DESTINATION_URL"; then
+        :
+      else
+        rc=$?
+        kill "$SOURCE_PID" 2>/dev/null || true
+        wait "$SOURCE_PID" 2>/dev/null || true
+        echo "ERROR: failed to stage customer RDB source" >&2
+        exit "$rc"
+      fi
+
+      if ! wait "$SOURCE_PID"; then
+        rc=$?
+        echo "ERROR: failed to read customer RDB source" >&2
+        exit "$rc"
+      fi
+    `;
+
+    const jobManifest: k8s.V1Job = {
+      apiVersion: 'batch/v1',
+      kind: 'Job',
+      metadata: {
+        name: jobId,
+        namespace,
+      },
+      spec: {
+        backoffLimit: 0,
+        activeDeadlineSeconds,
+        template: {
+          spec: {
+            serviceAccountName: 'db-exporter-sa',
+            containers: [
+              {
+                name: 'copy-source-to-bucket',
+                image: this._redisRdbCliImage(),
+                command: ['sh', '-c', shellCommand, 'sh', sourceReadUrl, destinationWriteUrl],
+                resources: {
+                  requests: {
+                    cpu: '100m',
+                    memory: '64Mi',
+                  },
+                  limits: {
+                    cpu: '500m',
+                    memory: '256Mi',
+                  },
+                },
+              },
+            ],
+            restartPolicy: 'Never',
+          },
+        },
+      },
+    };
+
+    const k8sApi = kubeConfig.makeApiClient(k8s.BatchV1Api);
+    await k8sApi.createNamespacedJob(namespace, jobManifest).catch((error) => {
+      if (this._isK8sAlreadyExistsError(error)) {
+        this._options.logger.info({ clusterId, region, namespace, jobId }, 'Copy source to bucket job already exists');
+        return;
+      }
+      throw error;
+    });
   }
 
   async createImportRDBJob(

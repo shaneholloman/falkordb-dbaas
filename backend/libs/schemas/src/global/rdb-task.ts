@@ -207,6 +207,10 @@ export const RDBImportURLSourceSchema = Type.Object({
   }),
 }, { additionalProperties: false });
 
+export const RDBImportFileSourceSchema = Type.Object({
+  type: Type.Literal('file'),
+}, { additionalProperties: false });
+
 export const RDBImportInstanceSourceSchema = Type.Object({
   type: Type.Literal('instance'),
   instanceId: Type.String(),
@@ -242,11 +246,12 @@ export const RDBImportRequestSourceSchema = Type.Union([
 export type RDBImportRequestSourceType = Static<typeof RDBImportRequestSourceSchema>;
 
 export const RDBImportSourceSchema = Type.Union([
+  RDBImportFileSourceSchema,
   RDBImportGCSSourceSchema,
   RDBImportS3SourceSchema,
   RDBImportURLSourceSchema,
   RDBImportInstanceSourceSchema,
-]);
+], { default: { type: 'file' } });
 export type RDBImportSourceType = Static<typeof RDBImportSourceSchema>;
 
 export const RDBImportPublicGCSSourceSchema = Type.Object({
@@ -266,17 +271,22 @@ export const RDBImportPublicURLSourceSchema = Type.Object({
   type: Type.Literal('url'),
 }, { additionalProperties: false });
 
+export const RDBImportPublicFileSourceSchema = Type.Object({
+  type: Type.Literal('file'),
+}, { additionalProperties: false });
+
 export const RDBImportPublicInstanceSourceSchema = Type.Object({
   type: Type.Literal('instance'),
   instanceId: Type.String(),
 }, { additionalProperties: false });
 
 export const RDBImportPublicSourceSchema = Type.Union([
+  RDBImportPublicFileSourceSchema,
   RDBImportPublicGCSSourceSchema,
   RDBImportPublicS3SourceSchema,
   RDBImportPublicURLSourceSchema,
   RDBImportPublicInstanceSourceSchema,
-]);
+], { default: { type: 'file' } });
 export type RDBImportPublicSourceType = Static<typeof RDBImportPublicSourceSchema>;
 
 export const TaskStatusSchema = Type.Union([

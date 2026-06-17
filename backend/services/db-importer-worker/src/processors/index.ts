@@ -12,6 +12,7 @@ import RdbImportCopySourceToBucketProcessor from './RdbImportCopySourceToBucketP
 import RdbImportDeleteLocalBackupProcessor from './RdbImportDeleteLocalBackupProcessor';
 import RdbImportFlushInstanceProcessor from './RdbImportFlushInstanceProcessor';
 import RdbImportMakeLocalBackupProcessor from './RdbImportMakeLocalBackupProcessor';
+import RdbImportMonitorCopySourceToBucketProcessor from './RdbImportMonitorCopySourceToBucketProcessor';
 import RdbImportMonitorFormatValidationProcessor from './RdbImportMonitorFormatValidationProcessor';
 import RdbImportMonitorImportRDBProcessor from './RdbImportMonitorImportRDBProcessor';
 import RdbImportMonitorSaveProgressProcessor from './RdbImportMonitorSaveProgressProcessor';
@@ -42,6 +43,7 @@ export default [
   PlaceholderProcessor,
   RdbImportCopyInstanceSourceToBucketProcessor,
   RdbImportCopySourceToBucketProcessor,
+  RdbImportMonitorCopySourceToBucketProcessor,
   RdbImportDeleteLocalBackupProcessor,
   RdbImportFlushInstanceProcessor,
   RdbImportMakeLocalBackupProcessor,
@@ -85,6 +87,7 @@ export {
   PlaceholderProcessor,
   RdbImportCopyInstanceSourceToBucketProcessor,
   RdbImportCopySourceToBucketProcessor,
+  RdbImportMonitorCopySourceToBucketProcessor,
   RdbImportDeleteLocalBackupProcessor,
   RdbImportFlushInstanceProcessor,
   RdbImportMakeLocalBackupProcessor,

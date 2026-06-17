@@ -251,7 +251,7 @@ export class ImportRDBController {
     }
 
     let task: ImportRDBTaskType | undefined;
-    const payload = this._createTaskPayload(instance, this._convertMaxMemoryToMB(maxMemory));
+    const payload = this._createTaskPayload(instance, this._convertMaxMemoryToMB(maxMemory), { type: 'file' });
     try {
       task = (await this.tasksRepository.createTask('RDBImport', payload)) as ImportRDBTaskType;
     } catch (error) {

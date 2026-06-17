@@ -10,26 +10,15 @@ import { setupContainer } from '../container';
 import { IBlobStorageRepository } from '../repositories/blob/IBlobStorageRepository';
 import { ITasksDBRepository } from '../repositories/tasks';
 import { validateImportSourceUrl } from '@falkordb/security';
+import { K8sRepository } from '../repositories/k8s/K8sRepository';
 
 const CUSTOMER_SOURCE_COPY_TIMEOUT_MS = parseInt(process.env.RDB_IMPORT_SOURCE_COPY_TIMEOUT_MS ?? '', 10) || 5 * 60 * 1000;
 
-const runWithCopyDeadline = async <T>(description: string, operation: (signal: AbortSignal) => Promise<T>): Promise<T> => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CUSTOMER_SOURCE_COPY_TIMEOUT_MS);
-
-  try {
-    return await operation(controller.signal);
-  } catch (error) {
-    if ((error as Error).name === 'AbortError') {
-      throw new Error(`${description} timed out after ${CUSTOMER_SOURCE_COPY_TIMEOUT_MS}ms`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-};
-
 const getCustomerSourceReadUrl = async (source: RDBImportSourceType): Promise<string> => {
+  if (source.type === 'file') {
+    throw new Error('File sources are uploaded directly to the managed import bucket');
+  }
+
   if (source.type === 'gcs') {
     const storage = new Storage({
       projectId: source.credentials.project_id,
@@ -85,6 +74,7 @@ const processor: Processor<RdbImportCopySourceToBucketProcessorData> = async (jo
   const logger = container.resolve<Logger>('logger');
   const tasksRepository = container.resolve<ITasksDBRepository>(ITasksDBRepository.name);
   const blobStorageRepository = container.resolve<IBlobStorageRepository>(IBlobStorageRepository.name);
+  const k8sRepository = container.resolve<K8sRepository>(K8sRepository.name);
 
   logger.debug(`Processing 'rdb-import-copy-source-to-bucket' job ${job.id} with data: ${JSON.stringify(job.data, null, 2)}`);
 
@@ -96,6 +86,10 @@ const processor: Processor<RdbImportCopySourceToBucketProcessorData> = async (jo
       throw new Error(`Task ${job.data.taskId} not found or is not an RDB import task`);
     }
     if (!task.payload.source) {
+      return { success: true, skipped: true };
+    }
+
+    if (task.payload.source.type === 'file') {
       return { success: true, skipped: true };
     }
 
@@ -113,30 +107,17 @@ const processor: Processor<RdbImportCopySourceToBucketProcessorData> = async (jo
       ),
     ]);
 
-    const destinationResponse = await runWithCopyDeadline('Copying customer RDB source to managed import bucket', async (signal) => {
-      const sourceResponse = await fetch(sourceReadUrl, {
-        redirect: 'manual',
-        signal,
-      });
-      if (!sourceResponse.ok || !sourceResponse.body) {
-        throw new Error(`Failed to read customer RDB source: ${sourceResponse.status} ${sourceResponse.statusText}`);
-      }
-
-      return fetch(destinationWriteUrl, {
-        method: 'PUT',
-        headers: {
-          'content-type': 'application/octet-stream',
-        },
-        body: sourceResponse.body,
-        duplex: 'half',
-        redirect: 'manual',
-        signal,
-      } as RequestInit & { duplex: 'half' });
-    });
-
-    if (!destinationResponse.ok) {
-      throw new Error(`Failed to stage customer RDB source: ${destinationResponse.status} ${destinationResponse.statusText}`);
-    }
+    await k8sRepository.createCopySourceToBucketJob(
+      process.env.CTRL_PLANE_PROJECT_ID,
+      'gcp',
+      process.env.CTRL_PLANE_CLUSTER_ID,
+      process.env.CTRL_PLANE_REGION,
+      process.env.NAMESPACE,
+      `${job.data.taskId}-copy-source-to-bucket`,
+      sourceReadUrl,
+      destinationWriteUrl,
+      CUSTOMER_SOURCE_COPY_TIMEOUT_MS,
+    );
 
     return { success: true };
   } catch (error) {

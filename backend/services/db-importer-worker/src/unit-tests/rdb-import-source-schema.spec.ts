@@ -29,6 +29,16 @@ const makeImportTask = (source: Record<string, unknown>, overrides: Record<strin
 });
 
 describe('RDB import source task schema', () => {
+  it('accepts file upload sources in task payloads only', () => {
+    const source = {
+      type: 'file',
+    };
+
+    expect(() => RDBTask.validateSync(makeImportTask(source))).not.toThrow();
+    expect(Value.Check(RDBImportSourceSchema, source)).toBe(true);
+    expect(Value.Check(RDBImportRequestSourceSchema, source)).toBe(false);
+  });
+
   it('accepts prepared instance sources', () => {
     expect(() => RDBTask.validateSync(makeImportTask({
       type: 'instance',

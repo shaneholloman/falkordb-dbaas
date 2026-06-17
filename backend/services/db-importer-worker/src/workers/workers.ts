@@ -1,6 +1,8 @@
 import { Queue, Worker } from 'bullmq';
 import processors from '../processors';
 import logger from '../logger';
+import { setupContainer } from '../container';
+import { ITasksDBRepository } from '../repositories/tasks';
 
 export let workerError = false;
 
@@ -23,6 +25,8 @@ export const getQueues = () => {
 
 const workers: Worker[] = []
 export const setupWorkers = () => {
+  const container = setupContainer(logger);
+  const tasksRepository = container.resolve<ITasksDBRepository>(ITasksDBRepository.name);
 
   // Setup the workers
   for (const { name, processor, concurrency } of processors) {
@@ -41,6 +45,21 @@ export const setupWorkers = () => {
     w.on('error', (error) => {
       logger.error(`Worker ${w.name} error: ${error}`);
       workerError = true;
+    });
+    w.on('failed', async (job, error) => {
+      const taskId = job?.data?.taskId;
+      if (typeof taskId !== 'string') {
+        return;
+      }
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error({ error, taskId, jobId: job.id, queueName: w.name }, 'Worker job failed');
+      await tasksRepository.updateTask({
+        taskId,
+        status: 'failed',
+        errors: [errorMessage],
+      }).catch((updateError) => {
+        logger.error({ error: updateError, taskId, jobId: job.id, queueName: w.name }, 'Error updating failed task from worker event');
+      });
     });
   }
 
