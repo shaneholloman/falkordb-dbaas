@@ -7,7 +7,7 @@ import { STSClient, AssumeRoleWithWebIdentityCommand } from '@aws-sdk/client-sts
 import { EKSClient, DescribeClusterCommand } from '@aws-sdk/client-eks';
 import axios from 'axios';
 
-const DEFAULT_REDIS_RDB_CLI_IMAGE = 'dudizimber/redis-rdb-cli@sha256:d279e342203d5018b1c803ff2690709d72eafd8f32595942e3224791e94d042e';
+const DEFAULT_REDIS_RDB_CLI_IMAGE = 'us-central1-docker.pkg.dev/falkordb-public/public/redis-rdb-cli:v0.9.10';
 const IMAGE_PULL_FAILURE_REASONS = new Set([
   'CreateContainerConfigError',
   'ErrImagePull',
